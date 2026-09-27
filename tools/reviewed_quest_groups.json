@@ -1,0 +1,1548 @@
+{
+  "game": "retail",
+  "groups": [
+    {
+      "att_review": {
+        "applicability": "Reviewed these sibling q records in the standard Northshire QUESTS context, outside seasonal wrappers. Root timelines are additions, with no root removal/creation-only marker. Human class, generic Alliance and Kul Tiran selectors are retained symbolically; partial/overlapping selectors are not treated as universal eligibility or completion exclusions.",
+        "direction": "successors",
+        "live_client": false,
+        "recurrence": "Source-level review infers a finite, one-time starting storyline from ordinary q constructors and the class/race predecessor/successor progression. No recurrence metadata is present on the selected records or their enclosing Northshire QUESTS context. This is a reviewed storyline inference, not an explicit client nonrepeatable flag.",
+        "completion": {
+          "scope": "party-comparison",
+          "rationale": "Completing any member represents finishing the same one-time six-worg task for Marshal McBride. Identical counted targets and the nine corresponding Lions for Lambs successors place every member at the same completed story step. Class/race selectors and rewards do not change that task; no cross-ID game completion flag or eligibility is asserted."
+        },
+        "relationship": "All nine records require six Blackrock Worgs in source slot 1, share Marshal McBride, and feed the matching class/race Lions for Lambs branches.",
+        "turn_in": "unknown",
+        "witnesses": [
+          {
+            "id": 28759,
+            "record": {
+              "line": 1119,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "c8f9abef7f24e352c38634bd1210080bad9ad72c188ecc1d1455aac540fa6aab"
+            }
+          },
+          {
+            "id": 28769,
+            "record": {
+              "line": 1189,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "87c9bf6b46eb95a80a7906535a23ed9f3b7fa6ea5961a0762baeba46b1db3665"
+            }
+          },
+          {
+            "id": 28770,
+            "record": {
+              "line": 1212,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "09fec4171b0f9ad79fd16b46549cfce92a933a3ae627d9e56f2ee3b062176d22"
+            }
+          },
+          {
+            "id": 28771,
+            "record": {
+              "line": 1027,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "105b95edb866cec5c88430de601d91d6ab9666fcc9d7b44fa319f11e5557671d"
+            }
+          },
+          {
+            "id": 28772,
+            "record": {
+              "line": 1050,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "2d7a634b3b98693d6f3286ff660eaab6d82b23069dbb60772df1ea1db16f431b"
+            }
+          },
+          {
+            "id": 28773,
+            "record": {
+              "line": 1073,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "3ed3ec590ac9e3a889a5b5df2c724980f2fda0590c006eb10b87976d7ce40053"
+            }
+          },
+          {
+            "id": 28774,
+            "record": {
+              "line": 1096,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "4824d4efeff19f4d877df4c3c9e354a67d5362918d7f91b7f6c6ae3fa149150f"
+            }
+          },
+          {
+            "id": 29079,
+            "record": {
+              "line": 1142,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "c5f479f5f4f4c962429cefb80d8469c039a913d6c1a952fee3a4f88c5cad7a67"
+            }
+          },
+          {
+            "id": 31140,
+            "record": {
+              "line": 1172,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "7356fa57a1c5b7f69363719e34546d19748b17e9649f7a3897f1186117a574cd"
+            }
+          }
+        ]
+      },
+      "basis": "att-reviewed-branches",
+      "evidence": [
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1027-L1049",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1050-L1072",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1073-L1095",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1096-L1118",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1119-L1141",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1142-L1171",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L115-L136",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1172-L1188",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1189-L1211",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1212-L1234",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L137-L158",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L159-L183",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L184-L205",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L206-L227",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L228-L246",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L36-L57",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L58-L89",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L90-L114"
+      ],
+      "history": true,
+      "ids": [28757, 28762, 28763, 28764, 28765, 28766, 28767, 29078, 31139],
+      "progress": "objectives",
+      "quests": {
+        "28757": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 184,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "f2b62525e7fd52a1025b1db534571d459dd3e77d5a3b937c2382c3a5bb100779"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ MAGE };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28762": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 36,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "e07567aa4c1f42027eb7fd103545670bee0fc5e1bf35bd54475a6e1e9a1b0d0e"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PALADIN };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28763": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 137,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "e7d019622e1349b79b3f06ab22ba986332415ff32ee2f892c96fb17377bdd0d9"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PRIEST };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28764": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 159,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "daa8c941f47f256bb7de00b18c4833af7c83dda39ef7f6a09d504ead1103f7b8"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ ROGUE };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28765": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 206,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "3b87a2559503e1d15aef9fc0434b0abe377d80e871a4ff069f250b4d4aa529c2"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARLOCK };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28766": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 115,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "20811a77bab612b231c1719714e5c481ffc939deadc9d7a3d8db08685a0f5b73"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARRIOR };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28767": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 90,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "b63ff4e876dbb5bd5bb9cb08ebf34e4a242af8b7630d63d13448b9bf36154c9f"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ HUNTER };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "29078": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 58,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "529a2033cdb96db1de7c3d5760e983342e80827353ee778803d2eda2b5f2b352"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races=exclude({ DRACTHYR_ALLIANCE, HUMAN, MECHAGNOME }, ALLIANCE_ONLY)",
+          "start": [["npc", 197]]
+        },
+        "31139": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 6,
+              "kind": "monster",
+              "targets": [["npc", 49871]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 228,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "5ddf81825f499e67cd377236d813c2b09144b22c937dc2865a76aa1a244ec800"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ DEATHKNIGHT, DRUID, MONK };races={ HUMAN, KULTIRAN }",
+          "start": [["npc", 197]]
+        }
+      },
+      "rationale": "All nine records require six Blackrock Worgs in source slot 1, share Marshal McBride, and feed the matching class/race Lions for Lambs branches.",
+      "source_sha256": "eea2369fd97d7f9d546916b987bfbc74defcecf3d6ff40b24b2e39b717f66180",
+      "title": "Beating Them Back!"
+    },
+    {
+      "att_review": {
+        "applicability": "Reviewed these sibling q records in the standard Northshire QUESTS context, outside seasonal wrappers. Root timelines are additions, with no root removal/creation-only marker. Human class, generic Alliance and Kul Tiran selectors are retained symbolically; partial/overlapping selectors are not treated as universal eligibility or completion exclusions.",
+        "direction": "successors",
+        "live_client": false,
+        "recurrence": "Source-level review infers a finite, one-time starting storyline from ordinary q constructors and the class/race predecessor/successor progression. No recurrence metadata is present on the selected records or their enclosing Northshire QUESTS context. This is a reviewed storyline inference, not an explicit client nonrepeatable flag.",
+        "completion": {
+          "scope": "party-comparison",
+          "rationale": "These are the same one-time eight-spy task for Marshal McBride, after the worg task and before the corresponding Join the Battle transitions. Matching counted objectives and successor coverage support comparing completed members as the same step. This does not imply completion of adjacent steps or write another ID's game flags."
+        },
+        "relationship": "All nine records require eight Blackrock Spies in source slot 1, share Marshal McBride, and feed the matching Join the Battle branches.",
+        "turn_in": "unknown",
+        "witnesses": [
+          {
+            "id": 28780,
+            "record": {
+              "line": 979,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "81cb6c15ecf0822723ade5ff2653c0aedc398ccd907b2ce32a2b3a546b9ab930"
+            }
+          },
+          {
+            "id": 28784,
+            "record": {
+              "line": 965,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "1c34dffbcfa1a92fe1069572d927b9e2a64fa552917fee072bac30c1884d14b9"
+            }
+          },
+          {
+            "id": 28785,
+            "record": {
+              "line": 937,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "046ab86294cf09dd8166034e81fc4eb729700890827cd95d86723a66d9eef11b"
+            }
+          },
+          {
+            "id": 28786,
+            "record": {
+              "line": 923,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "12f9915223d322769ca85bf011d3641295e183db7918c02bb95f8fb6a79dbc21"
+            }
+          },
+          {
+            "id": 28787,
+            "record": {
+              "line": 951,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "98cf81dca83afcf9875f76b38d17d0c2affe77e87a828717e358420ee22641bf"
+            }
+          },
+          {
+            "id": 28788,
+            "record": {
+              "line": 993,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "f808c29263e1513fade35f57ab1fd6d9fe075afab80e9a525b67867f47300e93"
+            }
+          },
+          {
+            "id": 28789,
+            "record": {
+              "line": 909,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "f774f26c86319215a83c4eca87c69a06a3f4a7e8ee8efe61017b0a4abfcef314"
+            }
+          },
+          {
+            "id": 29080,
+            "record": {
+              "line": 896,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "29b6df69e6e14d6a9675ce074467122ae9b75c26892506533eb61aee6bf348ff"
+            }
+          },
+          {
+            "id": 31143,
+            "record": {
+              "line": 1007,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "1aa4cca761b191efa0045ac554acc6a879d74aa29ee96c552f130b314819b862"
+            }
+          }
+        ]
+      },
+      "basis": "att-reviewed-branches",
+      "evidence": [
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1007-L1014",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1027-L1049",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1050-L1072",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1073-L1095",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1096-L1118",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1119-L1141",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1142-L1171",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1172-L1188",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1189-L1211",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1212-L1234",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L896-L908",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L909-L922",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L923-L936",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L937-L950",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L951-L964",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L965-L978",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L979-L992",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L993-L1006"
+      ],
+      "history": true,
+      "ids": [28759, 28769, 28770, 28771, 28772, 28773, 28774, 29079, 31140],
+      "progress": "objectives",
+      "quests": {
+        "28759": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1119,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "c8f9abef7f24e352c38634bd1210080bad9ad72c188ecc1d1455aac540fa6aab"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ HUNTER };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28769": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1189,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "87c9bf6b46eb95a80a7906535a23ed9f3b7fa6ea5961a0762baeba46b1db3665"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ MAGE };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28770": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1212,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "09fec4171b0f9ad79fd16b46549cfce92a933a3ae627d9e56f2ee3b062176d22"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PALADIN };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28771": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1027,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "105b95edb866cec5c88430de601d91d6ab9666fcc9d7b44fa319f11e5557671d"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PRIEST };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28772": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1050,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "2d7a634b3b98693d6f3286ff660eaab6d82b23069dbb60772df1ea1db16f431b"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ ROGUE };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28773": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1073,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "3ed3ec590ac9e3a889a5b5df2c724980f2fda0590c006eb10b87976d7ce40053"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARLOCK };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28774": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1096,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "4824d4efeff19f4d877df4c3c9e354a67d5362918d7f91b7f6c6ae3fa149150f"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARRIOR };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "29079": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1142,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "c5f479f5f4f4c962429cefb80d8469c039a913d6c1a952fee3a4f88c5cad7a67"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races=exclude({ DRACTHYR_ALLIANCE, HUMAN, MECHAGNOME }, ALLIANCE_ONLY)",
+          "start": [["npc", 197]]
+        },
+        "31140": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 49874]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1172,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "7356fa57a1c5b7f69363719e34546d19748b17e9649f7a3897f1186117a574cd"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ DEATHKNIGHT, DRUID, MONK };races={ HUMAN, KULTIRAN }",
+          "start": [["npc", 197]]
+        }
+      },
+      "rationale": "All nine records require eight Blackrock Spies in source slot 1, share Marshal McBride, and feed the matching Join the Battle branches.",
+      "source_sha256": "eea2369fd97d7f9d546916b987bfbc74defcecf3d6ff40b24b2e39b717f66180",
+      "title": "Lions for Lambs"
+    },
+    {
+      "att_review": {
+        "applicability": "Reviewed these sibling q records in the standard Northshire QUESTS context, outside seasonal wrappers. Root timelines are additions, with no root removal/creation-only marker. Human class, generic Alliance and Kul Tiran selectors are retained symbolically; partial/overlapping selectors are not treated as universal eligibility or completion exclusions.",
+        "direction": "successors",
+        "live_client": false,
+        "recurrence": "Source-level review infers a finite, one-time starting storyline from ordinary q constructors and the class/race predecessor/successor progression. No recurrence metadata is present on the selected records or their enclosing Northshire QUESTS context. This is a reviewed storyline inference, not an explicit client nonrepeatable flag.",
+        "completion": {
+          "scope": "party-comparison",
+          "rationale": "Completing one of these ordinary one-time branches finishes the same transition between Lions for Lambs and They Sent Assassins. Shared starter and corresponding successor links positively identify the transition's role for all nine members. Readiness and completed-step comparison do not require a counted schema or a known destination, and do not grant another quest's game credit."
+        },
+        "relationship": "The nine records are the parallel transition from Lions for Lambs to They Sent Assassins, with the same title and Marshal McBride. Source prerequisites establish the branch role; no objective-free or destination claim is made.",
+        "state_only_reason": "The nine records are the parallel transition from Lions for Lambs to They Sent Assassins, with the same title and Marshal McBride. Source prerequisites establish the branch role; no objective-free or destination claim is made. Compare readiness only; objective schema and turn-in identity remain unknown.",
+        "turn_in": "unknown",
+        "witnesses": [
+          {
+            "id": 28791,
+            "record": {
+              "line": 1876,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "9fdaf2f9a8bc1eaa72fa64699d4237038c6a328f1d5384b620f5aa774c3de375"
+            }
+          },
+          {
+            "id": 28792,
+            "record": {
+              "line": 1756,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "5dfd6c77532c461520eda9b825348933b099368f53cfe43b5c3a3c920c170ba5"
+            }
+          },
+          {
+            "id": 28793,
+            "record": {
+              "line": 1813,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "3cc3895fea5f415a16e0c71eb060a8bfd8f4eaba4be77528af617e9c335fdf87"
+            }
+          },
+          {
+            "id": 28794,
+            "record": {
+              "line": 1792,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "af837d72a6ff2e048e059a9110ec4945618de1e3b66b325ef04698f05816fa46"
+            }
+          },
+          {
+            "id": 28795,
+            "record": {
+              "line": 1834,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "28c25538e5f3471cb143e115660c4e15acb97b56211a315f03aa1ed768e1fc98"
+            }
+          },
+          {
+            "id": 28796,
+            "record": {
+              "line": 1899,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "4e98f9dec625686dc4731b130a3e76b8156329099b35f4ce51b47ab5681c00a0"
+            }
+          },
+          {
+            "id": 28797,
+            "record": {
+              "line": 1855,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "1caa6f4de1e778dea0d67356f64e9a977f92a3c654e1b0fd67cb95f88cdf55ae"
+            }
+          },
+          {
+            "id": 29081,
+            "record": {
+              "line": 1920,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "9b65797d2966c4f1fe9ceb13830d680ab8cd6ef769d98d3715c76639a80a1b36"
+            }
+          },
+          {
+            "id": 31144,
+            "record": {
+              "line": 1777,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "7e9651fa55c3e8b16d2227895ef8e55468063daa792d1b33a46d91bfc8d697b5"
+            }
+          }
+        ]
+      },
+      "basis": "att-reviewed-branches",
+      "evidence": [
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1007-L1014",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1756-L1776",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1777-L1791",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1792-L1812",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1813-L1833",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1834-L1854",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1855-L1875",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1876-L1898",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1899-L1919",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1920-L1943",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L896-L908",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L909-L922",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L923-L936",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L937-L950",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L951-L964",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L965-L978",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L979-L992",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L993-L1006"
+      ],
+      "history": true,
+      "ids": [28780, 28784, 28785, 28786, 28787, 28788, 28789, 29080, 31143],
+      "progress": "state",
+      "quests": {
+        "28780": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 979,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "81cb6c15ecf0822723ade5ff2653c0aedc398ccd907b2ce32a2b3a546b9ab930"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ HUNTER };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28784": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 965,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "1c34dffbcfa1a92fe1069572d927b9e2a64fa552917fee072bac30c1884d14b9"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ MAGE };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28785": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 937,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "046ab86294cf09dd8166034e81fc4eb729700890827cd95d86723a66d9eef11b"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PALADIN };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28786": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 923,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "12f9915223d322769ca85bf011d3641295e183db7918c02bb95f8fb6a79dbc21"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PRIEST };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28787": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 951,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "98cf81dca83afcf9875f76b38d17d0c2affe77e87a828717e358420ee22641bf"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ ROGUE };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28788": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 993,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "f808c29263e1513fade35f57ab1fd6d9fe075afab80e9a525b67867f47300e93"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARLOCK };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "28789": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 909,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "f774f26c86319215a83c4eca87c69a06a3f4a7e8ee8efe61017b0a4abfcef314"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARRIOR };races={ HUMAN }",
+          "start": [["npc", 197]]
+        },
+        "29080": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 896,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "29b6df69e6e14d6a9675ce074467122ae9b75c26892506533eb61aee6bf348ff"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races=exclude({ DRACTHYR_ALLIANCE, HUMAN, MECHAGNOME }, ALLIANCE_ONLY)",
+          "start": [["npc", 197]]
+        },
+        "31143": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1007,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "1aa4cca761b191efa0045ac554acc6a879d74aa29ee96c552f130b314819b862"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ DRUID, MONK };races={ HUMAN, KULTIRAN }",
+          "start": [["npc", 197]]
+        }
+      },
+      "rationale": "The nine records are the parallel transition from Lions for Lambs to They Sent Assassins, with the same title and Marshal McBride. Source prerequisites establish the branch role; no objective-free or destination claim is made.",
+      "source_sha256": "eea2369fd97d7f9d546916b987bfbc74defcecf3d6ff40b24b2e39b717f66180",
+      "title": "Join the Battle!"
+    },
+    {
+      "att_review": {
+        "applicability": "Reviewed these sibling q records in the standard Northshire QUESTS context, outside seasonal wrappers. Root timelines are additions, with no root removal/creation-only marker. Human class, generic Alliance and Kul Tiran selectors are retained symbolically; partial/overlapping selectors are not treated as universal eligibility or completion exclusions.",
+        "direction": "successors",
+        "live_client": false,
+        "recurrence": "Source-level review infers a finite, one-time starting storyline from ordinary q constructors and the class/race predecessor/successor progression. No recurrence metadata is present on the selected records or their enclosing Northshire QUESTS context. This is a reviewed storyline inference, not an explicit client nonrepeatable flag.",
+        "completion": {
+          "scope": "party-comparison",
+          "rationale": "Each member completes the same one-time eight-assassin task for Sergeant Willem between Join the Battle and The Rear is Clear. Identical ordered counted targets and matching next-step links support completed-task comparison across these branches, not completion of Fear No Evil or any other separate task. Actual game flags remain per ID."
+        },
+        "relationship": "All nine records require eight Goblin Assassins in source slot 1, share Sergeant Willem, and feed the matching The Rear is Clear branches.",
+        "turn_in": "unknown",
+        "witnesses": [
+          {
+            "id": 28817,
+            "record": {
+              "line": 1667,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "5df462992ea96861e2b395aa16c4ea9125b457059ad8816bf23e027682a3e221"
+            }
+          },
+          {
+            "id": 28818,
+            "record": {
+              "line": 1709,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "5ce6f1a2960b232e41ab6604fd30dabee802c0fd8dc3d97ebab0db255078a0b4"
+            }
+          },
+          {
+            "id": 28819,
+            "record": {
+              "line": 1617,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "c43d6bcd94199531ad873b4e7db4c1dd3e1067fce6ceae0d58b31a038f9ab201"
+            }
+          },
+          {
+            "id": 28820,
+            "record": {
+              "line": 1695,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "04a5a3ffe17429a79bc12843152b29abafdd5e988f6073b08bae0de46b5f1c49"
+            }
+          },
+          {
+            "id": 28821,
+            "record": {
+              "line": 1653,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "d19ef90f6408a832a8367ad1124eea3a0644439d526c08f089adfc5b0b132703"
+            }
+          },
+          {
+            "id": 28822,
+            "record": {
+              "line": 1631,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "2f96bd8d8821df842b4d2719fa1796fb6d96b76802efd705abfda7ff1198b8b5"
+            }
+          },
+          {
+            "id": 28823,
+            "record": {
+              "line": 1681,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "bfe2771161c56297550b88d487ff70b07fdb81199df51fb6f91bf7292176d937"
+            }
+          },
+          {
+            "id": 29083,
+            "record": {
+              "line": 1723,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "5fa538c631e3e656273085b9612304f1a9ad3aa86de7bc4e7de4df49f759eafb"
+            }
+          },
+          {
+            "id": 31145,
+            "record": {
+              "line": 1645,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "1bd345e861dbb0bcb3b8fcfc96e0f5bf6f2eda0dfbab63464a3f01daf40dbb83"
+            }
+          }
+        ]
+      },
+      "basis": "att-reviewed-branches",
+      "evidence": [
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1617-L1630",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1631-L1644",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1645-L1652",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1653-L1666",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1667-L1680",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1681-L1694",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1695-L1708",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1709-L1722",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1723-L1735",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1756-L1776",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1777-L1791",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1792-L1812",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1813-L1833",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1834-L1854",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1855-L1875",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1876-L1898",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1899-L1919",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1920-L1943"
+      ],
+      "history": true,
+      "ids": [28791, 28792, 28793, 28794, 28795, 28796, 28797, 29081, 31144],
+      "progress": "objectives",
+      "quests": {
+        "28791": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1876,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "9fdaf2f9a8bc1eaa72fa64699d4237038c6a328f1d5384b620f5aa774c3de375"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ HUNTER };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28792": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1756,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "5dfd6c77532c461520eda9b825348933b099368f53cfe43b5c3a3c920c170ba5"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ MAGE };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28793": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1813,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "3cc3895fea5f415a16e0c71eb060a8bfd8f4eaba4be77528af617e9c335fdf87"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PALADIN };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28794": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1792,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "af837d72a6ff2e048e059a9110ec4945618de1e3b66b325ef04698f05816fa46"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PRIEST };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28795": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1834,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "28c25538e5f3471cb143e115660c4e15acb97b56211a315f03aa1ed768e1fc98"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ ROGUE };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28796": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1899,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "4e98f9dec625686dc4731b130a3e76b8156329099b35f4ce51b47ab5681c00a0"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARLOCK };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28797": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1855,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "1caa6f4de1e778dea0d67356f64e9a977f92a3c654e1b0fd67cb95f88cdf55ae"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARRIOR };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "29081": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1920,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "9b65797d2966c4f1fe9ceb13830d680ab8cd6ef769d98d3715c76639a80a1b36"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races=exclude({ DRACTHYR_ALLIANCE, HUMAN, MECHAGNOME }, ALLIANCE_ONLY)",
+          "start": [["npc", 823]]
+        },
+        "31144": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 8,
+              "kind": "monster",
+              "targets": [["npc", 50039]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 1777,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "7e9651fa55c3e8b16d2227895ef8e55468063daa792d1b33a46d91bfc8d697b5"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ DRUID, MONK };races={ HUMAN, KULTIRAN }",
+          "start": [["npc", 823]]
+        }
+      },
+      "rationale": "All nine records require eight Goblin Assassins in source slot 1, share Sergeant Willem, and feed the matching The Rear is Clear branches.",
+      "source_sha256": "eea2369fd97d7f9d546916b987bfbc74defcecf3d6ff40b24b2e39b717f66180",
+      "title": "They Sent Assassins"
+    },
+    {
+      "att_review": {
+        "applicability": "Reviewed these sibling q records in the standard Northshire QUESTS context, outside seasonal wrappers. Root timelines are additions, with no root removal/creation-only marker. Human class, generic Alliance and Kul Tiran selectors are retained symbolically; partial/overlapping selectors are not treated as universal eligibility or completion exclusions.",
+        "direction": "predecessors",
+        "live_client": false,
+        "recurrence": "Source-level review infers a finite, one-time starting storyline from ordinary q constructors and the class/race predecessor/successor progression. No recurrence metadata is present on the selected records or their enclosing Northshire QUESTS context. This is a reviewed storyline inference, not an explicit client nonrepeatable flag.",
+        "completion": {
+          "scope": "party-comparison",
+          "rationale": "Completing any member finishes the same specific one-time aid task: four revivals of NPC 50047 for Brother Paxton using the common prayer-book helper. The matching Join the Battle context supports sibling task identity, including generic and Kul Tiran variants; the shared prerequisite alone is not the reason for approval. This compares completion of this aid task only, not completion of the main chain or another quest's game flag."
+        },
+        "relationship": "All nine records require four injured infantry revivals in source slot 1, share Brother Paxton and prayer-book helper 65733, and reference the corresponding Join the Battle stage. The Kul Tiran and generic records share parent 29080; that shared parent alone does not establish completion equivalence.",
+        "turn_in": "unknown",
+        "witnesses": [
+          {
+            "id": 28780,
+            "record": {
+              "line": 979,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "81cb6c15ecf0822723ade5ff2653c0aedc398ccd907b2ce32a2b3a546b9ab930"
+            }
+          },
+          {
+            "id": 28784,
+            "record": {
+              "line": 965,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "1c34dffbcfa1a92fe1069572d927b9e2a64fa552917fee072bac30c1884d14b9"
+            }
+          },
+          {
+            "id": 28785,
+            "record": {
+              "line": 937,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "046ab86294cf09dd8166034e81fc4eb729700890827cd95d86723a66d9eef11b"
+            }
+          },
+          {
+            "id": 28786,
+            "record": {
+              "line": 923,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "12f9915223d322769ca85bf011d3641295e183db7918c02bb95f8fb6a79dbc21"
+            }
+          },
+          {
+            "id": 28787,
+            "record": {
+              "line": 951,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "98cf81dca83afcf9875f76b38d17d0c2affe77e87a828717e358420ee22641bf"
+            }
+          },
+          {
+            "id": 28788,
+            "record": {
+              "line": 993,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "f808c29263e1513fade35f57ab1fd6d9fe075afab80e9a525b67867f47300e93"
+            }
+          },
+          {
+            "id": 28789,
+            "record": {
+              "line": 909,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "f774f26c86319215a83c4eca87c69a06a3f4a7e8ee8efe61017b0a4abfcef314"
+            }
+          },
+          {
+            "id": 29080,
+            "record": {
+              "line": 896,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "29b6df69e6e14d6a9675ce074467122ae9b75c26892506533eb61aee6bf348ff"
+            }
+          }
+        ]
+      },
+      "basis": "att-reviewed-branches",
+      "evidence": [
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L520-L545",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L546-L571",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L572-L597",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L598-L623",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L624-L649",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L650-L675",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L676-L701",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L702-L734",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L735-L767",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L896-L908",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L909-L922",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L923-L936",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L937-L950",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L951-L964",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L965-L978",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L979-L992",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L993-L1006"
+      ],
+      "history": true,
+      "ids": [28806, 28808, 28809, 28810, 28811, 28812, 28813, 29082, 63447],
+      "progress": "objectives",
+      "quests": {
+        "28806": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 624,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "dfdd1ca4b3007258f12f1abb3e6c344beb06c906ea8c737b022dfea950f703e4"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ HUNTER };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "28808": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 650,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "af8c8e557c881cfe938051d482782676798f65fa6d65a1abcc82e4ca2cdae7ca"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ MAGE };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "28809": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 676,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "4e1eb331040316dc954ea28b46117235a3f7a2ce0f578bf62c8267989f38e63d"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PALADIN };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "28810": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 572,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "e32104a24629797591b6e74fe40484992dffaecb1bda2ac1aba0475efaa1bddf"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PRIEST };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "28811": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 520,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "db0dcb1668f7047c622986ed599073cc3f2d1b2721bfc8362da25ba88f4121e2"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ ROGUE };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "28812": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 546,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "2ba80a441d16980b79e6041a8b05c56bf61656da3b51a659d93b99165b12d943"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARLOCK };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "28813": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 598,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "be9b0db37246581d36c0fd715321627cc7315ae5ef6487f58bf4b4f6d29dcb52"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARRIOR };races={ HUMAN }",
+          "start": [["npc", 951]]
+        },
+        "29082": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 702,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "d446ca48b0add7dd1f0d0a2680b221bb3b50a5c3258128231d57a6fd81c63b67"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races=exclude({ DRACTHYR_ALLIANCE, HUMAN, KULTIRAN, MECHAGNOME }, ALLIANCE_ONLY)",
+          "start": [["npc", 951]]
+        },
+        "63447": {
+          "end": null,
+          "objectives": [
+            {
+              "count": 4,
+              "kind": "event",
+              "targets": [["npc", 50047]]
+            }
+          ],
+          "objectives_complete": true,
+          "record": {
+            "line": 735,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "2705bf297b39c11d3b648da102b84cb4022e5fbe59cfccc55864f8c35751eb3d"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races={ KULTIRAN }",
+          "start": [["npc", 951]]
+        }
+      },
+      "rationale": "All nine records require four injured infantry revivals in source slot 1, share Brother Paxton and prayer-book helper 65733, and reference the corresponding Join the Battle stage. The Kul Tiran and generic records share parent 29080; that shared parent alone does not establish completion equivalence.",
+      "source_sha256": "eea2369fd97d7f9d546916b987bfbc74defcecf3d6ff40b24b2e39b717f66180",
+      "title": "Fear No Evil"
+    },
+    {
+      "att_review": {
+        "applicability": "Reviewed these sibling q records in the standard Northshire QUESTS context, outside seasonal wrappers. Root timelines are additions, with no root removal/creation-only marker. Human class, generic Alliance and Kul Tiran selectors are retained symbolically; partial/overlapping selectors are not treated as universal eligibility or completion exclusions.",
+        "direction": "successors",
+        "live_client": false,
+        "recurrence": "Source-level review infers a finite, one-time starting storyline from ordinary q constructors and the class/race predecessor/successor progression. No recurrence metadata is present on the selected records or their enclosing Northshire QUESTS context. This is a reviewed storyline inference, not an explicit client nonrepeatable flag.",
+        "completion": {
+          "scope": "party-comparison",
+          "rationale": "These are one-time alternatives for the same transition after They Sent Assassins. Blackrock Invasion's explicit list of all nine source quests positively supports equivalent completed-step comparison, together with the shared Sergeant Willem starter and branch context. No objective schema, turn-in identity or cross-ID game credit is inferred."
+        },
+        "relationship": "The nine records are the parallel transition after They Sent Assassins and explicitly converge through the sourceQuests list of Blackrock Invasion. They share Sergeant Willem. Source branch continuity, not absent objectives, justifies readiness-only grouping.",
+        "state_only_reason": "The nine records are the parallel transition after They Sent Assassins and explicitly converge through the sourceQuests list of Blackrock Invasion. They share Sergeant Willem. Source branch continuity, not absent objectives, justifies readiness-only grouping. Compare readiness only; objective schema and turn-in identity remain unknown.",
+        "turn_in": "unknown",
+        "witnesses": [
+          {
+            "id": 26389,
+            "record": {
+              "line": 247,
+              "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+              "sha256": "b97a46b8baede15294505cb85ef867eded64aab23aa53972930b603f4badf87d"
+            }
+          }
+        ]
+      },
+      "basis": "att-reviewed-branches",
+      "evidence": [
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1617-L1630",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1631-L1644",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1645-L1652",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1653-L1666",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1667-L1680",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1681-L1694",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1695-L1708",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1709-L1722",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L1723-L1735",
+        "https://github.com/ATTWoWAddon/AllTheThings/blob/c269971e856a1da16883cc94cba33d2ec5a90b02/.contrib/.db/standard/02%20-%20Outdoor%20Zones/02%20Eastern%20Kingdoms/Elwynn%20Forest.lua#L247-L300"
+      ],
+      "history": true,
+      "ids": [28817, 28818, 28819, 28820, 28821, 28822, 28823, 29083, 31145],
+      "progress": "state",
+      "quests": {
+        "28817": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1667,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "5df462992ea96861e2b395aa16c4ea9125b457059ad8816bf23e027682a3e221"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ HUNTER };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28818": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1709,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "5ce6f1a2960b232e41ab6604fd30dabee802c0fd8dc3d97ebab0db255078a0b4"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ MAGE };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28819": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1617,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "c43d6bcd94199531ad873b4e7db4c1dd3e1067fce6ceae0d58b31a038f9ab201"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PALADIN };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28820": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1695,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "04a5a3ffe17429a79bc12843152b29abafdd5e988f6073b08bae0de46b5f1c49"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ PRIEST };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28821": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1653,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "d19ef90f6408a832a8367ad1124eea3a0644439d526c08f089adfc5b0b132703"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ ROGUE };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28822": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1631,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "2f96bd8d8821df842b4d2719fa1796fb6d96b76802efd705abfda7ff1198b8b5"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARLOCK };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "28823": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1681,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "bfe2771161c56297550b88d487ff70b07fdb81199df51fb6f91bf7292176d937"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ WARRIOR };races={ HUMAN }",
+          "start": [["npc", 823]]
+        },
+        "29083": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1723,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "5fa538c631e3e656273085b9612304f1a9ad3aa86de7bc4e7de4df49f759eafb"
+          },
+          "repeatable": false,
+          "restrictions": "classes=unspecified;races=exclude({ DRACTHYR_ALLIANCE, HUMAN, MECHAGNOME }, ALLIANCE_ONLY)",
+          "start": [["npc", 823]]
+        },
+        "31145": {
+          "end": null,
+          "objectives": [],
+          "objectives_complete": false,
+          "record": {
+            "line": 1645,
+            "path": ".contrib/.db/standard/02 - Outdoor Zones/02 Eastern Kingdoms/Elwynn Forest.lua",
+            "sha256": "1bd345e861dbb0bcb3b8fcfc96e0f5bf6f2eda0dfbab63464a3f01daf40dbb83"
+          },
+          "repeatable": false,
+          "restrictions": "classes={ DRUID, MONK };races={ HUMAN, KULTIRAN }",
+          "start": [["npc", 823]]
+        }
+      },
+      "rationale": "The nine records are the parallel transition after They Sent Assassins and explicitly converge through the sourceQuests list of Blackrock Invasion. They share Sergeant Willem. Source branch continuity, not absent objectives, justifies readiness-only grouping.",
+      "source_sha256": "eea2369fd97d7f9d546916b987bfbc74defcecf3d6ff40b24b2e39b717f66180",
+      "title": "The Rear is Clear"
+    }
+  ],
+  "schema": 1,
+  "source": "att"
+}

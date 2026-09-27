@@ -1,0 +1,6 @@
+.cache/
+.ruff_cache/
+dist/
+__pycache__/
+QuestEquivalences.generated.lua
+QuestEquivalences.forever.generated.lua

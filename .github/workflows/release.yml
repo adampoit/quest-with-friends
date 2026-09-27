@@ -1,0 +1,59 @@
+name: Prepare release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate release tag and package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 tools/bundle_addon.py --tag "$RELEASE_TAG"
+
+  tests:
+    needs: validate
+    uses: ./.github/workflows/test.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build addon ZIP
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 tools/bundle_addon.py --tag "$RELEASE_TAG"
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" \
+            "dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            --verify-tag --draft --generate-notes \
+            --title "Quest With Friends ${RELEASE_TAG#v}" \
+            "${flags[@]}"

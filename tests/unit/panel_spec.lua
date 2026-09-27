@@ -1,0 +1,483 @@
+describe("Quest With Friends panel", function()
+	local panel, buttons, fontStrings, textures
+
+	local function widget()
+		local w = {}
+		function w:SetSize(width, height)
+			self.size = { width, height }
+		end
+		function w:SetPoint(point, _, relativePoint, x, y)
+			self.point = { point, relativePoint, x, y }
+		end
+		function w:SetFrameStrata(...) end
+		function w:SetBackdrop(...) end
+		function w:SetBackdropColor(...) end
+		function w:SetBackdropBorderColor(...) end
+		function w:SetMovable(...) end
+		function w:EnableMouse(...) end
+		function w:RegisterForDrag(...) end
+		function w:RegisterForClicks(...) end
+		function w:SetClampedToScreen(...) end
+		function w:StartMoving(...) end
+		function w:StopMovingOrSizing()
+			self.stopped = true
+		end
+		function w:GetLeft()
+			return self.left
+		end
+		function w:GetTop()
+			return self.top
+		end
+		function w:SetText(text)
+			self.text = text
+		end
+		function w:SetTextColor(...)
+			self.color = { ... }
+		end
+		function w:SetTexture(texture)
+			self.texture = texture
+		end
+		function w:SetVertexColor(...)
+			self.color = { ... }
+		end
+		function w:SetDesaturated(value)
+			self.desaturated = value
+		end
+		function w:SetWidth(width)
+			self.width = width
+		end
+		function w:SetJustifyH(...) end
+		function w:SetJustifyV(...) end
+		function w:SetWordWrap(...) end
+		function w:Show()
+			self.shown = true
+		end
+		function w:Hide()
+			local wasShown = self.shown
+			self.shown = false
+			if wasShown and self.OnHide then
+				self.OnHide(self)
+			end
+		end
+		function w:ClearAllPoints(...) end
+		function w:SetHeight(height)
+			self.height = height
+		end
+		function w:GetStringHeight()
+			return 15
+		end
+		function w:SetScript(event, callback)
+			self[event] = callback
+		end
+		function w:OverrideText(text)
+			self.text = text
+		end
+		function w:SetupMenu(generator)
+			self.menuGenerator = generator
+		end
+		function w:GenerateMenu()
+			local entries = {}
+			local root = {}
+			function root:CreateCheckbox(text, isSelected, responder)
+				local entry = { text = text, isSelected = isSelected, responder = responder }
+				function entry:SetEnabled(enabled)
+					self.enabled = enabled
+				end
+				entries[#entries + 1] = entry
+				return entry
+			end
+			self.menuGenerator(self, root)
+			self.entries = entries
+		end
+		function w:OpenMenu()
+			self:GenerateMenu()
+			self.menuOpen = true
+		end
+		function w:CloseMenu()
+			self.menuOpen = false
+		end
+		function w:CreateTexture(_, _)
+			local texture = widget()
+			textures[#textures + 1] = texture
+			return texture
+		end
+		function w:CreateFontString(_, _, _)
+			local text = widget()
+			fontStrings[#fontStrings + 1] = text
+			return text
+		end
+		return w
+	end
+
+	local function loadPanel()
+		_G.QuestWithFriends = {}
+		assert(loadfile("Panel.lua"))()
+		QuestWithFriends.Panel.show({}, true, true, function() end)
+	end
+
+	local function group(id, differences)
+		return {
+			questID = id or 42,
+			title = "Errand",
+			shareQuestID = id,
+			differences = differences or { { player = "Julia", kind = "missing", reason = "missing" } },
+		}
+	end
+
+	before_each(function()
+		buttons, fontStrings, textures = {}, {}, {}
+		_G.GameTooltip = widget()
+		function GameTooltip:SetOwner(owner, anchor)
+			assert.are.equal("ANCHOR_RIGHT", anchor)
+			self.owner = owner
+		end
+		function GameTooltip:IsOwned(owner)
+			return self.owner == owner
+		end
+		function GameTooltip:AddLine(text, r, g, b, wrap)
+			assert.same({ 1, 1, 1, true }, { r, g, b, wrap })
+			self.line = text
+		end
+		_G.UIParent = widget()
+		UIParent.left, UIParent.top = 0, 900
+		_G.QuestWithFriendsDB = {}
+		rawset(_G, "CreateFrame", function(kind, _, _, template)
+			local w = widget()
+			w.kind, w.template = kind, template
+			if kind == "Button" or kind == "DropdownButton" then
+				buttons[#buttons + 1] = w
+			elseif kind == "Frame" then
+				panel = w
+			end
+			return w
+		end)
+	end)
+
+	it("puts three independent checkbox filters in one native dropdown", function()
+		loadPanel()
+		local zone, professions, classes = true, false, false
+		local function show()
+			QuestWithFriends.Panel.show(
+				{},
+				true,
+				zone,
+				function()
+					zone = not zone
+					show()
+				end,
+				nil,
+				nil,
+				{
+					professions = professions,
+					classes = classes,
+					toggleProfessions = function()
+						professions = not professions
+						show()
+					end,
+					toggleClasses = function()
+						classes = not classes
+						show()
+					end,
+				}
+			)
+		end
+		show()
+		assert.are.equal(1, #buttons)
+		assert.are.equal("DropdownButton", panel.filter.kind)
+		assert.are.equal("WowStyle1DropdownTemplate", panel.filter.template)
+		assert.are.equal("Filters", panel.filter.text)
+		assert.same({ 92, 24 }, panel.filter.size)
+		assert.same({ "TOPRIGHT", "TOPRIGHT", -10, -7 }, panel.filter.point)
+		assert.are.equal("Party in sync", panel.status.text)
+		panel.filter:OpenMenu()
+		local entries = panel.filter.entries
+		assert.are.equal(3, #entries)
+		assert.are.equal("Current zone only", entries[1].text)
+		assert.are.equal("Show profession quests", entries[2].text)
+		assert.are.equal("Show class quests", entries[3].text)
+		assert.is_true(entries[1].isSelected())
+		assert.is_false(entries[2].isSelected())
+		assert.is_false(entries[3].isSelected())
+		for _, entry in ipairs(entries) do
+			assert.is_true(entry.enabled)
+		end
+		entries[1].responder()
+		assert.is_false(zone)
+		assert.is_false(panel.filter.entries[1].isSelected())
+		assert.are.equal("All zones · Standard quests", panel.scope.text)
+		panel.filter.entries[2].responder()
+		assert.is_true(professions)
+		assert.is_false(classes)
+		assert.are.equal("All zones · Includes profession quests", panel.scope.text)
+		panel.filter.entries[3].responder()
+		assert.is_true(classes)
+		assert.are.equal("All zones · All quest types", panel.scope.text)
+		assert.is_true(panel.filter.menuOpen)
+		assert.are.equal("Filters", panel.filter.text)
+	end)
+
+	it("summarizes every zone and category combination without changing status", function()
+		loadPanel()
+		for _, zone in ipairs({ true, false }) do
+			for _, case in ipairs({
+				{ false, false, "Standard quests" },
+				{ true, false, "Includes profession quests" },
+				{ false, true, "Includes class quests" },
+				{ true, true, "All quest types" },
+			}) do
+				QuestWithFriends.Panel.show({}, true, zone, nil, nil, nil, { professions = case[1], classes = case[2] })
+				assert.are.equal((zone and "Current zone" or "All zones") .. " · " .. case[3], panel.scope.text)
+				assert.are.equal("Party in sync", panel.status.text)
+				assert.are.equal("Filters", panel.filter.text)
+			end
+		end
+		QuestWithFriends.Panel.show({}, false, true)
+		assert.are.equal("Party status incomplete", panel.status.text)
+	end)
+
+	it("disables menu entries without callbacks and closes the menu when hidden or dragged", function()
+		loadPanel()
+		QuestWithFriends.Panel.show({}, true, true)
+		panel.filter:OpenMenu()
+		for _, entry in ipairs(panel.filter.entries) do
+			assert.is_false(entry.enabled)
+		end
+		QuestWithFriends.Panel.hide()
+		assert.is_false(panel.filter.menuOpen)
+		loadPanel()
+		panel.filter:OpenMenu()
+		panel.OnDragStart(panel)
+		assert.is_false(panel.filter.menuOpen)
+	end)
+
+	it("puts one Share button on the quest heading and safely reuses it", function()
+		loadPanel()
+		local shared
+		local function show(id)
+			QuestWithFriends.Panel.show(
+				{
+					group(id, {
+						{ player = "Julia", kind = "missing", reason = "missing" },
+						{ player = "Bob", kind = "missing", reason = "missing" },
+					}),
+				},
+				true,
+				true,
+				nil,
+				function(questID)
+					shared = questID
+				end
+			)
+		end
+		show(42)
+		assert.are.equal(2, #buttons)
+		local shareButton, heading = buttons[2], fontStrings[4]
+		assert.are.equal("Share", shareButton.text)
+		assert.is_true(shareButton.shown)
+		assert.are.equal(258, heading.width)
+		assert.are.equal("Errand", heading.text)
+		assert.is_nil(heading.icon)
+		assert.are.equal("Julia: Missing", fontStrings[5].text)
+		assert.are.equal("Bob: Missing", fontStrings[6].text)
+		assert.is_nil(shared)
+		shareButton.OnClick()
+		assert.are.equal(42, shared)
+		show(7)
+		shareButton.OnClick()
+		assert.are.equal(7, shared)
+		assert.are.equal(2, #buttons)
+		shareButton.OnEnter(shareButton)
+		assert.is_true(GameTooltip.shown)
+		assert.matches("Offers this quest to the party", GameTooltip.line)
+		show(nil)
+		assert.is_false(GameTooltip.shown)
+		assert.is_false(shareButton.shown)
+		assert.are.equal(318, heading.width)
+		shared = nil
+		shareButton.OnClick()
+		assert.is_nil(shared)
+	end)
+
+	it("uses structured reasons and distinct icons, not text parsing", function()
+		loadPanel()
+		local cases = {
+			{ "missing", "missing", "Missing", "Interface\\GossipFrame\\AvailableQuestIcon", { 0.98, 0.73, 0.40 } },
+			{
+				"needs",
+				"active",
+				"Still in progress",
+				"Interface\\QuestFrame\\UI-Quest-BulletPoint",
+				{ 0.57, 0.78, 1.00 },
+			},
+			{ "ahead", "ready", "Ready to turn in", "Interface\\RaidFrame\\ReadyCheck-Ready", { 0.52, 0.87, 0.62 } },
+			{ "ahead", "completed", "Completed", "Interface\\RaidFrame\\ReadyCheck-Ready", { 0.52, 0.87, 0.62 } },
+		}
+		for _, case in ipairs(cases) do
+			QuestWithFriends.Panel.show(
+				{ group(nil, { { player = "You", kind = case[1], reason = case[2] } }) },
+				true,
+				true
+			)
+			local row = fontStrings[5]
+			assert.are.equal("You: " .. case[3], row.text)
+			assert.same(case[5], row.color)
+			assert.same(case[5], row.icon.color)
+			assert.are.equal(case[4], row.icon.texture)
+			assert.is_true(row.icon.desaturated)
+			assert.is_true(row.icon.shown)
+			assert.are.equal(292, row.width)
+		end
+		assert.are.equal(1, #textures)
+		assert.same({ 0.94, 0.95, 0.97 }, fontStrings[4].color)
+		QuestWithFriends.Panel.show({}, true, true)
+		assert.is_false(textures[1].shown)
+	end)
+
+	it("displays objective counts and separates connection warnings from quests", function()
+		loadPanel()
+		QuestWithFriends.Panel.show({
+			group(nil, {
+				{
+					player = "Julia",
+					kind = "needs",
+					reason = "objective",
+					objective = { text = "Gnolls slain", have = 5, need = 8 },
+				},
+			}),
+		}, false, true, nil, nil, { { player = "Bob", reason = "unknown" }, { player = "You", reason = "oversized" } })
+		assert.are.equal("Bob: Quest With Friends not detected", fontStrings[4].text)
+		assert.are.equal("You: Quest log too large to share · status unknown", fontStrings[5].text)
+		assert.are.equal("Errand", fontStrings[6].text)
+		assert.are.equal("Julia: Gnolls slain 5/8", fontStrings[7].text)
+		assert.are.equal("Party status incomplete", panel.status.text)
+	end)
+
+	it("distinguishes waiting, refreshing and stale snapshots without claiming the party is in sync", function()
+		loadPanel()
+		local cases = {
+			{ "waiting", "Waiting for quest snapshot · /qwf to refresh" },
+			{ "refreshing", "Refreshing · showing last snapshot" },
+			{ "stale", "Quest data stale · /qwf to refresh" },
+			{ "incompatible", "Incompatible addon protocol · update addon" },
+		}
+		for _, case in ipairs(cases) do
+			QuestWithFriends.Panel.show(
+				{ group(nil) },
+				false,
+				true,
+				nil,
+				nil,
+				{ { player = "Julia", reason = case[1] } }
+			)
+			assert.are.equal("Party status incomplete", panel.status.text)
+			assert.are.equal("Julia: " .. case[2], fontStrings[4].text)
+			assert.are.equal("Errand", fontStrings[5].text)
+		end
+	end)
+
+	it("clears icons, styling and actions when warning rows become quest headings", function()
+		loadPanel()
+		QuestWithFriends.Panel.show({}, false, true, nil, nil, { { player = "Bob", reason = "unknown" } })
+		local row, icon = fontStrings[4], fontStrings[4].icon
+		assert.is_true(icon.shown)
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, function() end)
+		assert.are.equal("Errand", row.text)
+		assert.is_false(icon.shown)
+		assert.are.equal(258, row.width)
+		assert.same({ 0.94, 0.95, 0.97 }, row.color)
+		QuestWithFriends.Panel.show({}, false, true, nil, nil, { { player = "Bob", reason = "unknown" } })
+		assert.is_false(row.shareButton.shown)
+		assert.is_nil(row.questID)
+	end)
+
+	it("reserves space for wrapped quest headings beside Share", function()
+		loadPanel()
+		local data = group(42)
+		data.title = string.rep("Long quest title ", 20)
+		QuestWithFriends.Panel.show({ data }, true, true, nil, function() end)
+		local row = fontStrings[4]
+		assert.are.equal(258, row.width)
+		row.GetStringHeight = function()
+			return 60
+		end
+		QuestWithFriends.Panel.show({ data }, true, true, nil, function() end)
+		assert.are.equal(161, panel.height)
+	end)
+
+	it("hides share buttons for rows no longer visible and requires a callback", function()
+		loadPanel()
+		QuestWithFriends.Panel.show({ group(42) }, true, true)
+		assert.are.equal(1, #buttons)
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, function() end)
+		assert.is_true(buttons[2].shown)
+		QuestWithFriends.Panel.show({}, true, true)
+		assert.is_false(buttons[2].shown)
+	end)
+
+	it("truncates whole quest groups without creating orphan headings or actions", function()
+		loadPanel()
+		local groups = {}
+		for index = 1, 25 do
+			groups[index] = group(index)
+			groups[index].title = "Errand " .. index
+		end
+		QuestWithFriends.Panel.show(groups, true, true, nil, function() end)
+		assert.are.equal(10, #buttons)
+		assert.are.equal(9, #textures)
+		assert.are.equal("Errand 9", fontStrings[20].text)
+		assert.are.equal("Julia: Missing", fontStrings[21].text)
+		assert.are.equal("+16 more quests with differences", fontStrings[22].text)
+		assert.is_nil(fontStrings[22].icon)
+		QuestWithFriends.Panel.show({}, true, true)
+		for index = 2, #buttons do
+			assert.is_false(buttons[index].shown)
+		end
+		for _, icon in ipairs(textures) do
+			assert.is_false(icon.shown)
+		end
+	end)
+
+	it("shows part of an oversized first quest and counts its hidden details separately", function()
+		loadPanel()
+		local differences = {}
+		for index = 1, 25 do
+			differences[index] = {
+				player = "Julia",
+				kind = "needs",
+				reason = "objective",
+				objective = { text = "Task " .. index, have = 0, need = 1 },
+			}
+		end
+		QuestWithFriends.Panel.show(
+			{ group(42, differences), group(43) },
+			false,
+			true,
+			nil,
+			function() end,
+			{ { player = "Bob", reason = "unknown" } }
+		)
+		assert.are.equal("Errand", fontStrings[5].text)
+		assert.are.equal("Julia: Task 15 0/1", fontStrings[20].text)
+		assert.are.equal("  +10 more differences for this quest", fontStrings[21].text)
+		assert.are.equal("+1 more quest with differences", fontStrings[22].text)
+		assert.are.equal(2, #buttons)
+	end)
+
+	it("saves a dragged position and restores it after a reload", function()
+		loadPanel()
+		assert.same({ "TOPRIGHT", "TOPRIGHT", -36, -180 }, panel.point)
+		panel.left, panel.top = 140, 620
+		panel.OnDragStop(panel)
+		assert.is_true(panel.stopped)
+		assert.same({ x = 140, y = -280 }, QuestWithFriendsDB.panelPosition)
+		assert.same({ "TOPLEFT", "TOPLEFT", 140, -280 }, panel.point)
+		loadPanel()
+		assert.same({ "TOPLEFT", "TOPLEFT", 140, -280 }, panel.point)
+	end)
+
+	it("uses the default position if saved coordinates are invalid", function()
+		QuestWithFriendsDB.panelPosition = { x = "bad", y = -280 }
+		loadPanel()
+		assert.same({ "TOPRIGHT", "TOPRIGHT", -36, -180 }, panel.point)
+	end)
+end)

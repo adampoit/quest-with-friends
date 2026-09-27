@@ -1,0 +1,14 @@
+## Interface: 120100, 16001
+## Title: Quest With Friends
+## Notes: Shows actionable quest differences in your party
+## Version: 0.1.5
+## OptionalDeps: AddonKit
+## SavedVariables: QuestWithFriendsDB
+
+QuestEquivalences.lua
+Client.lua
+QuestCategories.lua
+Core.lua
+QuestWithFriends.lua
+Panel.lua
+InGameTests.lua

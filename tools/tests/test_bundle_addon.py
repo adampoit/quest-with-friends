@@ -1,0 +1,112 @@
+"""Release bundles use an allowlist, not a recursive directory copy."""
+
+import tempfile
+import unittest
+from pathlib import Path
+from zipfile import ZipFile
+
+from tools.bundle_addon import bundle
+
+
+class BundleTests(unittest.TestCase):
+	temp: tempfile.TemporaryDirectory[str]
+	root: Path
+
+	def __init__(self, methodName: str = "runTest"):
+		super().__init__(methodName)
+		self.temp = tempfile.TemporaryDirectory()
+		self.addCleanup(self.temp.cleanup)
+		self.root = Path(self.temp.name)
+		_ = (self.root / "QuestWithFriends.toc").write_text(
+			"## Version: 0.1.0\n\nCore.lua\n"
+		)
+		_ = (self.root / "Core.lua").write_text("-- runtime\n")
+		_ = (self.root / "README.md").write_text("Install under Interface/AddOns.\n")
+		_ = (self.root / "LICENSE").write_text("MIT License\n")
+
+	def test_only_runtime_files_and_readme_are_bundled(self):
+		for name in (
+			".cache/data.html",
+			".git/config",
+			".jj/repo/data",
+			".ruff_cache/data",
+			"tools/__pycache__/tool.pyc",
+			"tests/test.lua",
+			"QuestEquivalences.generated.lua",
+		):
+			path = self.root / name
+			path.parent.mkdir(parents=True, exist_ok=True)
+			_ = path.write_text("not for release")
+		output = bundle(self.root)
+		self.assertEqual(self.root / "dist/QuestWithFriends-0.1.0.zip", output)
+		with ZipFile(output) as archive:
+			self.assertIsNone(archive.testzip())
+			self.assertEqual(
+				{
+					"QuestWithFriends/QuestWithFriends.toc",
+					"QuestWithFriends/Core.lua",
+					"QuestWithFriends/README.md",
+					"QuestWithFriends/LICENSE",
+				},
+				set(archive.namelist()),
+			)
+			self.assertEqual(b"-- runtime\n", archive.read("QuestWithFriends/Core.lua"))
+			self.assertEqual(b"MIT License\n", archive.read("QuestWithFriends/LICENSE"))
+		_ = bundle(self.root)
+
+	def test_missing_file_preserves_previous_bundle(self):
+		output = bundle(self.root)
+		previous = output.read_bytes()
+		(self.root / "Core.lua").unlink()
+		with self.assertRaisesRegex(ValueError, "missing"):
+			_ = bundle(self.root)
+		self.assertEqual(previous, output.read_bytes())
+
+	def test_matching_release_tag(self):
+		output = bundle(self.root, tag="v0.1.0")
+		with ZipFile(output) as archive:
+			self.assertIsNone(archive.testzip())
+
+	def test_wrong_release_tag_preserves_previous_bundle(self):
+		output = bundle(self.root)
+		previous = output.read_bytes()
+		for tag in ("0.1.0", "v0.1.1", "v0.1.0-rc.1", ""):
+			with self.subTest(tag=tag):
+				with self.assertRaisesRegex(ValueError, "Release tag must be v0.1.0"):
+					_ = bundle(self.root, tag=tag)
+				self.assertEqual(previous, output.read_bytes())
+
+	def test_matching_prerelease_tag(self):
+		_ = (self.root / "QuestWithFriends.toc").write_text(
+			"## Version: 0.1.0-rc.1\n\nCore.lua\n"
+		)
+		output = bundle(self.root, tag="v0.1.0-rc.1")
+		self.assertEqual("QuestWithFriends-0.1.0-rc.1.zip", output.name)
+
+	def test_nested_windows_paths_and_duplicate_entries(self):
+		(self.root / "assets").mkdir()
+		_ = (self.root / "assets/icon.blp").write_bytes(b"texture")
+		with (self.root / "QuestWithFriends.toc").open("a") as toc:
+			_ = toc.write("# comment\nassets\\icon.blp\nCore.lua\n")
+		output = bundle(self.root, self.root / "custom.zip")
+		with ZipFile(output) as archive:
+			self.assertEqual(
+				b"texture", archive.read("QuestWithFriends/assets/icon.blp")
+			)
+
+	def test_unsafe_paths_are_rejected(self):
+		for name in ("../secret.lua", "/tmp/secret.lua", "C:\\secret.lua"):
+			with self.subTest(name=name):
+				_ = (self.root / "QuestWithFriends.toc").write_text(
+					f"## Version: 0.1.0\n{name}\n"
+				)
+				with self.assertRaisesRegex(ValueError, "Unsafe"):
+					_ = bundle(self.root)
+
+	def test_cannot_overwrite_runtime_file(self):
+		with self.assertRaisesRegex(ValueError, "overwrite"):
+			_ = bundle(self.root, self.root / "Core.lua")
+
+
+if __name__ == "__main__":
+	_ = unittest.main()

@@ -1,0 +1,575 @@
+{
+  "category": -666,
+  "game": "forever",
+  "quests": [
+    {
+      "category": -666,
+      "id": 95998,
+      "sha256": "a854ed9809001e00bc05022929b1aed0ffa7813b01ff94d7ab7d63c67b28465d",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96031,
+      "sha256": "a45fd9bc58b77815462828c458b990afd93e385674dcd426c4fb564a2bafdec9",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 96044,
+      "sha256": "c3175cf9ae587adea912342fc779fc32ef520bd623adaad3a60289a8fb9c0dc1",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 96045,
+      "sha256": "d3b013897e56b6a45a9bf0f873dc79b69ee982dd1bbec7c26fabaddd56febd3b",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 96046,
+      "sha256": "c7dfdd427500eb201db27a62cb2198771b897d0c5cd54b3ba6880ec447f2ac3c",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 96047,
+      "sha256": "d510d2c970b30838c15e7b4ce7b036fe768c6a5c930a8afe84e991d6c255bd27",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 96050,
+      "sha256": "d973f6071a4ba07bdd9b016ec0bb411bd1228b02d29767f4e622e0eca4259eed",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 96055,
+      "sha256": "7045a3ca3131f1b5580a09a1024b3c04d70bee6fcfe10b81a58e4c0a40c6cb9f",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 96056,
+      "sha256": "775584aeb3990bb7fba19c7b87243b849393a922c64561d57fc123a8df43752f",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 96057,
+      "sha256": "fec4f540edaf732f65352c3fa1638560d30d9e46fb687cf606af5cee01e87de8",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 96058,
+      "sha256": "8aed62d2cfeeba48da1d932462363ed5e5a27a96d095ce6d3835d0889f6e0cf3",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 96059,
+      "sha256": "1d831c2ec708356db2b4ce79de9409d52caa41a2b8d80baed8dbe0f62ec8b7d1",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 96101,
+      "sha256": "6b37ae53f6619b60842a923598b3db78f8b51f4702405bebf1c6cf5b6128f1f0",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96102,
+      "sha256": "453c2544c7ad513bc1a0b4d6550d52b1c8c6c6bb408be129ccb9512e78f3918a",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 96604,
+      "sha256": "106db6f2f10eec1560683e8dfb99212fe3eea2189f69b0f5cfb07c43f777a216",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96605,
+      "sha256": "f0f8177085a1ef07949279722750018343ce5a04272a168ada4c09a20498ad57",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96606,
+      "sha256": "2414c3dac152d97c51fa487defadb47eb915e4fc63027e25d5a07b0327802089",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96607,
+      "sha256": "cf1f61682226603e51e4bda6a702239919e1069c02bfe54c91f7aa6a37897815",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96608,
+      "sha256": "77bf0f26c472cab9f44dd15f4624e2f3eacfa98a585915dcfb2f8891a1b1f793",
+      "title": "The Great Outdoors"
+    },
+    {
+      "category": -666,
+      "id": 96626,
+      "sha256": "57efd0879c6985ce5fc94942199549f6d922aa02978d34052058a8cb8015dcb1",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 96629,
+      "sha256": "0ab17fbca7f1710761d7de80d8cbbf0e1a4e82d4e3db32754e0bacf54206584f",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 96634,
+      "sha256": "f7d4bdd0e9ed83c09814c3dd4be77ba3df4eabedbdc88b64bf98ea7a034cd54a",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 96646,
+      "sha256": "ea16c7fff766a7fa13b0292cb2cb0d41d641f6de9f00af14092582093664158b",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 96655,
+      "sha256": "d8afc08950bd891808fe44239bfe6b0aa9f00540954ed94ad74b97ab5a710fc8",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 96658,
+      "sha256": "378f5af7f38a7d3d1af316940ab49bad86aa9dcb019ceebf6e26e19908d59d54",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 96661,
+      "sha256": "f9321b5cb649bb591ab7a84eee8db9848b555f7d2678664940d47c69f5d59e8d",
+      "title": "Camping 101: Cooking"
+    },
+    {
+      "category": -666,
+      "id": 97899,
+      "sha256": "fb6a513f9424bc8ae8603d2c25511a6444b40b4174aedbca1645fe1af4bfbf98",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 97900,
+      "sha256": "cc6d9e6e1e60e5d26d69f393183fabbc3a9aa8bdebda7bb7d4a01f64eb886a79",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 97901,
+      "sha256": "6e15c783882eded3a2ec7408d5946844febfec40176b468972419b5ac5b38ab4",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 97902,
+      "sha256": "ba2bd605d42afd16a711e1c1622818efbb494f9e5e76fe175a7024e8cf49d4ed",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 97903,
+      "sha256": "8098bfcb000404445889bd0c3f715d5dca019ad6ef5af8a32149e4f92ebf44b0",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 97904,
+      "sha256": "98e2d6a77ff3fa7bdda53fc905f69027aef6fae3df1f4b38906eaf3779157bda",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 97905,
+      "sha256": "403f49fe6070293056255c41a26844db8c59b9b582a41dc8bbef7b2d45410587",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 97906,
+      "sha256": "edf9905110394b2aa49b0d56eb69314a9033d25e3cc9b6ff9a03751133fd17bd",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 97907,
+      "sha256": "d3cd62535a36695c36eb9796cca97508d1072e9025f1ad03593cf446bb4ff41e",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 97908,
+      "sha256": "8d95872a337ed8796328d530908c73784cae3a602aa1258a20a8aafac9158a91",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 97915,
+      "sha256": "4506715b489149ba44119fa43b132124f9f71d7fc3b0bfd3e92c448ec8d88609",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 97916,
+      "sha256": "721bcb2fe1a3d96014f3197fc85a4f88aade7868180cb31909955cf27ce64b22",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 97917,
+      "sha256": "e00d46c8b87ee631a8d9eb75355f6338dfd3de46f58d98af6766b16d52edf749",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 97918,
+      "sha256": "75d67b0720af561cafd884314fa88d68b0a12fa908b4a40b8f7025cf42620057",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 97919,
+      "sha256": "fa92889372b865866f6ac5c3e2c0bf1141cf4579bee9e2b30806dd5a8c1c2589",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 97920,
+      "sha256": "ef44ada375f71c7e6e4d18f40eaffe855200973615b794b4a49b448c2efac52b",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 97921,
+      "sha256": "58b0f2b8bf09881757cbfd0d7a181bb4fac17186fe0ccae28ce77f63fbe8b2ba",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 97922,
+      "sha256": "af3da069778b7a541cb12e2ca8b2666ba508deac1e93e17f07f9bcd5770e9702",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 97923,
+      "sha256": "092971019395e5af0ec199cd2e43fa42c9f12e714f22012f5b1d34ca1919d258",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 97924,
+      "sha256": "821551658d814f0b53198415c9b31237e11088739f3d2bdf674ecc29987cbb25",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 97925,
+      "sha256": "53180820912554e99e76b60749dee2099c368cba5c32d729c0b227243476588e",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 97927,
+      "sha256": "4b8bc2370f0180eb3e0a22024921ec3ab099ba988071d8b4e9b403249e88798d",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 97928,
+      "sha256": "31d1d139cb2eca94bab5176a96c1dcb61814660ba4131b7e4ac3eabdd4d11fd8",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 97929,
+      "sha256": "743e65ff5a7f61ae006b63a4f194de65d83e4334e65fc42e0670a9ae318f403f",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 97930,
+      "sha256": "f02bfd4b721fe0503c7bfe4ff4629cd08dfd7f4ed57789cdfa052a5058125c0c",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 97931,
+      "sha256": "07860ed0c95670e0ff97cd0b9fb0058f94097be8b2cd3ce7f21754cae46c5146",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 97932,
+      "sha256": "ce737c0f8ae453f255f407d6ce6d87386bb498e36716169eea7effbcf73bbddf",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 97933,
+      "sha256": "5525d940809cd9c8ca4a11b126e7a464eef5d95bc142f36c51b3726cdd41d05c",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 97934,
+      "sha256": "de9bac66266aadec8148addb6f4d84868adae6c447fd58415d2e221cee3b712a",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 97935,
+      "sha256": "a5ab360f2df455c33088be2a9a07c5d6ef1c47129788e9ffcc09d02ba00a10a1",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 97936,
+      "sha256": "5686dcc25851de83172cf894ad329d3fb63f7063db05c0fe31774bc510d535c1",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 97937,
+      "sha256": "ce69038752529ec5d83ad102b8985d1044ff4ba50f232d54972e3e4a7a0f8ef3",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 97938,
+      "sha256": "5c2a725685cdc4700c87fb923d6020b757952e55793ad22ab3128b507812f7b3",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 97939,
+      "sha256": "cc53badb99180e3ead046a2a3e7b49aa62d420932a6f0d62e45dc55e7bf948f9",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 97940,
+      "sha256": "626b6e03d88b33b6416e84a2258eac8dcc8c5d5ce26b032e2f61db6813753c25",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 97941,
+      "sha256": "837ee61b45475cc86772e35597dbd8986ca94596f882a01d8aa16b0d3d2e52f9",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 97942,
+      "sha256": "2304e65912e598f37daf256de08a5d68284fdf4c2126851e02a66a1508a50270",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 97943,
+      "sha256": "09480d5d0855477ba82ff228cf908760040356ea4401f142b8857c979b8c7ac8",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 97944,
+      "sha256": "acd3d451ae30f5ed2787890953ec3960f9b45eb1d0bcb30f36c9656afd012fbd",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 97946,
+      "sha256": "676940c3c4e028cd39801c9f879a4b4a7daac6b1064df83e99d006ce01512a7e",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 97948,
+      "sha256": "6b13b90767cb4161125670d746187816f2b9827da4e4d9fde1c8ce798f3456af",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 97949,
+      "sha256": "4d31e853a57520ac11dd1b2179463cb18538c49abb52106fd0494161948165d4",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 97950,
+      "sha256": "ccadb5a59dbbcba0a4cccb55abfa3c8b4b40ce655201b98e1757f8829e467d34",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 97951,
+      "sha256": "cd7fa10edb4fd122e2ef5f8c94eed4f380f737340546dadb7f0cb38d1aff63fe",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 97952,
+      "sha256": "61ee583b1be9125c37ef319bd2d366efe09674b48320514d7f3a1bdedced4cce",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 97953,
+      "sha256": "31878b46ee8062f66a1fe2a1a2f9d2202202b9e80022e657a2bdb9cf0c990b96",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 97954,
+      "sha256": "de11b379341525a10d61371d376c69c9e03a307c5e55c340fe704ecb420131b6",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 97955,
+      "sha256": "5144e2a600b1bd29e15de8b0492cd1c3019aafa1114f2c305007120b31bfd989",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 97956,
+      "sha256": "16759009c283cdd688662c8ea825855b192c2c251dfa6e37939ed6f3c487dcbd",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 97957,
+      "sha256": "57a646b5b3854fe4352e8cf52f6f9554e77b56e351532ad688e6dce38065f9d5",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 97958,
+      "sha256": "eaf2f57c6799e7be21b833f2e289d6252cedb040a16b0e2395bbbe0c3c6e7b17",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 97959,
+      "sha256": "206a454c076b91cbc432e4b8062143e0e9ee34049aa4ea1b4bb9bfce6332dfa0",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 97960,
+      "sha256": "0223b223aea1f5f4e2cbb6f351736b52081d5ab43c76c0f63925d1ef8e9905df",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 97961,
+      "sha256": "d094ec4be02786931fdaa2d7865843530c3c664bf329ae3f4040e4b3754a8fd3",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 97963,
+      "sha256": "995cd6f8f3e54f6906de1798994a69f56c9ab53fad7873265123087bce0d7bd2",
+      "title": "Camping 101: Alchemy"
+    },
+    {
+      "category": -666,
+      "id": 97964,
+      "sha256": "05140bbf290f6d0a2625312d068ec68849060031a669055012c5d65d315e7598",
+      "title": "Camping 101: Blacksmithing"
+    },
+    {
+      "category": -666,
+      "id": 97965,
+      "sha256": "a54589ea8b47ec4353923936e9e9ecfac22b130f57cc5041cf5a6de13fafef18",
+      "title": "Camping 101: First Aid"
+    },
+    {
+      "category": -666,
+      "id": 97967,
+      "sha256": "26aefff255f7dbc317480f5961311cc0637bf2d05059ee6c7ce52934a758100a",
+      "title": "Camping 101: Fishing"
+    },
+    {
+      "category": -666,
+      "id": 97968,
+      "sha256": "a38f1000e8d36e62d85261abe01dc846a777ecb75d971228271eb3515ccd97e3",
+      "title": "Camping 101: Herbalism"
+    },
+    {
+      "category": -666,
+      "id": 97969,
+      "sha256": "4dd888c8484648c3508214caa3811593e7aa922ecbc9fd651096d7b6f0f2b09b",
+      "title": "Camping 101: Leatherworking"
+    },
+    {
+      "category": -666,
+      "id": 97970,
+      "sha256": "c0e86f278748bf1fc202f41a0714f39d8477623db3bd428d1e9861b43e2c1138",
+      "title": "Camping 101: Mining"
+    },
+    {
+      "category": -666,
+      "id": 97971,
+      "sha256": "2d99f09934dc9e01e064c9a674380f42e664239153d235213ec254deb8435381",
+      "title": "Camping 101: Skinning"
+    },
+    {
+      "category": -666,
+      "id": 97972,
+      "sha256": "0e7d3d5aaf2761ebf4127f52ef1c337b7dde37986fc2a753767ab48ae0627a7b",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 97973,
+      "sha256": "380ce6dc80994aaebd427d0ac8092bd3e93048bf87ea13710309d562fe31613e",
+      "title": "Camping 101: Tailoring"
+    },
+    {
+      "category": -666,
+      "id": 98284,
+      "sha256": "7d2cb930e598ad978272435a91df5a5cdfad60ad4950647fe9c6fc739862c547",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 98285,
+      "sha256": "b32cdafda4ed5186980ab21cdc171cd56279bc01f3c6cd0e2b33a1264196e7d3",
+      "title": "Camping 101: Engineering"
+    },
+    {
+      "category": -666,
+      "id": 98286,
+      "sha256": "dcc7204177772822ab2af4bd3e56607be61cc6891ff7d121aee9eb6d17f8b20f",
+      "title": "Camping 101: Enchanting"
+    },
+    {
+      "category": -666,
+      "id": 98287,
+      "sha256": "0d942acc23b85891a522f06a1c3038277ad6b46084853491f7c637696d243a43",
+      "title": "Camping 101: Engineering"
+    }
+  ],
+  "revision": "e0a6eaa86f181ac99262e34126bcd2ed1a1712d6",
+  "schema": 1,
+  "source": "questiedb",
+  "source_sha256": "14717b77f49e0f5b99eb0c1596a8af72c5493d913da7fffb963c7567779babfa",
+  "source_url": "https://github.com/Questie/QuestieDB/tree/e0a6eaa86f181ac99262e34126bcd2ed1a1712d6"
+}
