@@ -321,7 +321,7 @@ render = function()
 		local quests = peer and peer.quests
 		local status = peer and peer.status
 		if peer and not peer.connected then
-			status = quests and "stale" or "unknown"
+			status = "offline"
 		end
 		roster[#roster + 1] = { name = member.name, quests = quests, syncStatus = status }
 		if quests then
@@ -858,6 +858,7 @@ end
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GROUP_ROSTER_UPDATE")
+frame:RegisterEvent("UNIT_CONNECTION")
 frame:RegisterEvent("QUEST_LOG_UPDATE")
 frame:RegisterEvent("QUEST_ACCEPTED")
 frame:RegisterEvent("QUEST_REMOVED")
@@ -894,6 +895,11 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
 		updateRoster(event == "PLAYER_ENTERING_WORLD")
+	elseif event == "UNIT_CONNECTION" then
+		local unit = ...
+		if type(unit) == "string" and unit:match("^party[1-4]$") then
+			updateRoster(false)
+		end
 	elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" or event == "ZONE_CHANGED_NEW_AREA" then
 		render()
 	else

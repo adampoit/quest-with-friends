@@ -412,9 +412,10 @@ describe("Quest With Friends panel", function()
 		assert.are.equal("Party status incomplete", panel.status.text)
 	end)
 
-	it("distinguishes waiting, refreshing and stale snapshots without claiming the party is in sync", function()
+	it("distinguishes offline members and sync health without claiming the party is in sync", function()
 		loadPanel()
 		local cases = {
+			{ "offline", "Offline · sync resumes when online" },
 			{ "waiting", "Waiting for quest snapshot · /qwf to refresh" },
 			{ "refreshing", "Refreshing · showing last snapshot" },
 			{ "stale", "Quest data stale · /qwf to refresh" },

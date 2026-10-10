@@ -13,7 +13,7 @@ Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-co
 - **Stop asking “Are you done yet?”** Readiness and completion differences appear together under one quest title.
 - **Keep the view relevant.** Focus on the current zone and optionally include profession or class quests. On Forever, Camping quests count as profession quests too.
 - **Compare Retail quest variants.** Six reviewed Northshire families share completion status; four also compare objective progress, while two compare readiness. Other quests and Forever compare by exact quest ID.
-- **See connection health at a glance.** Clear notices identify members whose data is waiting, refreshing, stale, or incompatible.
+- **See connection health at a glance.** Clear notices distinguish offline members from waiting, refreshing, stale, or incompatible data.
 
 An illustrative party view:
 
@@ -54,7 +54,8 @@ Join a party and the panel appears automatically. Quest changes update it as you
 - **Missing:** a player is missing a quest known to another party member.
 - **Still in progress:** someone else has finished an objective or quest that this player still needs.
 - **Ready/completed:** highlights a readiness or completion difference.
-- **Party status incomplete:** a member is waiting for fresh, compatible data. Cached differences stay visible while refreshing.
+- **Party status incomplete:** a member is offline or waiting for fresh, compatible data. Cached differences stay visible.
+- **Offline:** the member is disconnected. Their last snapshot stays visible if available; syncing resumes automatically when they reconnect.
 
 Click **Share** beside a quest to offer it through WoW's normal party-wide sharing flow. WoW checks eligibility, and recipients accept the offer.
 

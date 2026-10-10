@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Offline party members now have a distinct **Offline** notice instead of stale data or addon-not-detected messages. Cached comparisons remain visible and party status stays incomplete until fresh data arrives after reconnection.
 - Fixed saved **Debug mode** appearing enabled while AddonKit remained at INFO after login or reload. Logging preferences and setting defaults now reapply after WoW restores saved variables.
 - Added **Sort by** choices in the **View** dropdown (formerly **Filters**), grouped into **Show** and **Sort by** sections: **Smart** (default) puts missing quests first, then recently active quests within each group; **Title A–Z** sorts alphabetically. Real quest changes from you or friends count as activity, not refreshes. Sort choices persist across reloads; activity history is session-only.
 - Preview the panel while solo with `/qwf preview` or **Preview appearance** in addon settings. Sample data demonstrates missing quests, objective progress, readiness and completion, with working filters and disabled Share buttons. Preview ends on joining a group or reloading; sample data is never sent or saved.

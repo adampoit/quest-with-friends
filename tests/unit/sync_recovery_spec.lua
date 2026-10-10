@@ -626,14 +626,14 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.same({}, a.view.groups)
 		end)
 
-		it("keeps manual refresh available and marks disconnected data stale", function()
+		it("keeps manual refresh available and distinguishes offline members on roster updates", function()
 			local n = network(game)
 			local a = n.clients[1]
 			n:join()
 			n:advance(5)
 			a.offline[2] = true
 			a:fire("GROUP_ROSTER_UPDATE")
-			assert.are.equal("stale", a.view.notices[1].reason)
+			assert.are.equal("offline", a.view.notices[1].reason)
 			assert.is_false(a.view.complete)
 			a.offline[2] = nil
 			a:fire("GROUP_ROSTER_UPDATE")
@@ -645,6 +645,87 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(5)
 			assert.are.equal(previous + 1, a:count("1.0:H"))
 			assert.is_true(a.view.complete)
+		end)
+
+		it("retains cached differences offline and refreshes them on UNIT_CONNECTION", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			b.quests[42] = quest("Cached errand")
+			n:join()
+			n:advance(5)
+			assert.are.equal("Cached errand", a.view.groups[1].title)
+			a.offline[2] = true
+			n.deliver = function(from, to)
+				return from ~= b and to ~= b
+			end
+			a:fire("UNIT_CONNECTION", "party1", false)
+			assert.are.equal("offline", a.view.notices[1].reason)
+			assert.is_false(a.view.complete)
+			assert.are.equal("Cached errand", a.view.groups[1].title)
+			a.env.SlashCmdList.QUESTWITHFRIENDS("")
+			n:advance(5)
+			assert.are.equal("offline", a.view.notices[1].reason)
+			local requests = a:count("1.0:H")
+			n:advance(120)
+			assert.are.equal(requests, a:count("1.0:H"))
+			b.quests = { [43] = quest("Fresh errand") }
+			a.offline[2], n.deliver = nil, nil
+			a:fire("UNIT_CONNECTION", "party1", true)
+			assert.is_false(a.view.complete)
+			n:advance(5)
+			assert.is_true(a.view.complete)
+			assert.same({}, a.view.notices)
+			assert.are.equal(1, #a.view.groups)
+			assert.are.equal("Fresh errand", a.view.groups[1].title)
+		end)
+
+		it("labels offline members without snapshots and removes them when they leave", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.offline[2] = true
+			n.deliver = function(from, to)
+				return from ~= b and to ~= b
+			end
+			n:join()
+			n:advance(5)
+			assert.are.equal("offline", a.view.notices[1].reason)
+			assert.is_false(a.view.complete)
+			local requests = a:count("1.0:H")
+			a:fire("UNIT_CONNECTION", "player", true)
+			a:fire("UNIT_CONNECTION", "target", true)
+			n:advance(120)
+			assert.are.equal(requests, a:count("1.0:H"))
+			a.offline[2], n.deliver = nil, nil
+			a:fire("UNIT_CONNECTION", "party1", true)
+			n:advance(5)
+			assert.is_true(a.view.complete)
+			assert.same({}, a.view.notices)
+			a.offline[2] = true
+			a:fire("UNIT_CONNECTION", "party1", false)
+			assert.are.equal("offline", a.view.notices[1].reason)
+			a.units = {}
+			a:fire("GROUP_ROSTER_UPDATE")
+			assert.same({}, a.view.notices)
+			assert.is_true(a.view.complete)
+		end)
+
+		it("cancels stalled snapshot recovery when a peer goes offline", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n.deliver = function(from, _, message)
+				return from ~= b or message == "1.0:H"
+			end
+			n:join()
+			n:advance(5)
+			assert.are.equal("waiting", a.view.notices[1].reason)
+			a.offline[2] = true
+			a:fire("UNIT_CONNECTION", "party1", false)
+			n:advance(5)
+			local requests = a:count("1.0:H")
+			n:advance(120)
+			assert.are.equal(requests, a:count("1.0:H"))
+			assert.are.equal("offline", a.view.notices[1].reason)
+			assert.is_false(a.view.complete)
 		end)
 
 		it("stops queued sends when the party becomes a raid", function()

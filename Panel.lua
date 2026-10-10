@@ -311,6 +311,7 @@ function QWF.Panel.hide()
 end
 
 local connectionLabels = {
+	offline = "Offline · sync resumes when online",
 	unknown = "Quest With Friends not detected",
 	waiting = "Waiting for quest snapshot · /qwf to refresh",
 	refreshing = "Refreshing · showing last snapshot",

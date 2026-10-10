@@ -15,5 +15,5 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Collapsible quest headers**
 - [ ] **Resizable panel**
 - [ ] **We should show x/y for quests we've already turned in**
-- [ ] **Offline member handling**
+- [x] **Offline member handling.** Show a distinct Offline notice, retain cached comparisons, and resume syncing automatically on reconnection.
 - [ ] **Redundant counts in the UI**

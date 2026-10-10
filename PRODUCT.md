@@ -64,7 +64,7 @@ Reviewed Retail variant families let friends on different class/race versions of
 
 ### Show connection health
 
-Connection notices appear separately above quest groups. Distinguish addon detection, waiting for a snapshot, refreshing, stale data and protocol incompatibility. Keep the last comparison visible during recovery, with a clear status. `/qwf` requests a fresh comparison.
+Connection notices appear separately above quest groups. Distinguish offline members, addon detection, waiting for a snapshot, refreshing, stale data and protocol incompatibility. Keep the last comparison visible during recovery or disconnection, with a clear status. Offline members keep party status incomplete; syncing resumes automatically when they reconnect. `/qwf` requests a fresh comparison for online members.
 
 ## Synchronization
 
