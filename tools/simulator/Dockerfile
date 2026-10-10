@@ -36,13 +36,20 @@ ENV CARGO_BUILD_JOBS=2
 RUN cargo build --release --bin wow-sim --no-default-features --features gui,client-retail --locked \
     && strip /build/target/release/wow-sim
 
+# Reuse the compiled dependencies when adjusting the preview-only shader.
+FROM preview-builder AS preview-color-builder
+COPY preview-color.patch /build/preview-color.patch
+RUN git apply /build/preview-color.patch \
+    && cargo build --release --bin wow-sim --no-default-features --features gui,client-retail --locked \
+    && strip /build/target/release/wow-sim
+
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS preview
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates fonts-dejavu-core libvulkan1 mesa-vulkan-drivers libudev1 \
     libxkbcommon0 libx11-6 libx11-xcb1 libxcb1 libwayland-client0 libwayland-cursor0 libwayland-egl1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=preview-builder /build/target/release/wow-sim /app/wow-sim
+COPY --from=preview-color-builder /build/target/release/wow-sim /app/wow-sim
 COPY --from=source /build/data/ /app/data/
 COPY --from=runtime-assets /app/Interface/ /app/Interface/
 COPY --from=runtime-assets /root/.cache/wow-ui-sim/blizzard-ui/ /opt/wow-ui-sim/blizzard-ui/
@@ -53,6 +60,7 @@ ENV WOW_SIM_NO_SAVED_VARS=1 \
     XDG_CACHE_HOME=/tmp/wow-ui-sim-cache \
     XDG_RUNTIME_DIR=/tmp/wow-ui-sim-runtime \
     HOME=/tmp
-LABEL local.wow-ui-sim.target-cpu="x86-64"
+LABEL local.wow-ui-sim.target-cpu="x86-64" \
+    local.wow-ui-sim.preview-color="srgb-runtime-visibility-boost"
 ENTRYPOINT ["/app/preview-entrypoint.sh"]
 CMD ["--help"]

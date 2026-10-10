@@ -47,6 +47,16 @@ bash tools/capture_share_preview.sh
 
 This builds `wow-ui-sim:0.1.32-preview` with the upstream `gui` feature and Mesa software Vulkan renderer. It runs headlessly with software rendering. The heavier build limits compilation to two jobs for memory-constrained environments; CI uses only the lightweight test target.
 
+The preview-only `tools/simulator/preview-color.patch` disables the upstream shader's artificial brightness boost by default and converts display RGB tints to linear light for its sRGB render target. This keeps dark panel backgrounds and status colors closer to the addon's requested colors without changing the addon itself. The lightweight test image remains unpatched. Revalidate the patch when upgrading the pinned simulator revision; previews are still approximations, not substitutes for in-game screenshots.
+
+For inspecting dark borders or translucent elements, opt into the debug-only boost:
+
+```sh
+bash tools/capture_share_preview.sh --visibility-boost
+```
+
+Both modes keep the sRGB correction. The flag selects a shader override at runtime (`WOW_SIM_VISIBILITY_BOOST=1` inside the preview container), so switching modes does not require rebuilding. Rebuild the preview image once after updating the renderer patch. Do not use boosted captures to judge the addon's actual colors.
+
 To supply real game fonts and textures, point to your local installation root (the directory with `Data` and `.build.info`):
 
 ```sh
@@ -55,7 +65,7 @@ WOW_INSTALL_PATH="/path/to/World of Warcraft" bash tools/capture_share_preview.s
 
 Both installation and addon mounts are **read-only**. Without an installation, CASC is disabled and missing assets can use fallbacks or remain blank. Extracted assets are cached under `$XDG_CACHE_HOME/quest-with-friends/simulator-preview/` or `~/.cache/quest-with-friends/simulator-preview/`; set `QWF_SIMULATOR_CACHE_DIR` to override it. Prefer the Linux filesystem for SQLite-heavy caches when using WSL. Keep extracted game assets local and excluded from version control and release bundles.
 
-Output goes to `.cache/simulator-previews/share.webp` and `share.log`; an optional first argument selects another directory. Failed captures preserve the previous screenshot, and interrupts clean up the container. The demo runs the real comparison and panel code with synthetic quests at 2× scale. Its Share callback logs a demonstration message. Label captures as simulator previews.
+Output goes to `.cache/simulator-previews/share.webp` and `share.log`; `--visibility-boost` writes `share-visibility-boost.webp` and `share-visibility-boost.log` instead, preserving the faithful capture. Logs identify the selected mode. An optional output-directory argument selects another directory and may appear before or after the flag; `--help` shows usage. Failed captures preserve the previous screenshot, and interrupts clean up the container. The demo runs the real comparison and panel code with synthetic quests at 2× scale. Its Share callback logs a demonstration message. Label captures as simulator previews.
 
 ## Quest data and protocol
 

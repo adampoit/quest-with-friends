@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
@@ -20,7 +21,10 @@ with open(os.environ["DOCKER_CALLS"], "a", encoding="utf-8") as file:
     file.write(json.dumps(args) + "\\n")
 mode = os.environ["DOCKER_MODE"]
 if args[:2] == ["image", "inspect"]:
-    sys.exit(1 if mode == "missing-image" else 0)
+    if mode == "missing-image":
+        sys.exit(1)
+    print({"old-image": "srgb-no-brightness-boost", "unpatched-image": ""}.get(mode, "srgb-runtime-visibility-boost"))
+    sys.exit(0)
 if mode == "run-error":
     sys.exit(17)
 output = next(
@@ -53,10 +57,17 @@ class SharePreviewTests(unittest.TestCase):
 		docker.chmod(0o755)
 
 	def capture(
-		self, mode: str = "success", install_path: str | Path = ""
+		self,
+		mode: str = "success",
+		install_path: str | Path = "",
+		arguments: Sequence[str] | None = None,
 	) -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
 		result = subprocess.run(
-			["bash", str(CAPTURE_SCRIPT), str(self.output)],
+			[
+				"bash",
+				str(CAPTURE_SCRIPT),
+				*(arguments if arguments is not None else [str(self.output)]),
+			],
 			cwd=self.workdir,
 			env={
 				**os.environ,
@@ -66,6 +77,7 @@ class SharePreviewTests(unittest.TestCase):
 				"WOW_INSTALL_PATH": str(install_path),
 				"XDG_CACHE_HOME": str(self.workdir / "cache"),
 				"QWF_SIMULATOR_CACHE_DIR": "",
+				"WOW_SIM_VISIBILITY_BOOST": "1",
 			},
 			capture_output=True,
 			text=True,
@@ -73,9 +85,11 @@ class SharePreviewTests(unittest.TestCase):
 		)
 		calls = [
 			cast(list[str], json.loads(line))
-			for line in self.calls.read_text().splitlines()
+			for line in (
+				self.calls.read_text().splitlines() if self.calls.exists() else []
+			)
 		]
-		self.assertEqual(list(self.output.glob(".capture.*")), [])
+		self.assertEqual(list(self.workdir.rglob(".capture.*")), [])
 		return result, calls
 
 	def test_capture_without_install_disables_casc_and_keeps_mounts_read_only(self):
@@ -84,11 +98,82 @@ class SharePreviewTests(unittest.TestCase):
 		self.assertEqual(self.screenshot.read_bytes(), b"preview")
 		run = calls[-1]
 		self.assertIn("WOW_SIM_CASC=0", run)
+		self.assertIn("WOW_SIM_VISIBILITY_BOOST=0", run)
+		self.assertIn("Preview mode: faithful colors", result.stdout)
+		self.assertIn("faithful colors", (self.output / "share.log").read_text())
 		self.assertIn("--init", run)
 		self.assertIn(f"{ROOT}:/app/Interface/AddOns/QuestWithFriends:ro", run)
 		self.assertIn(f"{os.getuid()}:{os.getgid()}", run)
 		self.assertIn("screenshot", run)
 		self.assertIn("QuestWithFriendsPanel", run)
+
+	def test_visibility_boost_is_opt_in_and_does_not_replace_faithful_preview(self):
+		result, calls = self.capture(arguments=["--visibility-boost", str(self.output)])
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("WOW_SIM_VISIBILITY_BOOST=1", calls[-1])
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+		self.assertEqual(
+			(self.output / "share-visibility-boost.webp").read_bytes(), b"preview"
+		)
+		self.assertIn("debug only; colors are not faithful", result.stdout)
+		self.assertIn(
+			"debug only", (self.output / "share-visibility-boost.log").read_text()
+		)
+
+	def test_visibility_boost_flag_can_follow_output_directory(self):
+		result, calls = self.capture(arguments=[str(self.output), "--visibility-boost"])
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("WOW_SIM_VISIBILITY_BOOST=1", calls[-1])
+
+	def test_visibility_boost_failures_preserve_both_previews(self):
+		boosted = self.output / "share-visibility-boost.webp"
+		_ = boosted.write_bytes(b"previous debug screenshot")
+		for mode, code in [("lua-error", 1), ("run-error", 17)]:
+			with self.subTest(mode=mode):
+				result, _ = self.capture(
+					mode=mode, arguments=["--visibility-boost", str(self.output)]
+				)
+				self.assertEqual(result.returncode, code)
+				self.assertEqual(boosted.read_bytes(), b"previous debug screenshot")
+				self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+
+	def test_old_renderer_requires_rebuild_to_enable_visibility_boost(self):
+		result, calls = self.capture(
+			mode="old-image", arguments=["--visibility-boost", str(self.output)]
+		)
+		self.assertEqual(result.returncode, 1)
+		self.assertIn("Rebuild the renderer for --visibility-boost", result.stderr)
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+
+	def test_unpatched_renderer_requires_rebuild_for_faithful_colors(self):
+		result, calls = self.capture(mode="unpatched-image")
+		self.assertEqual(result.returncode, 1)
+		self.assertIn("Rebuild the renderer for faithful colors", result.stderr)
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+
+	def test_help_does_not_require_docker(self):
+		result, calls = self.capture(arguments=["--help"])
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("--visibility-boost", result.stdout)
+		self.assertEqual(calls, [])
+
+	def test_invalid_arguments_fail_before_accessing_docker(self):
+		for arguments in [("--unknown",), (str(self.output), "extra")]:
+			with self.subTest(arguments=arguments):
+				result, calls = self.capture(arguments=arguments)
+				self.assertEqual(result.returncode, 2)
+				self.assertIn("Usage:", result.stderr)
+				self.assertEqual(calls, [])
+
+	def test_double_dash_allows_directory_names_starting_with_a_dash(self):
+		result, calls = self.capture(arguments=["--", "-preview"])
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn(f"{self.workdir / '-preview'}:/output", calls[-1])
+		self.assertEqual(
+			(self.workdir / "-preview" / "share.webp").read_bytes(), b"preview"
+		)
 
 	def test_game_install_is_mounted_read_only(self):
 		install = self.workdir / "World of Warcraft"

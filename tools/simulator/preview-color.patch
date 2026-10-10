@@ -1,0 +1,71 @@
+diff --git a/src/render/shader/quad.wgsl b/src/render/shader/quad.wgsl
+--- a/src/render/shader/quad.wgsl
++++ b/src/render/shader/quad.wgsl
+@@ -72,6 +72,18 @@ struct VertexOutput {
+     @location(6) @interpolate(linear) mask_tex_coords: vec2<f32>,
+ }
+ 
++override VISIBILITY_BOOST: bool = false;
++
++// Lua UI colors are display RGB; textures and the render target are sRGB.
++// Convert tints to linear light before texture multiplication and blending.
++fn srgb_to_linear(rgb: vec3<f32>) -> vec3<f32> {
++    return select(
++        pow((rgb + vec3f(0.055)) / 1.055, vec3f(2.4)),
++        rgb / 12.92,
++        rgb <= vec3f(0.04045),
++    );
++}
++
+ @vertex
+ fn vs_main(in: VertexInput) -> VertexOutput {
+     var out: VertexOutput;
+@@ -81,7 +93,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
+ 
+     // Pass through to fragment shader
+     out.tex_coords = in.tex_coords;
+-    out.color = in.color;
++    out.color = vec4f(srgb_to_linear(in.color.rgb), in.color.a);
+     out.tex_index = in.tex_index;
+     out.flags = in.flags;
+     out.local_uv = in.local_uv;
+@@ -210,15 +222,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+         }
+     }
+ 
+-    // Brightness boost — the simulator has no 3D game world behind the UI,
+-    // so dark/semi-transparent textures (borders, backgrounds) are harder to
+-    // see against the black clear color. Additive overlays already brighten the
+-    // destination; boosting them also makes near-transparent atlas edge pixels
+-    // visible as stripes.
+-    if blend_mode != BLEND_ADDITIVE {
+-        color = vec4f(pow(color.rgb, vec3f(1.0 / 1.5)), color.a);
+-    }
+-
++    // Debug-only visibility aid; color-space correction stays enabled.
++    if VISIBILITY_BOOST && blend_mode != BLEND_ADDITIVE {
++        color = vec4f(pow(color.rgb, vec3f(1.0 / 1.5)), color.a);
++    }
++
+     // Premultiplied alpha output: pipeline uses src + dst * (1 - src.a).
+     // Standard alpha: premultiply color by alpha for correct blending.
+     // Additive: premultiply then zero alpha so dst is fully preserved (src + dst).
+diff --git a/src/render/shader/pipeline.rs b/src/render/shader/pipeline.rs
+--- a/src/render/shader/pipeline.rs
++++ b/src/render/shader/pipeline.rs
+@@ -181,7 +181,14 @@ impl WowUiPipeline {
+             module: shader,
+             entry_point: Some("fs_main"),
+             targets,
+-            compilation_options: wgpu::PipelineCompilationOptions::default(),
++            compilation_options: wgpu::PipelineCompilationOptions {
++                constants: if std::env::var("WOW_SIM_VISIBILITY_BOOST").as_deref() == Ok("1") {
++                    &[("VISIBILITY_BOOST", 1.0)]
++                } else {
++                    &[]
++                },
++                ..Default::default()
++            },
+         }
+     }
+ 
