@@ -12,7 +12,7 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Clear connection health.** Distinguish addon not detected, waiting, refreshing, and stale data. Keep cached comparisons visible with their connection status while fresh data arrives; `/qwf` requests a refresh.
 - [x] **Exclude class and profession quests**
 - [ ] **More compact mode**
-- [ ] **Collapsible quest headers**
+- [x] **Collapsible quest headers**
 - [ ] **Resizable panel**
 - [ ] **We should show x/y for quests we've already turned in**
 - [ ] **Offline member handling**

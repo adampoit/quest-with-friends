@@ -33,6 +33,8 @@ The Missing Scout
   ✓ Julia: Ready to turn in
 ```
 
+Click a quest heading to collapse or expand its player details. Collapsed headings retain a compact summary counting distinct affected players and any **Share** button. Collapse choices persist across sessions and do not change comparison status.
+
 When everyone is caught up, the panel shows **Party in sync**. Its draggable position and filter choices persist across sessions.
 
 ### Focus the view

@@ -34,7 +34,7 @@ The first build downloads dependencies and compiles Rust, requiring several minu
 
 When upgrading the simulator, update the source revision, runtime image digest, and versioned image tags in the build script, workflows, and these instructions together. The interface override loads our TOC in the simulator.
 
-`tests/simulator.lua` covers party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, scope summaries, row truncation/reuse, sharing, panel position persistence, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
+`tests/simulator.lua` covers party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, scope summaries, row truncation/reuse, persistent quest-heading toggles, collapsed summaries, sharing, panel position persistence, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
 
 ## Simulator screenshots
 

@@ -7,6 +7,7 @@ local toggleFilter
 local currentZoneOnly
 local questFilters = {}
 local shareQuest
+local redraw
 local WIDTH = 348
 local MAX_ROWS = 18
 local DETAIL_X = 41
@@ -54,6 +55,9 @@ local function generateFilterMenu(_, root)
 end
 
 local function createPanel()
+	QuestWithFriendsDB.collapsedQuests = type(QuestWithFriendsDB.collapsedQuests) == "table"
+			and QuestWithFriendsDB.collapsedQuests
+		or {}
 	panel = CreateFrame("Frame", "QuestWithFriendsPanel", UIParent, "BackdropTemplate")
 	panel:SetSize(WIDTH, 58)
 	local position = QuestWithFriendsDB.panelPosition
@@ -116,7 +120,90 @@ local function createPanel()
 	panel.scope:SetTextColor(0.72, 0.78, 0.85)
 end
 
-local function addRow(text, y, kind, questID)
+local function hideTooltip(self)
+	if GameTooltip:IsOwned(self) then
+		GameTooltip:Hide()
+	end
+end
+
+local function collapsedSummary(group)
+	local players, count, reason = {}, 0, group.differences[1] and group.differences[1].reason
+	for _, difference in ipairs(group.differences) do
+		if not players[difference.player] then
+			players[difference.player] = true
+			count = count + 1
+		end
+		if difference.reason ~= reason then
+			reason = false
+		end
+	end
+	if reason == "missing" then
+		return count .. " missing", styles.missing.color
+	elseif reason == "active" or reason == "objective" then
+		return count .. " need" .. (count == 1 and "s" or "") .. " progress", styles.needs.color
+	end
+	return count .. " affected", { 0.72, 0.78, 0.85 }
+end
+
+local function setQuestHeading(row, group, collapsed, y, width)
+	if not row.toggleButton then
+		local button = CreateFrame("Button", nil, panel)
+		row.toggleButton = button
+		button:RegisterForClicks("LeftButtonUp")
+		local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+		highlight:SetAllPoints()
+		highlight:SetColorTexture(1, 1, 1, 0.06)
+		button.indicator = button:CreateTexture(nil, "OVERLAY")
+		button.indicator:SetPoint("LEFT", 0, 0)
+		button.indicator:SetSize(12, 12)
+		button.indicator:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+		button.indicator:SetTexCoord(0.25, 0.75, 0.25, 0.75)
+		button.indicator:SetDesaturated(true)
+		button.indicator:SetVertexColor(0.72, 0.79, 0.88)
+		button.summary = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		button.summary:SetPoint("RIGHT", 0, 0)
+		button.summary:SetJustifyH("RIGHT")
+		button.summary:SetWordWrap(false)
+		button:SetScript("OnClick", function()
+			if row.groupID then
+				local saved = QuestWithFriendsDB.collapsedQuests
+				saved[row.groupID] = saved[row.groupID] ~= true or nil
+				redraw()
+			end
+		end)
+		button:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetText(row.title)
+			GameTooltip:AddLine(row.summaryText, 1, 1, 1, true)
+			GameTooltip:AddLine(row.collapsed and "Click to expand" or "Click to collapse", 1, 1, 1, true)
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", hideTooltip)
+		button:SetScript("OnHide", hideTooltip)
+	end
+	local button = row.toggleButton
+	row.groupID, row.title, row.collapsed = group.questID, group.title, collapsed
+	local summary, color = collapsedSummary(group)
+	row.summaryText = summary
+	button:ClearAllPoints()
+	button:SetPoint("TOPLEFT", panel, "TOPLEFT", 15, -y)
+	button:SetSize(width + 16, 20)
+	button.indicator:SetRotation(collapsed and 0 or -math.pi / 2)
+	local summaryWidth = 0
+	if collapsed then
+		button.summary:SetText(summary)
+		button.summary:SetTextColor(unpack(color))
+		summaryWidth = math.min(130, button.summary:GetStringWidth())
+		button.summary:SetWidth(summaryWidth)
+		button.summary:Show()
+	else
+		button.summary:Hide()
+	end
+	row:SetWidth(width - (collapsed and summaryWidth + 8 or 0))
+	button:Show()
+end
+
+local function addRow(text, y, kind, questID, group, collapsed)
 	activeRows = activeRows + 1
 	local row = rows[activeRows]
 	if not row then
@@ -166,15 +253,20 @@ local function addRow(text, y, kind, questID)
 		row.icon:SetVertexColor(unpack(style.color))
 		row.icon:Show()
 	end
-	local x = style and DETAIL_X or 15
-	row:SetWidth(WIDTH - x - 15 - (questID and 60 or 0))
+	local x = group and 31 or (style and DETAIL_X or 15)
+	local width = WIDTH - x - 15 - (questID and 60 or 0)
+	row:SetWidth(width)
+	row:SetWordWrap(not group)
 	if questID then
 		row.shareButton:ClearAllPoints()
 		row.shareButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -y)
 		row.shareButton:Show()
 	end
-	row:SetPoint("TOPLEFT", x, -y)
+	row:SetPoint("TOPLEFT", x, -y - (group and 3 or 0))
 	row:SetText(text)
+	if group then
+		setQuestHeading(row, group, collapsed, y, width)
+	end
 	if style then
 		row:SetTextColor(unpack(style.color))
 	elseif kind == "muted" then
@@ -183,7 +275,7 @@ local function addRow(text, y, kind, questID)
 		row:SetTextColor(0.94, 0.95, 0.97)
 	end
 	row:Show()
-	return y + math.max(questID and 20 or 15, row:GetStringHeight()) + (kind == "quest" and 2 or 3)
+	return y + math.max(group and 20 or 15, row:GetStringHeight()) + (kind == "quest" and 2 or 3)
 end
 
 function QWF.Panel.hide()
@@ -217,6 +309,9 @@ local function differenceText(difference)
 end
 
 function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters)
+	redraw = function()
+		QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters)
+	end
 	toggleFilter = onToggle
 	currentZoneOnly = zoneFilter == true
 	questFilters = filters or {}
@@ -230,6 +325,10 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		row:Hide()
 		row:ClearAllPoints()
 		row.questID = nil
+		row.groupID = nil
+		if row.toggleButton then
+			row.toggleButton:Hide()
+		end
 		if row.icon then
 			row.icon:Hide()
 		end
@@ -257,21 +356,22 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	end
 	local remaining = 0
 	for index, group in ipairs(groups) do
-		local size = #group.differences + 1
+		local collapsed = QuestWithFriendsDB.collapsedQuests[group.questID] == true
+		local size = collapsed and 1 or #group.differences + 1
 		local available = MAX_ROWS - count
 		-- Never hide the first quest entirely just because its details exceed the row budget.
 		local oversized = size > available and index == 1 and available >= 3
 		if size <= available or oversized then
 			local questID = onShare and group.shareQuestID
-			y = addRow(group.title, y, "quest", questID)
+			y = addRow(group.title, y, "quest", questID, group, collapsed)
 			count = count + 1
-			local shown = oversized and available - 2 or #group.differences
+			local shown = collapsed and 0 or (oversized and available - 2 or #group.differences)
 			for detailIndex = 1, shown do
 				local difference = group.differences[detailIndex]
 				y = addRow(differenceText(difference), y, difference.kind)
 				count = count + 1
 			end
-			if shown < #group.differences then
+			if not collapsed and shown < #group.differences then
 				y = addRow("  +" .. (#group.differences - shown) .. " more differences for this quest", y, "muted")
 				count = count + 1
 			end

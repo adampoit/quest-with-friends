@@ -29,7 +29,7 @@ The Missing Scout
   ✓ Alex: Ready to turn in
 ```
 
-The compact, draggable panel remembers its position and hides when you leave the party.
+The compact, draggable panel remembers its position and hides when you leave the party. Click a quest heading to collapse or expand its details; choices persist across reloads and logins. Collapsed headings retain a short summary and the **Share** button when available.
 
 ## Install
 
@@ -64,7 +64,7 @@ Open **Filters** in the header:
 | Show profession quests | Off     |
 | Show class quests      | Off     |
 
-Settings persist across reloads. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists show a count of hidden quests or differences.
+Settings persist across reloads. Collapsing a quest only hides its details—it still contributes to party status. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists show a count of hidden quests or differences.
 
 Recently completed quests stay available for comparisons during the current login, up to 30 entries. Use **`/qwf`** to request a fresh party comparison. Automatic retries and stalled-transfer recovery keep updates flowing.
 

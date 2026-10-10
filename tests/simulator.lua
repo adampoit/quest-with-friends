@@ -159,6 +159,7 @@ local function partyTest(name, callback)
 			QuestWithFriendsDB.zoneFilter = true
 			QuestWithFriendsDB.showProfessionQuests = false
 			QuestWithFriendsDB.showClassQuests = false
+			QuestWithFriendsDB.collapsedQuests = {}
 			A_Admin.SetPartySize(1)
 			A_Admin.SetPartyMember(1, "Julia", 8, 80)
 			A_Admin.FireEvent("PLAYER_ENTERING_WORLD")
@@ -436,6 +437,74 @@ partyTest("real Share buttons use current row IDs and disappear when differences
 	assertFalse(shareButton:IsShown())
 	assertFalse(GameTooltip:IsShown())
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
+end)
+
+partyTest("quest heading clicks persist collapse choices without hiding sharing or notices", function(quests)
+	local title = string.rep("Long simulator quest title ", 10)
+	local groups = {
+		{
+			questID = 42,
+			shareQuestID = 77,
+			title = title,
+			differences = {
+				{ player = "Julia", kind = "missing", reason = "missing" },
+				{ player = "Bob", kind = "missing", reason = "missing" },
+			},
+		},
+		{
+			questID = 43,
+			title = "Other errand",
+			differences = { { player = "You", kind = "needs", reason = "active" } },
+		},
+	}
+	local shared
+	local function show()
+		QuestWithFriends.Panel.show(groups, false, true, nil, function(id)
+			shared = id
+		end, { { player = "Charlie", reason = "waiting" } })
+	end
+	show()
+	local heading
+	for _, region in ipairs({ QuestWithFriendsPanel:GetRegions() }) do
+		if region:GetObjectType() == "FontString" and region:GetText() == title then
+			heading = region
+		end
+	end
+	assertNotNil(heading)
+	local toggle, share = heading.toggleButton, heading.shareButton
+	assertFalse(toggle.summary:IsShown())
+	assertAlmostEquals(-math.pi / 2, toggle.indicator:GetRotation())
+	assertContains(panelTexts(), "Julia: Missing")
+	local expandedHeight = QuestWithFriendsPanel:GetHeight()
+	toggle:Click()
+	assertTrue(QuestWithFriendsDB.collapsedQuests[42])
+	assertEquals(nil, QuestWithFriendsDB.collapsedQuests[77])
+	assertAlmostEquals(0, toggle.indicator:GetRotation())
+	assertEquals("2 missing", toggle.summary:GetText())
+	assertTrue(toggle.summary:IsShown())
+	assertTrue(share:IsShown())
+	assertTrue(QuestWithFriendsPanel:GetHeight() < expandedHeight)
+	assertTrue(heading:GetHeight() < 20)
+	local shareLeft = share:GetLeft()
+	assertTrue(toggle:GetRight() < shareLeft)
+	assertTrue(heading:GetRight() < toggle.summary:GetLeft())
+	assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
+	assertContains(panelTexts(), "Charlie: Waiting for quest snapshot · /qwf to refresh")
+	assertContains(panelTexts(), "You: Still in progress")
+	share:Click()
+	assertEquals(77, shared)
+	assertTrue(QuestWithFriendsDB.collapsedQuests[42])
+	sendSnapshot(quests)
+	assertFalse(toggle:IsShown())
+	show()
+	assertAlmostEquals(0, toggle.indicator:GetRotation())
+	toggle:GetScript("OnEnter")(toggle)
+	assertTrue(GameTooltip:IsOwned(toggle))
+	toggle:Click()
+	assertFalse(GameTooltip:IsShown())
+	assertEquals(nil, QuestWithFriendsDB.collapsedQuests[42])
+	assertContains(panelTexts(), "Julia: Missing")
+	assertFalse(toggle.summary:IsShown())
 end)
 
 partyTest("quest event bursts and slash refreshes queue only one new snapshot", function(_, messages)

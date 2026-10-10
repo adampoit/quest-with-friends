@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Click quest headings to collapse or expand details, with choices saved across reloads and logins. Collapsed headings keep an affected-player summary and any **Share** button; party status and connection notices remain unchanged.
+
 ## 0.1.5
 
 - Explicit protocol 1.0 for snapshots and control messages. Older development formats and different majors show an **Incompatible addon protocol** notice; compatible minor versions can exchange baseline snapshots.
