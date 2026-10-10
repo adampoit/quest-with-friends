@@ -11,6 +11,8 @@ local redraw
 local isPreview = false
 local collapsedQuests
 local stopPreview
+local sortMode = "smart"
+local selectSort
 local WIDTH = 348
 local MAX_ROWS = 18
 local DETAIL_X = 41
@@ -34,6 +36,7 @@ local function scopeText()
 end
 
 local function generateFilterMenu(_, root)
+	root:CreateTitle("Show")
 	root:CreateCheckbox("Current zone only", function()
 		return currentZoneOnly
 	end, function()
@@ -55,6 +58,18 @@ local function generateFilterMenu(_, root)
 			questFilters.toggleClasses()
 		end
 	end):SetEnabled(questFilters.toggleClasses ~= nil)
+	root:CreateDivider()
+	root:CreateTitle("Sort by")
+	for _, option in ipairs({ { "smart", "Smart" }, { "title", "Title A–Z" } }) do
+		local mode, label = option[1], option[2]
+		root:CreateRadio(label, function()
+			return sortMode == mode
+		end, function()
+			if selectSort then
+				selectSort(mode)
+			end
+		end):SetEnabled(selectSort ~= nil)
+	end
 end
 
 local function createPanel()
@@ -105,7 +120,7 @@ local function createPanel()
 	panel.filter = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
 	panel.filter:SetSize(92, 24)
 	panel.filter:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -7)
-	panel.filter:OverrideText("Filters")
+	panel.filter:OverrideText("View")
 	panel.filter:SetupMenu(generateFilterMenu)
 	panel:SetScript("OnHide", function(self)
 		self.filter:CloseMenu()
@@ -323,6 +338,8 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	presentation = presentation or {}
 	isPreview = presentation.preview == true
 	stopPreview = presentation.onStop
+	sortMode = presentation.sortMode or "smart"
+	selectSort = presentation.onSort
 	redraw = function()
 		QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters, presentation)
 	end

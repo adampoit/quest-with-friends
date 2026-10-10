@@ -20,6 +20,9 @@ local members = {}
 local completed = {}
 local completedOrder = {}
 local localQuests = {}
+local localSnapshotKnown = false
+local activity = {}
+local activitySequence = 0
 local questCategories = {}
 local lastScanSummary
 local lastPayload
@@ -46,6 +49,9 @@ local setPreviewMode
 local frame = CreateFrame("Frame")
 QuestWithFriendsDB = type(QuestWithFriendsDB) == "table" and QuestWithFriendsDB or {}
 QuestWithFriendsDB.debugMode = QuestWithFriendsDB.debugMode == true
+if QuestWithFriendsDB.sortMode ~= "title" then
+	QuestWithFriendsDB.sortMode = "smart"
+end
 if QuestWithFriendsDB.zoneFilter == nil then
 	QuestWithFriendsDB.zoneFilter = true
 end
@@ -196,6 +202,18 @@ local function collectQuests()
 	return quests
 end
 
+local function recordActivity(previous, current)
+	activitySequence = activitySequence + 1
+	Core.recordActivity(activity, previous, current, activitySequence)
+end
+
+local function scanQuests()
+	local quests = collectQuests()
+	recordActivity(localSnapshotKnown and localQuests or nil, quests)
+	localQuests = quests
+	localSnapshotKnown = true
+end
+
 local function shareableQuestIndex(id)
 	if not inParty() or not C_QuestLog.IsPushableQuest(id) then
 		return nil
@@ -207,6 +225,7 @@ local function shareableQuestIndex(id)
 end
 
 local function showPanel(groups, complete, notices)
+	Core.sortGroups(groups, QuestWithFriendsDB.sortMode, previewMode and QWF.Preview.activity or activity)
 	QWF.Panel.show(
 		groups,
 		complete,
@@ -240,6 +259,11 @@ local function showPanel(groups, complete, notices)
 			end,
 		},
 		{
+			sortMode = QuestWithFriendsDB.sortMode,
+			onSort = function(mode)
+				QuestWithFriendsDB.sortMode = mode == "title" and "title" or "smart"
+				render()
+			end,
 			preview = previewMode,
 			collapsedQuests = previewMode and previewCollapsed or nil,
 			onStop = previewMode and function()
@@ -563,7 +587,7 @@ local function broadcast(force)
 end
 
 refresh = function(force)
-	localQuests = collectQuests()
+	scanQuests()
 	render()
 	if not inParty() then
 		return
@@ -579,7 +603,7 @@ refresh = function(force)
 			return
 		end
 		scheduled = false
-		localQuests = collectQuests()
+		scanQuests()
 		render()
 		local forced = forceRefresh
 		forceRefresh = false
@@ -807,6 +831,7 @@ local function receive(sender, message)
 		peer.pending = nil
 		local quests = Core.decode(table.concat(pending.parts), pending.version)
 		if quests then
+			recordActivity(peer.quests, quests)
 			peer.revision = serial
 			peer.quests = quests
 			peer.status, peer.watch = nil, nil

@@ -227,6 +227,65 @@ function Core.matchQuest(quests, id)
 	return matched, matchedID
 end
 
+-- Initial snapshots establish a baseline, not activity. Metadata and objective wording can change on refresh.
+function Core.recordActivity(activity, previous, current, sequence)
+	if not previous then
+		return
+	end
+	local function mark(id)
+		activity[Core.questIDs(id)[1]] = sequence
+	end
+	for id, quest in pairs(current) do
+		local old = previous[id]
+		local changed = old and (old.state ~= quest.state or #old.objectives ~= #quest.objectives)
+		if old and not changed then
+			for index, objective in ipairs(quest.objectives) do
+				local before = old.objectives[index]
+				if before.have ~= objective.have or before.need ~= objective.need then
+					changed = true
+					break
+				end
+			end
+		end
+		if changed or (not old and quest.state ~= "completed") then
+			mark(id)
+		end
+	end
+	for id, quest in pairs(previous) do
+		if not current[id] and quest.state ~= "completed" then
+			mark(id)
+		end
+	end
+end
+
+function Core.sortGroups(groups, mode, activity)
+	local missing = {}
+	for _, group in ipairs(groups) do
+		for _, difference in ipairs(group.differences) do
+			if difference.kind == "missing" then
+				missing[group] = true
+				break
+			end
+		end
+	end
+	table.sort(groups, function(a, b)
+		if mode ~= "title" then
+			local am, bm = missing[a] == true, missing[b] == true
+			if am ~= bm then
+				return am
+			end
+			local aa, ba = activity and activity[a.questID] or 0, activity and activity[b.questID] or 0
+			if aa ~= ba then
+				return aa > ba
+			end
+		end
+		if a.title ~= b.title then
+			return a.title < b.title
+		end
+		return a.questID < b.questID
+	end)
+end
+
 -- Returns quest groups, snapshot completeness, and connection notices outside the quest groups.
 function Core.compare(localQuests, members, zoneID)
 	local groups, notices = {}, {}
@@ -365,20 +424,6 @@ function Core.compare(localQuests, members, zoneID)
 			groups[#groups + 1] = group
 		end
 	end
-	local function hasMissing(group)
-		for _, difference in ipairs(group.differences) do
-			if difference.kind == "missing" then
-				return true
-			end
-		end
-		return false
-	end
-	table.sort(groups, function(a, b)
-		local am, bm = hasMissing(a), hasMissing(b)
-		if am ~= bm then
-			return am
-		end
-		return a.title == b.title and a.questID < b.questID or a.title < b.title
-	end)
+	Core.sortGroups(groups)
 	return groups, complete, notices
 end

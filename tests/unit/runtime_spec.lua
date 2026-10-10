@@ -190,6 +190,155 @@ describe("Quest With Friends party sync", function()
 		assert(batches ~= nil or #timers == 0, "Transport did not settle")
 	end
 
+	local function receiveSnapshot(quests, serial)
+		local payload = QuestWithFriends.Core.encode(quests)
+		local total = math.ceil(#payload / 220)
+		for part = 1, total do
+			fire(
+				"CHAT_MSG_ADDON",
+				"QWF",
+				"1.0:D:"
+					.. serial
+					.. ":"
+					.. part
+					.. ":"
+					.. total
+					.. ":"
+					.. payload:sub((part - 1) * 220 + 1, part * 220),
+				"PARTY",
+				"Julia-Realm"
+			)
+		end
+	end
+
+	it("uses Smart by default and tracks local and remote activity without promoting refreshes", function()
+		entries = {
+			{ questID = 1, title = "Alpha" },
+			{ questID = 2, title = "Beta" },
+			{ questID = 3, title = "Missing A" },
+		}
+		for id = 1, 3 do
+			objectives[id] = { { text = "Gnolls", numFulfilled = 0, numRequired = 8 } }
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local remote = {
+			[1] = { title = "Alpha", state = "active", objectives = { { text = "Gnolls", have = 8, need = 8 } } },
+			[2] = { title = "Beta", state = "active", objectives = { { text = "Gnolls", have = 8, need = 8 } } },
+			[4] = { title = "Missing Z", state = "active", objectives = { { text = "Gnolls", have = 0, need = 8 } } },
+		}
+		local function ids()
+			local result = {}
+			for _, group in ipairs(view.groups) do
+				result[#result + 1] = group.questID
+			end
+			return result
+		end
+		receiveSnapshot(remote, 1)
+		assert.are.equal("smart", QuestWithFriendsDB.sortMode)
+		assert.same({ 3, 4, 1, 2 }, ids())
+		objectives[2][1].numFulfilled = 1
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		assert.same({ 3, 4, 2, 1 }, ids())
+		remote[4].objectives[1].have = 1
+		receiveSnapshot(remote, 2)
+		assert.same({ 4, 3, 2, 1 }, ids())
+		remote[1].state = "ready"
+		receiveSnapshot(remote, 3)
+		assert.same({ 4, 3, 1, 2 }, ids())
+		SlashCmdList.QUESTWITHFRIENDS("")
+		flush()
+		receiveSnapshot(remote, 4)
+		fire("QUEST_LOG_UPDATE")
+		fire("GROUP_ROSTER_UPDATE")
+		flush()
+		assert.same({ 4, 3, 1, 2 }, ids())
+		view.presentation.onSort("title")
+		assert.are.equal("title", QuestWithFriendsDB.sortMode)
+		assert.same({ 1, 2, 3, 4 }, ids())
+		view.presentation.onSort("smart")
+		assert.same({ 4, 3, 1, 2 }, ids())
+		entries[4] = { questID = 5, title = "Newest pickup" }
+		objectives[5] = {}
+		fire("QUEST_ACCEPTED", 5)
+		flush()
+		assert.same({ 5, 4, 3, 1, 2 }, ids())
+	end)
+
+	it("keeps activity for quests hidden by zone filters or currently in sync", function()
+		entries = { { questID = 1, title = "Alpha" }, { questID = 2, title = "Beta" } }
+		questMaps[1], questMaps[2] = 202, 202
+		for id = 1, 2 do
+			objectives[id] = { { text = "Gnolls", numFulfilled = 8, numRequired = 8 } }
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local remote = {
+			[1] = {
+				title = "Alpha",
+				state = "active",
+				objectives = { { text = "Gnolls", have = 8, need = 8 } },
+				mapID = 202,
+			},
+			[2] = {
+				title = "Beta",
+				state = "active",
+				objectives = { { text = "Gnolls", have = 8, need = 8 } },
+				mapID = 202,
+			},
+		}
+		receiveSnapshot(remote, 1)
+		assert.same({}, view.groups)
+		objectives[1][1].numFulfilled = 7
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		objectives[2][1].numFulfilled = 7
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		receiveSnapshot(remote, 2)
+		assert.same({}, view.groups)
+		view.toggle()
+		assert.are.equal(2, view.groups[1].questID)
+		assert.are.equal(1, view.groups[2].questID)
+	end)
+
+	it("resets activity on reload rather than promoting initial snapshots", function()
+		entries = { { questID = 1, title = "Alpha" }, { questID = 2, title = "Beta" } }
+		objectives[1], objectives[2] = {}, {}
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({}, 1)
+		objectives[2] = { { text = "Gnolls", numFulfilled = 1, numRequired = 8 } }
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		assert.are.equal(2, view.groups[1].questID)
+		assert(loadfile("QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({}, 1)
+		assert.are.equal("smart", view.presentation.sortMode)
+		assert.are.equal(1, view.groups[1].questID)
+		assert.are.equal(2, view.groups[2].questID)
+	end)
+
+	it("persists the sort choice across reloads and sorts preview samples", function()
+		party = false
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("The Lost Supplies", view.groups[1].title)
+		view.presentation.onSort("title")
+		assert.are.equal("A Bridge to Safety", view.groups[1].title)
+		assert.are.equal("title", QuestWithFriendsDB.sortMode)
+		assert(loadfile("QuestWithFriends.lua"))()
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("title", view.presentation.sortMode)
+		assert.are.equal("A Bridge to Safety", view.groups[1].title)
+		QuestWithFriendsDB.sortMode = "invalid"
+		assert(loadfile("QuestWithFriends.lua"))()
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("smart", view.presentation.sortMode)
+	end)
+
 	local function foreverNames(names)
 		rawset(_G, "UnitFullName", function(unit)
 			return unpack(names[unit] or {})

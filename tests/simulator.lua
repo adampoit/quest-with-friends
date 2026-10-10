@@ -6,6 +6,7 @@ test("TOC loads the addon and registers its slash command", function()
 	assertTrue(QuestWithFriendsDB.zoneFilter)
 	assertFalse(QuestWithFriendsDB.showProfessionQuests)
 	assertFalse(QuestWithFriendsDB.showClassQuests)
+	assertEquals("smart", QuestWithFriendsDB.sortMode)
 end)
 
 test("native debug setting shares the persistent slash-command preference", function()
@@ -271,7 +272,7 @@ partyTest("matching snapshots show party in sync", function(quests)
 	sendSnapshot(quests)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
 	assertAlmostEquals(78, QuestWithFriendsPanel:GetHeight())
-	assertEquals("Filters", QuestWithFriendsPanel.filter:GetText())
+	assertEquals("View", QuestWithFriendsPanel.filter:GetText())
 	assertEquals("Current zone · Standard quests", QuestWithFriendsPanel.scope:GetText())
 end)
 
@@ -312,11 +313,47 @@ partyTest("profession and class menu choices independently filter snapshot class
 	chooseFilter("Show class quests")
 	assertFalse(QuestWithFriendsDB.showClassQuests)
 	assertEquals("Current zone · Standard quests", panel.scope:GetText())
-	assertEquals("Filters", panel.filter:GetText())
+	assertEquals("View", panel.filter:GetText())
 	assertEquals("Party in sync", panel.status:GetText())
 	assertTrue(panel.filter:IsMenuOpen())
 	panel.filter:CloseMenu()
 	assertFalse(panel.filter:IsMenuOpen())
+end)
+
+partyTest("native sort radios switch between recent activity and alphabetical order", function(quests)
+	quests[987654] = { title = "Alpha sort sample", state = "active", objectives = {} }
+	quests[987653] = {
+		title = "Zeta sort sample",
+		state = "active",
+		objectives = { { text = "Gnolls", have = 0, need = 8 } },
+	}
+	QuestWithFriendsDB.sortMode = "smart"
+	sendSnapshot(quests, 100)
+	local function firstSample()
+		for _, text in ipairs(panelTexts()) do
+			if text == "Alpha sort sample" or text == "Zeta sort sample" then
+				return text
+			end
+		end
+	end
+	assertEquals("Alpha sort sample", firstSample())
+	quests[987653].objectives[1].have = 1
+	sendSnapshot(quests, 101)
+	assertEquals("Zeta sort sample", firstSample())
+	local _, smart = filterChoice("Smart")
+	local _, title = filterChoice("Title A–Z")
+	assertTrue(smart:IsSelected())
+	assertFalse(title:IsSelected())
+	chooseFilter("Title A–Z")
+	assertEquals("title", QuestWithFriendsDB.sortMode)
+	assertEquals("Alpha sort sample", firstSample())
+	local _, selected = filterChoice("Title A–Z")
+	assertTrue(selected:IsSelected())
+	chooseFilter("Smart")
+	assertEquals("smart", QuestWithFriendsDB.sortMode)
+	assertEquals("Zeta sort sample", firstSample())
+	sendSnapshot(quests, 102)
+	assertEquals("Zeta sort sample", firstSample())
 end)
 
 partyTest("partial and duplicate chunks stay unknown until reverse-order assembly completes", function(quests)

@@ -91,16 +91,26 @@ describe("Quest With Friends panel", function()
 		end
 		function w:GenerateMenu()
 			local entries = {}
-			local root = {}
+			local root = { titles = {} }
 			function root:CreateCheckbox(text, isSelected, responder)
-				local entry = { text = text, isSelected = isSelected, responder = responder }
+				local entry = { text = text, isSelected = isSelected, responder = responder, kind = "checkbox" }
 				function entry:SetEnabled(enabled)
 					self.enabled = enabled
 				end
 				entries[#entries + 1] = entry
 				return entry
 			end
+			function root:CreateRadio(text, isSelected, responder)
+				local entry = self:CreateCheckbox(text, isSelected, responder)
+				entry.kind = "radio"
+				return entry
+			end
+			function root:CreateDivider() end
+			function root:CreateTitle(text)
+				self.titles[#self.titles + 1] = text
+			end
 			self.menuGenerator(self, root)
+			self.menuTitles = root.titles
 			self.entries = entries
 		end
 		function w:OpenMenu()
@@ -203,21 +213,21 @@ describe("Quest With Friends panel", function()
 		assert.are.equal(1, #buttons)
 		assert.are.equal("DropdownButton", panel.filter.kind)
 		assert.are.equal("WowStyle1DropdownTemplate", panel.filter.template)
-		assert.are.equal("Filters", panel.filter.text)
+		assert.are.equal("View", panel.filter.text)
 		assert.same({ 92, 24 }, panel.filter.size)
 		assert.same({ "TOPRIGHT", "TOPRIGHT", -10, -7 }, panel.filter.point)
 		assert.are.equal("Party in sync", panel.status.text)
 		panel.filter:OpenMenu()
 		local entries = panel.filter.entries
-		assert.are.equal(3, #entries)
+		assert.are.equal(5, #entries)
 		assert.are.equal("Current zone only", entries[1].text)
 		assert.are.equal("Show profession quests", entries[2].text)
 		assert.are.equal("Show class quests", entries[3].text)
 		assert.is_true(entries[1].isSelected())
 		assert.is_false(entries[2].isSelected())
 		assert.is_false(entries[3].isSelected())
-		for _, entry in ipairs(entries) do
-			assert.is_true(entry.enabled)
+		for index = 1, 3 do
+			assert.is_true(entries[index].enabled)
 		end
 		entries[1].responder()
 		assert.is_false(zone)
@@ -231,7 +241,39 @@ describe("Quest With Friends panel", function()
 		assert.is_true(classes)
 		assert.are.equal("All zones · All quest types", panel.scope.text)
 		assert.is_true(panel.filter.menuOpen)
-		assert.are.equal("Filters", panel.filter.text)
+		assert.are.equal("View", panel.filter.text)
+	end)
+
+	it("offers exclusive Smart and Title A–Z sort choices and redraws the selection", function()
+		loadPanel()
+		local mode = "smart"
+		local function show()
+			QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, {
+				sortMode = mode,
+				onSort = function(selected)
+					mode = selected
+					show()
+				end,
+			})
+		end
+		show()
+		panel.filter:OpenMenu()
+		assert.same({ "Show", "Sort by" }, panel.filter.menuTitles)
+		local smart, title = panel.filter.entries[4], panel.filter.entries[5]
+		assert.are.equal("Smart", smart.text)
+		assert.are.equal("Title A–Z", title.text)
+		assert.are.equal("radio", smart.kind)
+		assert.is_true(smart.enabled)
+		assert.is_true(title.enabled)
+		assert.is_true(smart.isSelected())
+		assert.is_false(title.isSelected())
+		title.responder()
+		assert.are.equal("title", mode)
+		assert.is_false(panel.filter.entries[4].isSelected())
+		assert.is_true(panel.filter.entries[5].isSelected())
+		panel.filter.entries[4].responder()
+		assert.are.equal("smart", mode)
+		assert.is_true(panel.filter.entries[4].isSelected())
 	end)
 
 	it("summarizes every zone and category combination without changing status", function()
@@ -246,7 +288,7 @@ describe("Quest With Friends panel", function()
 				QuestWithFriends.Panel.show({}, true, zone, nil, nil, nil, { professions = case[1], classes = case[2] })
 				assert.are.equal((zone and "Current zone" or "All zones") .. " · " .. case[3], panel.scope.text)
 				assert.are.equal("Party in sync", panel.status.text)
-				assert.are.equal("Filters", panel.filter.text)
+				assert.are.equal("View", panel.filter.text)
 			end
 		end
 		QuestWithFriends.Panel.show({}, false, true)

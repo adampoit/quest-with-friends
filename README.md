@@ -58,7 +58,7 @@ Join a party and the panel appears automatically. Quest changes update it as you
 
 Click **Share** beside a quest to offer it through WoW's normal party-wide sharing flow. WoW checks eligibility, and recipients accept the offer.
 
-Open **Filters** in the header:
+Open **View** in the header. The **Show** section contains:
 
 | Filter                 | Default |
 | ---------------------- | ------- |
@@ -66,7 +66,14 @@ Open **Filters** in the header:
 | Show profession quests | Off     |
 | Show class quests      | Off     |
 
-Settings persist across reloads. Collapsing a quest only hides its details—it still contributes to party status. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists show a count of hidden quests or differences.
+The dropdown also includes **Sort by**:
+
+- **Smart** (default): missing quests first, then most recent quest activity within both the missing and non-missing groups. Pickups, objective changes, readiness, completion and abandonment from you or a party member count as activity. Refreshes and unchanged snapshots do not.
+- **Title A–Z**: alphabetical order, without missing-first priority.
+
+Equal or unknown activity falls back to title, then quest ID. Activity is tracked during the current login, including quests outside the selected filters and quests currently in sync. Initial snapshots establish a baseline rather than counting as activity; activity history resets on reload. Preview uses fixed sample activity.
+
+Settings, including the sort choice, persist across reloads. Collapsing a quest only hides its details—it still contributes to party status. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists show a count of hidden quests or differences.
 
 Recently completed quests stay available for comparisons during the current login, up to 30 entries. Use **`/qwf`** to request a fresh party comparison. Automatic retries and stalled-transfer recovery keep updates flowing.
 

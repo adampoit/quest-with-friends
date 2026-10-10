@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -9,7 +10,6 @@ from pathlib import Path
 from typing import cast
 
 ROOT = Path(__file__).resolve().parents[2]
-CAPTURE_SCRIPT = ROOT / "tools" / "capture_share_preview.sh"
 FAKE_DOCKER = """
 import json
 import os
@@ -25,7 +25,11 @@ if args[:2] == ["image", "inspect"]:
         sys.exit(1)
     print({"old-image": "srgb-no-brightness-boost", "unpatched-image": ""}.get(mode, "srgb-runtime-visibility-boost"))
     sys.exit(0)
-if mode == "run-error":
+if args[:2] == ["rm", "--force"]:
+    sys.exit(0)
+if mode == "cid-run-error":
+    Path(args[args.index("--cidfile") + 1]).write_text("fake-container")
+if mode in {"run-error", "cid-run-error"}:
     sys.exit(17)
 output = next(
     value.removesuffix(":/output")
@@ -33,13 +37,14 @@ output = next(
     if index > 0 and args[index - 1] == "-v" and value.endswith(":/output")
 )
 filename = Path(args[args.index("-o") + 1]).relative_to("/output")
-Path(output, filename).write_bytes(b"preview")
+if mode != "missing-output":
+    Path(output, filename).write_bytes(b"" if mode == "empty-output" else b"preview")
 if mode == "lua-error":
     print("[exec-lua] error: demo failed")
 """
 
 
-class SharePreviewTests(unittest.TestCase):
+class PreviewTests(unittest.TestCase):
 	def __init__(self, methodName: str = "runTest") -> None:
 		super().__init__(methodName)
 		self.directory: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
@@ -47,14 +52,35 @@ class SharePreviewTests(unittest.TestCase):
 		)
 		self.addCleanup(self.directory.cleanup)
 		self.workdir: Path = Path(self.directory.name)
+		self.repo: Path = self.workdir / "addon"
+		self.copy_capture_tools(self.repo)
+		self.script: Path = self.repo / "tools" / "capture_preview.sh"
 		self.calls: Path = self.workdir / "calls.jsonl"
 		self.output: Path = self.workdir / "preview output"
 		self.output.mkdir()
-		self.screenshot: Path = self.output / "share.webp"
+		self.screenshot: Path = self.output / "preview.webp"
 		_ = self.screenshot.write_bytes(b"previous screenshot")
 		docker = self.workdir / "docker"
 		_ = docker.write_text(f"#!{sys.executable}\n{FAKE_DOCKER}", encoding="utf-8")
 		docker.chmod(0o755)
+
+	@staticmethod
+	def copy_capture_tools(repo: Path) -> None:
+		tools = repo / "tools"
+		(tools / "simulator").mkdir(parents=True)
+		_ = shutil.copyfile(
+			ROOT / "tools" / "capture_preview.sh", tools / "capture_preview.sh"
+		)
+		_ = shutil.copyfile(
+			ROOT / "tools" / "simulator" / "preview_demo.lua",
+			tools / "simulator" / "preview_demo.lua",
+		)
+
+	def make_install(self, name: str = "World of Warcraft") -> Path:
+		install = self.workdir / name
+		(install / "Data").mkdir(parents=True)
+		_ = (install / ".build.info").write_text("fixture")
+		return install
 
 	def capture(
 		self,
@@ -65,7 +91,7 @@ class SharePreviewTests(unittest.TestCase):
 		result = subprocess.run(
 			[
 				"bash",
-				str(CAPTURE_SCRIPT),
+				str(self.script),
 				*(arguments if arguments is not None else [str(self.output)]),
 			],
 			cwd=self.workdir,
@@ -100,12 +126,13 @@ class SharePreviewTests(unittest.TestCase):
 		self.assertIn("WOW_SIM_CASC=0", run)
 		self.assertIn("WOW_SIM_VISIBILITY_BOOST=0", run)
 		self.assertIn("Preview mode: faithful colors", result.stdout)
-		self.assertIn("faithful colors", (self.output / "share.log").read_text())
+		self.assertIn("faithful colors", (self.output / "preview.log").read_text())
 		self.assertIn("--init", run)
-		self.assertIn(f"{ROOT}:/app/Interface/AddOns/QuestWithFriends:ro", run)
+		self.assertIn(f"{self.repo}:/app/Interface/AddOns/QuestWithFriends:ro", run)
 		self.assertIn(f"{os.getuid()}:{os.getgid()}", run)
 		self.assertIn("screenshot", run)
 		self.assertIn("QuestWithFriendsPanel", run)
+		self.assertIn(f"{self.repo}/tools/simulator/preview_demo.lua:/demo.lua:ro", run)
 
 	def test_visibility_boost_is_opt_in_and_does_not_replace_faithful_preview(self):
 		result, calls = self.capture(arguments=["--visibility-boost", str(self.output)])
@@ -113,11 +140,11 @@ class SharePreviewTests(unittest.TestCase):
 		self.assertIn("WOW_SIM_VISIBILITY_BOOST=1", calls[-1])
 		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
 		self.assertEqual(
-			(self.output / "share-visibility-boost.webp").read_bytes(), b"preview"
+			(self.output / "preview-visibility-boost.webp").read_bytes(), b"preview"
 		)
 		self.assertIn("debug only; colors are not faithful", result.stdout)
 		self.assertIn(
-			"debug only", (self.output / "share-visibility-boost.log").read_text()
+			"debug only", (self.output / "preview-visibility-boost.log").read_text()
 		)
 
 	def test_visibility_boost_flag_can_follow_output_directory(self):
@@ -126,7 +153,7 @@ class SharePreviewTests(unittest.TestCase):
 		self.assertIn("WOW_SIM_VISIBILITY_BOOST=1", calls[-1])
 
 	def test_visibility_boost_failures_preserve_both_previews(self):
-		boosted = self.output / "share-visibility-boost.webp"
+		boosted = self.output / "preview-visibility-boost.webp"
 		_ = boosted.write_bytes(b"previous debug screenshot")
 		for mode, code in [("lua-error", 1), ("run-error", 17)]:
 			with self.subTest(mode=mode):
@@ -172,17 +199,145 @@ class SharePreviewTests(unittest.TestCase):
 		self.assertEqual(result.returncode, 0, result.stderr)
 		self.assertIn(f"{self.workdir / '-preview'}:/output", calls[-1])
 		self.assertEqual(
-			(self.workdir / "-preview" / "share.webp").read_bytes(), b"preview"
+			(self.workdir / "-preview" / "preview.webp").read_bytes(), b"preview"
 		)
 
 	def test_game_install_is_mounted_read_only(self):
-		install = self.workdir / "World of Warcraft"
-		install.mkdir()
+		install = self.make_install()
 		result, calls = self.capture(install_path=install)
 		self.assertEqual(result.returncode, 0, result.stderr)
 		self.assertIn(f"{install}:/wow:ro", calls[-1])
 		self.assertIn("WOW_INSTALL_PATH=/wow", calls[-1])
 		self.assertNotIn("WOW_SIM_CASC=0", calls[-1])
+
+	def test_discovers_install_above_addon_without_using_the_callers_directory(self):
+		install = self.make_install()
+		self.repo = install / "_retail_" / "Interface" / "AddOns" / "QuestWithFriends"
+		self.copy_capture_tools(self.repo)
+		self.script = self.repo / "tools" / "capture_preview.sh"
+		result, calls = self.capture()
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn(f"{install}:/wow:ro", calls[-1])
+		self.assertIn("auto-discovered above addon", result.stdout)
+
+	def test_explicit_install_overrides_discovery(self):
+		_ = (self.workdir / "Data").mkdir()
+		_ = (self.workdir / ".build.info").write_text("fixture")
+		explicit = self.make_install("Another install")
+		result, calls = self.capture(install_path=explicit)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn(f"{explicit}:/wow:ro", calls[-1])
+		self.assertNotIn(f"{self.workdir}:/wow:ro", calls[-1])
+		self.assertIn("Game assets: WOW_INSTALL_PATH", result.stdout)
+
+	def test_discovery_requires_both_data_and_build_info(self):
+		_ = (self.workdir / "Data").mkdir()
+		result, calls = self.capture()
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("WOW_SIM_CASC=0", calls[-1])
+		self.assertIn("fallback assets may be missing", result.stdout)
+
+	def test_no_game_assets_disables_discovery_and_explicit_install(self):
+		_ = (self.workdir / "Data").mkdir()
+		_ = (self.workdir / ".build.info").write_text("fixture")
+		result, calls = self.capture(
+			install_path="/invalid/path",
+			arguments=["--no-game-assets", str(self.output)],
+		)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("WOW_SIM_CASC=0", calls[-1])
+		self.assertNotIn("WOW_INSTALL_PATH=/wow", calls[-1])
+		self.assertIn("disabled by --no-game-assets", result.stdout)
+
+	def test_invalid_explicit_install_fails_before_docker(self):
+		result, calls = self.capture(install_path=self.workdir)
+		self.assertEqual(result.returncode, 2)
+		self.assertIn("Data and .build.info", result.stderr)
+		self.assertEqual(calls, [])
+
+	def test_custom_scene_controls_capture_without_an_implicit_frame_filter(self):
+		scene = self.workdir / "my scene.lua"
+		_ = scene.write_text("assert(QuestWithFriends.Panel)")
+		result, calls = self.capture(
+			arguments=[
+				"--lua",
+				scene.name,
+				"--name",
+				"view-open",
+				"--width",
+				"1000",
+				"--height",
+				"750",
+				str(self.output),
+			]
+		)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		run = calls[-1]
+		self.assertIn(f"{scene}:/demo.lua:ro", run)
+		self.assertNotIn("--filter", run)
+		self.assertEqual(run[run.index("--width") + 1], "1000")
+		self.assertEqual(run[run.index("--height") + 1], "750")
+		self.assertEqual((self.output / "view-open.webp").read_bytes(), b"preview")
+		log = (self.output / "view-open.log").read_text()
+		self.assertIn(f"Scene: {scene}", log)
+		self.assertIn("Filter: none", log)
+		self.assertIn("Canvas: 1000x750", log)
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+
+	def test_explicit_filter_is_respected_with_custom_scenes_in_either_option_order(
+		self,
+	):
+		scene = self.workdir / "scene.lua"
+		_ = scene.write_text("assert(QuestWithFriends.Panel)")
+		for options in (
+			["--lua", str(scene), "--filter", "UIParent"],
+			["--filter", "UIParent", "--lua", str(scene)],
+		):
+			with self.subTest(options=options):
+				result, calls = self.capture(arguments=[*options, str(self.output)])
+				self.assertEqual(result.returncode, 0, result.stderr)
+				run = calls[-1]
+				self.assertEqual(run[run.index("--filter") + 1], "UIParent")
+
+	def test_explicit_none_filter_omits_renderer_filter_for_default_scene(self):
+		result, calls = self.capture(arguments=["--filter", "none", str(self.output)])
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertNotIn("--filter", calls[-1])
+
+	def test_invalid_scene_name_and_dimensions_fail_before_docker(self):
+		for options in (
+			["--lua"],
+			["--lua", "missing.lua"],
+			["--filter"],
+			["--name"],
+			["--name", "../escape"],
+			["--name", "name/escape"],
+			["--width", "0"],
+			["--width", "1.5"],
+			["--height", "-1"],
+			["--height", "10000"],
+		):
+			with self.subTest(options=options):
+				result, calls = self.capture(arguments=options)
+				self.assertEqual(result.returncode, 2, result.stderr)
+				self.assertEqual(calls, [])
+
+	def test_missing_and_empty_screenshots_preserve_previous_capture(self):
+		for mode in ("missing-output", "empty-output"):
+			with self.subTest(mode=mode):
+				result, _ = self.capture(mode=mode)
+				self.assertEqual(result.returncode, 1)
+				self.assertIn("Screenshot failed; see", result.stderr)
+				self.assertTrue((self.output / "preview.log").is_file())
+				self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+
+	def test_failed_container_is_cleaned_up_and_logs_remain_available(self):
+		result, calls = self.capture(mode="cid-run-error")
+		self.assertEqual(result.returncode, 17)
+		self.assertEqual(calls[-1], ["rm", "--force", "fake-container"])
+		self.assertIn(str(self.output / "preview.log"), result.stderr)
+		self.assertTrue((self.output / "preview.log").is_file())
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
 
 	def test_lua_failure_does_not_replace_previous_screenshot(self):
 		result, _ = self.capture(mode="lua-error")

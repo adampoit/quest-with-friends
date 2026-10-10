@@ -41,6 +41,90 @@ describe("Quest With Friends core", function()
 		return result
 	end
 
+	it("sorts missing quests first and recent activity within both groups", function()
+		local groups = {
+			{ questID = 1, title = "A progress", differences = { state("You", "active") } },
+			{ questID = 2, title = "B missing", differences = { missing("You") } },
+			{ questID = 3, title = "C missing", differences = { missing("Julia") } },
+			{ questID = 4, title = "D progress", differences = { objective("Julia", 5) } },
+		}
+		Core.sortGroups(groups, "smart", { [1] = 10, [2] = 1, [3] = 2, [4] = 20 })
+		assert.same({ "C missing", "B missing", "D progress", "A progress" }, titles(groups))
+		Core.sortGroups(groups, "title", { [4] = 20 })
+		assert.same({ "A progress", "B missing", "C missing", "D progress" }, titles(groups))
+	end)
+
+	it("breaks equal or unknown activity ties by title then numeric quest ID", function()
+		local groups = {
+			{ questID = 3, title = "Same", differences = {} },
+			{ questID = 2, title = "Same", differences = {} },
+			{ questID = 1, title = "Alpha", differences = {} },
+		}
+		for _, mode in ipairs({ "smart", "title" }) do
+			Core.sortGroups(groups, mode)
+			assert.are.equal(1, groups[1].questID)
+			assert.are.equal(2, groups[2].questID)
+			assert.are.equal(3, groups[3].questID)
+		end
+		Core.sortGroups(groups, "smart", { [2] = 5, [3] = 5 })
+		assert.are.equal(2, groups[1].questID)
+		assert.are.equal(3, groups[2].questID)
+	end)
+
+	it("baselines initial snapshots and ignores identical refreshes and metadata changes", function()
+		local activity = {}
+		local old = { [1] = quest("Errand", "active", 3) }
+		Core.recordActivity(activity, nil, old, 1)
+		assert.same({}, activity)
+		local current = Core.decode(Core.encode(old))
+		Core.recordActivity(activity, old, current, 2)
+		current[1].title, current[1].mapID, current[1].category = "New title", 101, "class"
+		current[1].objectives[1].text = "Localized objective"
+		Core.recordActivity(activity, old, current, 3)
+		assert.same({}, activity)
+	end)
+
+	it("records pickup, objective and state changes, abandonment, but not expired completion history", function()
+		local activity = {}
+		local old = { [1] = quest("Errand", "active", 3), [2] = quest("Done", "completed") }
+		local current = { [1] = quest("Errand", "active", 4), [3] = quest("Pickup", "active") }
+		Core.recordActivity(activity, old, current, 10)
+		assert.same({ [1] = 10, [3] = 10 }, activity)
+		old, current = current, { [1] = quest("Errand", "ready", 8) }
+		Core.recordActivity(activity, old, current, 11)
+		assert.same({ [1] = 11, [3] = 11 }, activity)
+		old, current = current, { [1] = quest("Errand", "completed") }
+		Core.recordActivity(activity, old, current, 12)
+		assert.are.equal(12, activity[1])
+		Core.recordActivity(activity, current, current, 13)
+		assert.are.equal(12, activity[1])
+		Core.recordActivity(activity, current, {}, 14)
+		assert.are.equal(12, activity[1])
+		Core.recordActivity(activity, {}, current, 15)
+		assert.are.equal(12, activity[1])
+	end)
+
+	it("records changes to objective counts and targets", function()
+		local activity = {}
+		local old = { [1] = quest("Errand", "active", 3) }
+		local current = { [1] = quest("Errand", "active", 3, 10) }
+		Core.recordActivity(activity, old, current, 1)
+		assert.are.equal(1, activity[1])
+		old = current
+		current = { [1] = { title = "Errand", state = "active", objectives = {} } }
+		Core.recordActivity(activity, old, current, 2)
+		assert.are.equal(2, activity[1])
+	end)
+
+	it("shares activity across equivalent quest IDs and party snapshots", function()
+		local activity = {}
+		Core.recordActivity(activity, {}, { [71002] = quest("Variant", "active") }, 1)
+		assert.same({ [71001] = 1 }, activity)
+		local old = { [71003] = quest("Variant", "active", 3) }
+		Core.recordActivity(activity, old, { [71003] = quest("Variant", "active", 4) }, 2)
+		assert.same({ [71001] = 2 }, activity)
+	end)
+
 	it("round trips length-prefixed text and multiple quests", function()
 		local input = {
 			[123] = quest("The: Lost|Supplies", "active", 5, 8),

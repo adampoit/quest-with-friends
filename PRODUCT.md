@@ -41,13 +41,20 @@ While solo, **Preview appearance** in addon settings or `/qwf preview` shows pla
 
 ### Focus the view
 
-A **Filters** dropdown contains three independent choices:
+A **View** dropdown groups visibility and ordering controls. Its **Show** section contains three independent choices:
 
 - **Current zone only**, enabled by default.
 - **Show profession quests**, hidden by default.
 - **Show class quests**, hidden by default.
 
 A muted scope label, such as **Current zone · Standard quests**, summarizes the selection. The synchronization status applies to that scope. WoW Forever's Camping quests use the profession filter.
+
+The same dropdown has a **Sort by** section with two radio choices:
+
+- **Smart** (default): missing quests first, with most recently active quests first within both groups.
+- **Title A–Z**: alphabetical, without missing-first priority.
+
+Smart activity comes from actual pickups, objective changes, readiness, completion or abandonment by you or a party member, not refreshes or unchanged snapshots. Initial snapshots establish a baseline. Activity is session-only and tracked even for filtered or currently synchronized quests. Equal or unknown activity uses title and quest ID as tie-breakers. The sort choice persists across sessions; preview demonstrates the same choices using fixed sample activity.
 
 ### Make differences actionable
 

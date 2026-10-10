@@ -34,7 +34,7 @@ The first build downloads dependencies and compiles Rust, requiring several minu
 
 When upgrading the simulator, update the source revision, runtime image digest, and versioned image tags in the build script, workflows, and these instructions together. The interface override loads our TOC in the simulator.
 
-`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, scope summaries, row truncation/reuse, persistent quest-heading toggles, collapsed summaries, sharing, panel position persistence, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
+`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, row truncation/reuse, persistent quest-heading toggles, collapsed summaries, sharing, panel position persistence, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
 
 ## Simulator screenshots
 
@@ -42,7 +42,7 @@ The normal test image omits the renderer. Build the separate preview target for 
 
 ```sh
 bash tools/build_simulator_image.sh --preview
-bash tools/capture_share_preview.sh
+bash tools/capture_preview.sh
 ```
 
 This builds `wow-ui-sim:0.1.32-preview` with the upstream `gui` feature and Mesa software Vulkan renderer. It runs headlessly with software rendering. The heavier build limits compilation to two jobs for memory-constrained environments; CI uses only the lightweight test target.
@@ -52,20 +52,25 @@ The preview-only `tools/simulator/preview-color.patch` disables the upstream sha
 For inspecting dark borders or translucent elements, opt into the debug-only boost:
 
 ```sh
-bash tools/capture_share_preview.sh --visibility-boost
+bash tools/capture_preview.sh --visibility-boost
 ```
 
 Both modes keep the sRGB correction. The flag selects a shader override at runtime (`WOW_SIM_VISIBILITY_BOOST=1` inside the preview container), so switching modes does not require rebuilding. Rebuild the preview image once after updating the renderer patch. Do not use boosted captures to judge the addon's actual colors.
 
-To supply real game fonts and textures, point to your local installation root (the directory with `Data` and `.build.info`):
+The capture runner discovers a local WoW installation by checking the addon directory's ancestors for `Data` and `.build.info`. Discovery does not depend on the caller's working directory. Override it with `WOW_INSTALL_PATH="/path/to/World of Warcraft"`, or use `--no-game-assets` to disable asset loading. Invalid explicit installation paths fail with an actionable error; when discovery finds nothing, the runner logs that it is using fallback assets, which may be incomplete.
+
+Both installation and addon mounts are **read-only**. Extracted assets are cached under `$XDG_CACHE_HOME/quest-with-friends/simulator-preview/` or `~/.cache/quest-with-friends/simulator-preview/`; set `QWF_SIMULATOR_CACHE_DIR` to override it. Prefer the Linux filesystem for SQLite-heavy caches when using WSL. Keep extracted game assets local and excluded from version control and release bundles.
+
+The default scene in `tools/simulator/preview_demo.lua` uses the addon's real `/qwf preview` at 1.5× scale, fitting the default 800×600 canvas. Sharing is disabled, as in the normal solo preview. Output goes to `.cache/simulator-previews/preview.webp` and `preview.log`; `--visibility-boost` appends `-visibility-boost` to both names, preserving the faithful capture. An optional output-directory argument selects another directory. Failed captures preserve the previous screenshot and retain the log; interrupts clean up the container.
+
+For arbitrary scenes, pass a Lua setup script and choose the canvas and output name:
 
 ```sh
-WOW_INSTALL_PATH="/path/to/World of Warcraft" bash tools/capture_share_preview.sh
+bash tools/capture_preview.sh --lua .cache/simulator-previews/scene.lua \
+  --name my-scene --width 1000 --height 750
 ```
 
-Both installation and addon mounts are **read-only**. Without an installation, CASC is disabled and missing assets can use fallbacks or remain blank. Extracted assets are cached under `$XDG_CACHE_HOME/quest-with-friends/simulator-preview/` or `~/.cache/quest-with-friends/simulator-preview/`; set `QWF_SIMULATOR_CACHE_DIR` to override it. Prefer the Linux filesystem for SQLite-heavy caches when using WSL. Keep extracted game assets local and excluded from version control and release bundles.
-
-Output goes to `.cache/simulator-previews/share.webp` and `share.log`; `--visibility-boost` writes `share-visibility-boost.webp` and `share-visibility-boost.log` instead, preserving the faithful capture. Logs identify the selected mode. An optional output-directory argument selects another directory and may appear before or after the flag; `--help` shows usage. Failed captures preserve the previous screenshot, and interrupts clean up the container. The demo runs the real comparison and panel code with synthetic quests at 2× scale. Its Share callback logs a demonstration message. Label captures as simulator previews.
+With `--lua`, no frame filter is applied unless explicitly requested. This lets scenes include menus and other independent frames. `--filter FRAME` restricts rendering to that frame hierarchy; `--filter none` renders all visible UI. The runner does not choose which menus to open, collapse quests, or adjust scene scaling. See [Screenshot scenes](tools/simulator/SCREENSHOTS.md) for optional composition recipes, popup/scaling gotchas and validation guidance. `--help` lists all options. Label captures as simulator previews.
 
 ## Quest data and protocol
 
