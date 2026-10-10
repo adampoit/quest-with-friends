@@ -634,8 +634,9 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal("Gryphons of a Feather", quests[42].title)
 	end)
 
-	local function captureLogs()
+	local function captureLogs(filterLevels)
 		local records = {}
+		local levels = { TRACE = 1, DEBUG = 2, INFO = 3, WARN = 4, ERROR = 5 }
 		_G.AddonKit = {
 			Registry = { addons = {} },
 			RegisterAddon = function(name, options)
@@ -645,7 +646,10 @@ describe("Quest With Friends party sync", function()
 				assert.are.equal("QuestWithFriends", name)
 				AddonKit.Registry.addons[name].logLevel = level
 			end,
-			Log = function(_, level, category, message, data)
+			Log = function(name, level, category, message, data)
+				if filterLevels and levels[level] < levels[AddonKit.Registry.addons[name].logLevel] then
+					return
+				end
 				records[#records + 1] = { level = level, category = category, message = message, data = data }
 			end,
 		}
@@ -814,6 +818,52 @@ describe("Quest With Friends party sync", function()
 	end
 
 	for _, game in ipairs({ "retail", "forever" }) do
+		it("restores debug logging when SavedVariables arrive after Lua files on " .. game, function()
+			QuestWithFriends.QuestEquivalencesGame = game
+			local records = captureLogs(true)
+			local settings = captureSettings()
+			assert(loadfile("QuestWithFriends.lua"))()
+			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
+
+			-- WoW restores this table after executing the files listed in the TOC.
+			local saved = { debugMode = true, showPersonalQuests = true, sortMode = "title", zoneFilter = false }
+			_G.QuestWithFriendsDB = saved
+			fire("ADDON_LOADED", "OtherAddon")
+			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
+			assert.are.equal(0, #records)
+			fire("ADDON_LOADED", "QuestWithFriends")
+			assert.are.equal("DEBUG", AddonKit.Registry.addons.QuestWithFriends.logLevel)
+			assert.are.equal(saved, QuestWithFriendsDB)
+			assert.is_true(settings.setting:GetValue())
+			assert.is_true(saved.showProfessionQuests)
+			assert.is_true(saved.showClassQuests)
+			assert.are.equal("title", saved.sortMode)
+			assert.is_false(saved.zoneFilter)
+			assert.are.equal(0, #records)
+
+			fire("PLAYER_ENTERING_WORLD")
+			flush()
+			assert.is_not_nil(findLog(records, "Quest log scanned"))
+			assert.is_not_nil(findLog(records, "Addon message submitted"))
+			assert.is_not_nil(findLog(records, "Submitted quest snapshot"))
+		end)
+
+		it("restores disabled debug logging after SavedVariables load on " .. game, function()
+			QuestWithFriends.QuestEquivalencesGame = game
+			QuestWithFriendsDB.debugMode = true
+			local records = captureLogs(true)
+			assert(loadfile("QuestWithFriends.lua"))()
+			assert.are.equal("DEBUG", AddonKit.Registry.addons.QuestWithFriends.logLevel)
+			_G.QuestWithFriendsDB = { debugMode = false }
+			fire("ADDON_LOADED", "QuestWithFriends")
+			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
+			fire("PLAYER_ENTERING_WORLD")
+			flush()
+			assert.is_not_nil(findLog(records, "Quest log scanned"))
+			assert.is_nil(findLog(records, "Addon message submitted"))
+			assert.is_nil(findLog(records, "Submitted quest snapshot"))
+		end)
+
 		it("registers native settings and persists debug mode on " .. game, function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			captureLogs()

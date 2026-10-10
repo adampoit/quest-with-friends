@@ -47,17 +47,26 @@ local previewSetting
 local render
 local setPreviewMode
 local frame = CreateFrame("Frame")
-QuestWithFriendsDB = type(QuestWithFriendsDB) == "table" and QuestWithFriendsDB or {}
-QuestWithFriendsDB.debugMode = QuestWithFriendsDB.debugMode == true
-if QuestWithFriendsDB.sortMode ~= "title" then
-	QuestWithFriendsDB.sortMode = "smart"
+local function initializeSettings()
+	QuestWithFriendsDB = type(QuestWithFriendsDB) == "table" and QuestWithFriendsDB or {}
+	QuestWithFriendsDB.debugMode = QuestWithFriendsDB.debugMode == true
+	if QuestWithFriendsDB.sortMode ~= "title" then
+		QuestWithFriendsDB.sortMode = "smart"
+	end
+	if QuestWithFriendsDB.zoneFilter == nil then
+		QuestWithFriendsDB.zoneFilter = true
+	end
+	for _, setting in ipairs({ "showProfessionQuests", "showClassQuests" }) do
+		if QuestWithFriendsDB[setting] == nil then
+			QuestWithFriendsDB[setting] = QuestWithFriendsDB.showPersonalQuests == true
+		end
+	end
 end
-if QuestWithFriendsDB.zoneFilter == nil then
-	QuestWithFriendsDB.zoneFilter = true
-end
-for _, setting in ipairs({ "showProfessionQuests", "showClassQuests" }) do
-	if QuestWithFriendsDB[setting] == nil then
-		QuestWithFriendsDB[setting] = QuestWithFriendsDB.showPersonalQuests == true
+initializeSettings()
+
+local function applyDebugMode()
+	if AddonKit and AddonKit.SetLogLevel then
+		AddonKit.SetLogLevel("QuestWithFriends", QuestWithFriendsDB.debugMode and "DEBUG" or "INFO")
 	end
 end
 
@@ -846,6 +855,7 @@ local function receive(sender, message)
 	end
 end
 
+frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 frame:RegisterEvent("QUEST_LOG_UPDATE")
@@ -857,7 +867,13 @@ frame:RegisterEvent("ZONE_CHANGED")
 frame:RegisterEvent("ZONE_CHANGED_INDOORS")
 frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 frame:SetScript("OnEvent", function(_, event, ...)
-	if event == "CHAT_MSG_ADDON" then
+	if event == "ADDON_LOADED" then
+		if ... == "QuestWithFriends" then
+			-- SavedVariables are restored after the TOC's Lua files execute.
+			initializeSettings()
+			applyDebugMode()
+		end
+	elseif event == "CHAT_MSG_ADDON" then
 		local prefix, message, channel, sender = ...
 		if prefix == PREFIX then
 			log("DEBUG", "sync", "Incoming addon message", {
@@ -904,12 +920,6 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		refresh(false)
 	end
 end)
-
-local function applyDebugMode()
-	if AddonKit and AddonKit.SetLogLevel then
-		AddonKit.SetLogLevel("QuestWithFriends", QuestWithFriendsDB.debugMode and "DEBUG" or "INFO")
-	end
-end
 
 local function setDebugMode(enabled)
 	QuestWithFriendsDB.debugMode = enabled == true
