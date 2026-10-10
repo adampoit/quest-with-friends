@@ -15,3 +15,5 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [ ] **Collapsible quest headers**
 - [ ] **Resizable panel**
 - [ ] **We should show x/y for quests we've already turned in**
+- [ ] **Offline member handling**
+- [ ] **Redundant counts in the UI**
