@@ -8,6 +8,9 @@ local currentZoneOnly
 local questFilters = {}
 local shareQuest
 local redraw
+local isPreview = false
+local collapsedQuests
+local stopPreview
 local WIDTH = 348
 local MAX_ROWS = 18
 local DETAIL_X = 41
@@ -166,7 +169,7 @@ local function setQuestHeading(row, group, collapsed, y, width)
 		button.summary:SetWordWrap(false)
 		button:SetScript("OnClick", function()
 			if row.groupID then
-				local saved = QuestWithFriendsDB.collapsedQuests
+				local saved = collapsedQuests
 				saved[row.groupID] = saved[row.groupID] ~= true or nil
 				redraw()
 			end
@@ -221,14 +224,21 @@ local function addRow(text, y, kind, questID, group, collapsed)
 		row.shareButton:SetText("Share")
 		row.shareButton:RegisterForClicks("LeftButtonUp")
 		row.shareButton:SetScript("OnClick", function()
-			if row.questID and shareQuest then
+			if row.questID and shareQuest and not isPreview then
 				shareQuest(row.questID)
 			end
 		end)
 		row.shareButton:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:SetText("Share quest")
-			GameTooltip:AddLine("Offers this quest to the party. WoW determines who can accept it.", 1, 1, 1, true)
+			GameTooltip:AddLine(
+				isPreview and "Sample quest only. Sharing is disabled in preview."
+					or "Offers this quest to the party. WoW determines who can accept it.",
+				1,
+				1,
+				1,
+				true
+			)
 			GameTooltip:Show()
 		end)
 		row.shareButton:SetScript("OnLeave", function()
@@ -260,6 +270,7 @@ local function addRow(text, y, kind, questID, group, collapsed)
 	if questID then
 		row.shareButton:ClearAllPoints()
 		row.shareButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -y)
+		row.shareButton:SetEnabled(not isPreview)
 		row.shareButton:Show()
 	end
 	row:SetPoint("TOPLEFT", x, -y - (group and 3 or 0))
@@ -308,9 +319,12 @@ local function differenceText(difference)
 	return difference.player .. ": " .. text
 end
 
-function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters)
+function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters, presentation)
+	presentation = presentation or {}
+	isPreview = presentation.preview == true
+	stopPreview = presentation.onStop
 	redraw = function()
-		QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters)
+		QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters, presentation)
 	end
 	toggleFilter = onToggle
 	currentZoneOnly = zoneFilter == true
@@ -319,6 +333,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	if not panel then
 		createPanel()
 	end
+	collapsedQuests = presentation.collapsedQuests or QuestWithFriendsDB.collapsedQuests
 	panel.scope:SetText(scopeText())
 	panel.filter:GenerateMenu()
 	for _, row in ipairs(rows) do
@@ -338,7 +353,10 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	end
 	activeRows = 0
 	local y = 70
-	if #groups == 0 and complete then
+	if isPreview then
+		panel.status:SetText("Preview · Sample party data")
+		panel.status:SetTextColor(0.72, 0.79, 0.88)
+	elseif #groups == 0 and complete then
 		panel.status:SetText("Party in sync")
 		panel.status:SetTextColor(0.52, 0.87, 0.62)
 	else
@@ -356,13 +374,13 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	end
 	local remaining = 0
 	for index, group in ipairs(groups) do
-		local collapsed = QuestWithFriendsDB.collapsedQuests[group.questID] == true
+		local collapsed = collapsedQuests[group.questID] == true
 		local size = collapsed and 1 or #group.differences + 1
 		local available = MAX_ROWS - count
 		-- Never hide the first quest entirely just because its details exceed the row budget.
 		local oversized = size > available and index == 1 and available >= 3
 		if size <= available or oversized then
-			local questID = onShare and group.shareQuestID
+			local questID = (onShare or isPreview) and group.shareQuestID
 			y = addRow(group.title, y, "quest", questID, group, collapsed)
 			count = count + 1
 			local shown = collapsed and 0 or (oversized and available - 2 or #group.differences)
@@ -384,6 +402,25 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	if remaining > 0 then
 		local noun = remaining == 1 and "quest" or "quests"
 		y = addRow("+" .. remaining .. " more " .. noun .. " with differences", y, "muted")
+	end
+	if isPreview and stopPreview then
+		if not panel.stopPreview then
+			panel.stopPreview = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+			panel.stopPreview:SetSize(100, 22)
+			panel.stopPreview:SetText("End preview")
+			panel.stopPreview:RegisterForClicks("LeftButtonUp")
+			panel.stopPreview:SetScript("OnClick", function()
+				if stopPreview then
+					stopPreview()
+				end
+			end)
+		end
+		panel.stopPreview:ClearAllPoints()
+		panel.stopPreview:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -y)
+		panel.stopPreview:Show()
+		y = y + 27
+	elseif panel.stopPreview then
+		panel.stopPreview:Hide()
 	end
 	panel:SetHeight(math.max(58, y + 8))
 	panel:Show()

@@ -196,6 +196,68 @@ local function partyTest(name, callback)
 	end)
 end
 
+test("solo preview uses the real panel and filters without sending or sharing sample quests", function()
+	A_Admin.SetPartySize(0)
+	QuestWithFriendsDB.zoneFilter = true
+	QuestWithFriendsDB.showProfessionQuests = false
+	QuestWithFriendsDB.showClassQuests = false
+	local originalSend, originalPush = C_ChatInfo.SendAddonMessage, QuestLogPushQuest
+	local sends, shares = 0, 0
+	C_ChatInfo.SendAddonMessage = function()
+		sends = sends + 1
+	end
+	QuestLogPushQuest = function()
+		shares = shares + 1
+	end
+	local ok, err = pcall(function()
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		local panel = QuestWithFriendsPanel
+		assertTrue(panel:IsShown())
+		assertEquals("Preview · Sample party data", panel.status:GetText())
+		assertContains(panelTexts(), "The Lost Supplies")
+		assertContains(panelTexts(), "Alex: Gnolls slain 5/8")
+		assertContains(panelTexts(), "Alex: Ready to turn in")
+		assertContains(panelTexts(), "You: Completed")
+		local setting = Settings.GetSetting("QuestWithFriendsPreviewMode")
+		assertTrue(setting:GetValue())
+		local foundShare = false
+		for _, child in ipairs({ panel:GetChildren() }) do
+			if child:GetObjectType() == "Button" and child:GetText() == "Share" and child:IsShown() then
+				foundShare = true
+				assertFalse(child:IsEnabled())
+				child:Click()
+			end
+		end
+		assertTrue(foundShare)
+		chooseFilter("Current zone only")
+		assertContains(panelTexts(), "Delivery to the Next Town")
+		chooseFilter("Show profession quests")
+		assertContains(panelTexts(), "Fresh Fish for the Camp")
+		chooseFilter("Show class quests")
+		assertContains(panelTexts(), "A Lesson in Courage")
+		assertEquals(0, sends)
+		assertEquals(0, shares)
+		panel.stopPreview:Click()
+		assertFalse(panel:IsShown())
+		assertFalse(setting:GetValue())
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		A_Admin.SetPartySize(1)
+		A_Admin.SetPartyMember(1, "Julia", 8, 80)
+		assertFalse(setting:GetValue())
+		assertEquals("Party status incomplete", panel.status:GetText())
+		assertFalse(panel.stopPreview:IsShown())
+	end)
+	SlashCmdList.QUESTWITHFRIENDS("preview off")
+	A_Admin.SetPartySize(0)
+	QuestWithFriendsDB.zoneFilter = true
+	QuestWithFriendsDB.showProfessionQuests = false
+	QuestWithFriendsDB.showClassQuests = false
+	C_ChatInfo.SendAddonMessage, QuestLogPushQuest = originalSend, originalPush
+	if not ok then
+		error(err)
+	end
+end)
+
 partyTest("joining warns about unknown members and leaving hides the panel", function(_, messages)
 	assertContains(messages, "1.0:H")
 	assertTrue(QuestWithFriendsPanel:IsShown())

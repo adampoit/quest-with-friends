@@ -23,6 +23,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("Client.lua"))()
 		assert(loadfile("QuestCategories.lua"))()
 		assert(loadfile("Core.lua"))()
+		assert(loadfile("Preview.lua"))()
 		timers, messages, objectives, entries = {}, {}, {}, {}
 		view = {}
 		party = true
@@ -33,7 +34,7 @@ describe("Quest With Friends party sync", function()
 		end
 		_G.QuestWithFriendsDB = nil
 		QuestWithFriends.Panel = {
-			show = function(groups, complete, zoneFilter, toggle, share, notices, filters)
+			show = function(groups, complete, zoneFilter, toggle, share, notices, filters, presentation)
 				view = {
 					groups = groups,
 					complete = complete,
@@ -42,6 +43,7 @@ describe("Quest With Friends party sync", function()
 					share = share,
 					notices = notices,
 					filters = filters,
+					presentation = presentation,
 				}
 			end,
 			hide = function()
@@ -274,6 +276,106 @@ describe("Quest With Friends party sync", function()
 			assert.are.equal("missing", view.groups[1].differences[1].reason)
 		end)
 	end
+
+	for _, game in ipairs({ "retail", "forever" }) do
+		it("previews plausible data solo with working filters and no network traffic on " .. game, function()
+			QuestWithFriends.QuestEquivalencesGame = game
+			party = false
+			fire("PLAYER_ENTERING_WORLD")
+			SlashCmdList.QUESTWITHFRIENDS(" PREVIEW ON ")
+			assert.is_true(view.presentation.preview)
+			assert.are.equal(4, #view.groups)
+			assert.is_true(view.complete)
+			assert.same({}, view.notices)
+			assert.is_falsy(view.share)
+			local reasons = {}
+			for _, group in ipairs(view.groups) do
+				assert.is_true(group.questID < 0)
+				for _, difference in ipairs(group.differences) do
+					reasons[difference.reason] = true
+				end
+			end
+			assert.same({ missing = true, objective = true, active = true, ready = true, completed = true }, reasons)
+			view.toggle()
+			assert.are.equal(5, #view.groups)
+			view.filters.toggleProfessions()
+			assert.are.equal(6, #view.groups)
+			view.filters.toggleClasses()
+			assert.are.equal(7, #view.groups)
+			currentMap = 202
+			fire("ZONE_CHANGED_NEW_AREA")
+			fire("QUEST_LOG_UPDATE")
+			SlashCmdList.QUESTWITHFRIENDS("")
+			assert.is_true(view.presentation.preview)
+			assert.are.equal(7, #view.groups)
+			flush()
+			assert.same({}, messages)
+			assert.same({}, pushed)
+			view.presentation.onStop()
+			assert.is_true(view.hidden)
+			SlashCmdList.QUESTWITHFRIENDS("preview")
+			assert.is_true(view.presentation.preview)
+			SlashCmdList.QUESTWITHFRIENDS("preview")
+			assert.is_true(view.hidden)
+		end)
+	end
+
+	it("ends preview on joining a party and sends only the real quest log", function()
+		party = false
+		fire("PLAYER_ENTERING_WORLD")
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		entries = { { questID = 42, title = "Actual errand" } }
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_false(view.presentation.preview)
+		assert.same({ { player = "Julia", reason = "unknown" } }, view.notices)
+		flush()
+		local payload
+		for _, message in ipairs(messages) do
+			payload = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$") or payload
+		end
+		local snapshot = QuestWithFriends.Core.decode(payload)
+		assert.are.equal("Actual errand", snapshot[42].title)
+		assert.is_nil(next(snapshot, 42))
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.is_false(view.presentation.preview)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_true(view.hidden)
+	end)
+
+	it("ends preview on joining a raid and does not resume when leaving", function()
+		party = false
+		fire("PLAYER_ENTERING_WORLD")
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		party = true
+		_G.IsInRaid = function()
+			return true
+		end
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_true(view.hidden)
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.is_true(view.hidden)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_true(view.hidden)
+		flush()
+		assert.same({}, messages)
+	end)
+
+	it("does not restore preview or its sample collapse choices after reload", function()
+		party = false
+		fire("PLAYER_ENTERING_WORLD")
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		view.presentation.collapsedQuests[-1] = true
+		SlashCmdList.QUESTWITHFRIENDS("preview off")
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.same({}, view.presentation.collapsedQuests)
+		assert(loadfile("QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		assert.is_true(view.hidden)
+		assert.is_nil(QuestWithFriendsDB.previewMode)
+	end)
 
 	it("handshakes, reassembles out-of-order chunks and ignores duplicates", function()
 		fire("PLAYER_ENTERING_WORLD")
@@ -516,7 +618,7 @@ describe("Quest With Friends party sync", function()
 	end)
 
 	local function captureSettings()
-		local captured = {}
+		local captured = { settings = {} }
 		_G.Settings = {
 			VarType = { Boolean = "boolean" },
 			RegisterVerticalLayoutCategory = function(name)
@@ -525,20 +627,34 @@ describe("Quest With Friends party sync", function()
 			end,
 			RegisterProxySetting = function(category, variable, varType, name, default, getter, setter)
 				assert.are.equal(captured.category, category)
-				captured.variable, captured.varType = variable, varType
-				captured.name, captured.default = name, default
-				captured.setting = {
+				local record = { variable = variable, varType = varType, name = name, default = default }
+				record.setting = {
 					GetValue = getter,
 					SetValue = function(_, value)
 						setter(value)
 					end,
 				}
-				return captured.setting
+				captured.settings[variable] = record
+				if variable == "QuestWithFriendsDebugMode" then
+					for key, value in pairs(record) do
+						captured[key] = value
+					end
+				end
+				return record.setting
 			end,
 			CreateCheckbox = function(category, setting, tooltip)
 				assert.are.equal(captured.category, category)
-				assert.are.equal(captured.setting, setting)
-				captured.tooltip = tooltip
+				local found = false
+				for _, record in pairs(captured.settings) do
+					if record.setting == setting then
+						record.tooltip = tooltip
+						found = true
+					end
+				end
+				assert.is_true(found)
+				if setting == captured.setting then
+					captured.tooltip = tooltip
+				end
 			end,
 			RegisterAddOnCategory = function(category)
 				assert.are.equal(captured.category, category)
@@ -588,6 +704,28 @@ describe("Quest With Friends party sync", function()
 			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 		end)
 	end
+
+	it("exposes session-only preview in native settings and stays synchronized with slash commands", function()
+		party = false
+		local settings = captureSettings()
+		assert(loadfile("QuestWithFriends.lua"))()
+		local preview = settings.settings.QuestWithFriendsPreviewMode
+		assert.are.equal("Preview appearance", preview.name)
+		assert.is_false(preview.setting:GetValue())
+		preview.setting:SetValue(true)
+		assert.is_true(view.presentation.preview)
+		assert.is_true(preview.setting:GetValue())
+		SlashCmdList.QUESTWITHFRIENDS("preview off")
+		assert.is_false(preview.setting:GetValue())
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.is_true(preview.setting:GetValue())
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_false(preview.setting:GetValue())
+		assert.is_false(view.presentation.preview)
+		preview.setting:SetValue(true)
+		assert.is_false(preview.setting:GetValue())
+	end)
 
 	it("saves settings without AddonKit and applies them when it becomes available after reload", function()
 		local settings = captureSettings()

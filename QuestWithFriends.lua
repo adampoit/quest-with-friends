@@ -38,6 +38,11 @@ local retryDelay = 1
 local refresh
 local queueRequest
 local prefixRegistered
+local previewMode = false
+local previewCollapsed = {}
+local previewSetting
+local render
+local setPreviewMode
 local frame = CreateFrame("Frame")
 QuestWithFriendsDB = type(QuestWithFriendsDB) == "table" and QuestWithFriendsDB or {}
 QuestWithFriendsDB.debugMode = QuestWithFriendsDB.debugMode == true
@@ -201,8 +206,72 @@ local function shareableQuestIndex(id)
 	end
 end
 
-local function render()
+local function showPanel(groups, complete, notices)
+	QWF.Panel.show(
+		groups,
+		complete,
+		QuestWithFriendsDB.zoneFilter,
+		function()
+			QuestWithFriendsDB.zoneFilter = not QuestWithFriendsDB.zoneFilter
+			render()
+		end,
+		not previewMode
+				and function(id)
+					-- Resolve the index again: the quest log may have changed since rendering.
+					local index = shareableQuestIndex(id)
+					if index then
+						QuestLogPushQuest(index)
+					else
+						render()
+					end
+				end
+			or nil,
+		notices,
+		{
+			professions = QuestWithFriendsDB.showProfessionQuests,
+			classes = QuestWithFriendsDB.showClassQuests,
+			toggleProfessions = function()
+				QuestWithFriendsDB.showProfessionQuests = not QuestWithFriendsDB.showProfessionQuests
+				render()
+			end,
+			toggleClasses = function()
+				QuestWithFriendsDB.showClassQuests = not QuestWithFriendsDB.showClassQuests
+				render()
+			end,
+		},
+		{
+			preview = previewMode,
+			collapsedQuests = previewMode and previewCollapsed or nil,
+			onStop = previewMode and function()
+				if previewSetting then
+					previewSetting:SetValue(false)
+				else
+					setPreviewMode(false)
+				end
+			end or nil,
+		}
+	)
+end
+
+render = function()
 	if not QWF.Panel then
+		return
+	end
+	if previewMode and IsInGroup() then
+		previewMode = false
+		previewCollapsed = {}
+		if previewSetting then
+			previewSetting:SetValue(false)
+		end
+	end
+	if previewMode then
+		showPanel(
+			QWF.Preview.compare(
+				QuestWithFriendsDB.zoneFilter,
+				QuestWithFriendsDB.showProfessionQuests,
+				QuestWithFriendsDB.showClassQuests
+			)
+		)
 		return
 	end
 	if not inParty() then
@@ -274,37 +343,19 @@ local function render()
 		complete = false
 		table.insert(notices, 1, { player = "You", reason = "oversized" })
 	end
-	QWF.Panel.show(
-		groups,
-		complete,
-		QuestWithFriendsDB.zoneFilter,
-		function()
-			QuestWithFriendsDB.zoneFilter = not QuestWithFriendsDB.zoneFilter
-			render()
-		end,
-		function(id)
-			-- Resolve the index again: the quest log may have changed since rendering.
-			local index = shareableQuestIndex(id)
-			if index then
-				QuestLogPushQuest(index)
-			else
-				render()
-			end
-		end,
-		notices,
-		{
-			professions = QuestWithFriendsDB.showProfessionQuests,
-			classes = QuestWithFriendsDB.showClassQuests,
-			toggleProfessions = function()
-				QuestWithFriendsDB.showProfessionQuests = not QuestWithFriendsDB.showProfessionQuests
-				render()
-			end,
-			toggleClasses = function()
-				QuestWithFriendsDB.showClassQuests = not QuestWithFriendsDB.showClassQuests
-				render()
-			end,
-		}
-	)
+	showPanel(groups, complete, notices)
+end
+
+setPreviewMode = function(enabled)
+	if enabled and IsInGroup() then
+		print("Quest With Friends: Leave your group to preview sample quest data.")
+		return
+	end
+	previewMode = enabled == true
+	if not previewMode then
+		previewCollapsed = {}
+	end
+	render()
 end
 
 local function send(message)
@@ -870,6 +921,23 @@ then
 		"Capture detailed Quest With Friends logs with AddonKit. Requires AddonKit to be installed and enabled. "
 			.. "Applies immediately and stays enabled across reloads and logins. Turn off to return to normal INFO logging."
 	)
+	previewSetting = Settings.RegisterProxySetting(
+		category,
+		"QuestWithFriendsPreviewMode",
+		Settings.VarType.Boolean,
+		"Preview appearance",
+		false,
+		function()
+			return previewMode
+		end,
+		setPreviewMode
+	)
+	Settings.CreateCheckbox(
+		category,
+		previewSetting,
+		"Show sample party quest data while solo. Try filters, collapse quest headings, or drag the panel. "
+			.. "Sample quests cannot be shared. Preview ends when you join a group or reload."
+	)
 	Settings.RegisterAddOnCategory(category)
 end
 
@@ -881,6 +949,19 @@ end
 SLASH_QUESTWITHFRIENDS1 = "/qwf"
 SlashCmdList.QUESTWITHFRIENDS = function(command)
 	command = (command or ""):lower():match("^%s*(.-)%s*$")
+	if command == "preview" or command == "preview on" or command == "preview off" then
+		local enabled = command == "preview on" or (command == "preview" and not previewMode)
+		if previewSetting then
+			previewSetting:SetValue(enabled)
+		else
+			setPreviewMode(enabled)
+		end
+		return
+	end
+	if command == "" and previewMode then
+		render()
+		return
+	end
 	if command == "debug" or command == "debug on" or command == "debug off" then
 		local enabled = command ~= "debug off"
 		if debugSetting then
@@ -899,7 +980,7 @@ SlashCmdList.QUESTWITHFRIENDS = function(command)
 		return
 	end
 	if not inParty() then
-		print("Quest With Friends: Join a party to compare quests.")
+		print("Quest With Friends: Join a party to compare quests, or use /qwf preview to see sample data.")
 	else
 		updateRoster(true)
 		print("Quest With Friends: Refreshing party quest status.")

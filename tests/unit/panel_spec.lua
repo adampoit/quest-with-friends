@@ -31,6 +31,9 @@ describe("Quest With Friends panel", function()
 		function w:SetText(text)
 			self.text = text
 		end
+		function w:SetEnabled(enabled)
+			self.enabled = enabled
+		end
 		function w:SetTextColor(...)
 			self.color = { ... }
 		end
@@ -619,6 +622,55 @@ describe("Quest With Friends panel", function()
 		assert.same({ "TOPLEFT", "TOPLEFT", 140, -280 }, panel.point)
 		loadPanel()
 		assert.same({ "TOPLEFT", "TOPLEFT", 140, -280 }, panel.point)
+	end)
+
+	it("labels preview data, disables sharing and keeps sample collapse choices out of saved settings", function()
+		loadPanel()
+		local shared, stopped = false, false
+		local collapsed = {}
+		QuestWithFriends.Panel.show(
+			{ group(-1) },
+			true,
+			true,
+			nil,
+			function()
+				shared = true
+			end,
+			nil,
+			nil,
+			{
+				preview = true,
+				collapsedQuests = collapsed,
+				onStop = function()
+					stopped = true
+					QuestWithFriends.Panel.hide()
+				end,
+			}
+		)
+		assert.are.equal("Preview · Sample party data", panel.status.text)
+		local row = fontStrings[4]
+		assert.is_true(row.shareButton.shown)
+		assert.is_false(row.shareButton.enabled)
+		row.shareButton.OnClick()
+		assert.is_false(shared)
+		row.shareButton.OnEnter(row.shareButton)
+		assert.are.equal("Sample quest only. Sharing is disabled in preview.", GameTooltip.line)
+		row.toggleButton.OnClick()
+		assert.is_true(collapsed[-1])
+		assert.same({}, QuestWithFriendsDB.collapsedQuests)
+		assert.is_true(row.collapsed)
+		assert.is_true(panel.stopPreview.shown)
+		panel.stopPreview.OnClick()
+		assert.is_true(stopped)
+		assert.is_false(panel.shown)
+
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, function() end)
+		assert.are.equal("Party out of sync", panel.status.text)
+		assert.is_false(panel.stopPreview.shown)
+		assert.is_true(row.shareButton.enabled)
+		assert.is_false(row.collapsed)
+		row.toggleButton.OnClick()
+		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
 	end)
 
 	it("uses the default position if saved coordinates are invalid", function()

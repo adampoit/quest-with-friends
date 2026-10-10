@@ -49,6 +49,8 @@ Install a separate copy in each client if you play both Retail and Forever. The 
 
 Join a party and the panel appears automatically. Quest changes update it as you play.
 
+**Try it solo:** use **`/qwf preview`**, or enable **Preview appearance** in the addon's settings, to show sample party data. Try the filters, collapse quest headings, and drag the panel into position. Share buttons are shown but disabled. Click **End preview**, use `/qwf preview` again, or `/qwf preview off` to stop. Preview also ends when you join a group or reload; it never sends sample data. Position and filter changes are saved normally, but sample collapse choices are not.
+
 - **Missing:** a player is missing a quest known to another party member.
 - **Still in progress:** someone else has finished an objective or quest that this player still needs.
 - **Ready/completed:** highlights a readiness or completion difference.

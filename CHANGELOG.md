@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Preview the panel while solo with `/qwf preview` or **Preview appearance** in addon settings. Sample data demonstrates missing quests, objective progress, readiness and completion, with working filters and disabled Share buttons. Preview ends on joining a group or reloading; sample data is never sent or saved.
 - Click quest headings to collapse or expand details, with choices saved across reloads and logins. Collapsed headings keep an affected-player summary and any **Share** button; party status and connection notices remain unchanged.
 
 ## 0.1.5

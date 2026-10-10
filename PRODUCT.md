@@ -37,6 +37,8 @@ Click a quest heading to collapse or expand its player details. Collapsed headin
 
 When everyone is caught up, the panel shows **Party in sync**. Its draggable position and filter choices persist across sessions.
 
+While solo, **Preview appearance** in addon settings or `/qwf preview` shows plausible sample differences through the same panel. Filters, heading toggles and dragging work normally; sample sharing is disabled. A clear preview label and **End preview** button distinguish it from live data. Preview is session-only and ends on joining a group or reloading. Sample quests never enter synchronization or saved collapse preferences.
+
 ### Focus the view
 
 A **Filters** dropdown contains three independent choices:
