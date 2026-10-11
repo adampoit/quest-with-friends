@@ -1,8 +1,7 @@
 name: Prepare release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,38 +14,50 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Validate release tag and package
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 tools/bundle_addon.py --tag "$RELEASE_TAG"
+      - name: Resolve release tag and validate package
+        id: release
+        run: |
+          version="$(python3 -c 'import pathlib, re; print(re.search(r"^##\s*Version:\s*(\S+)\s*$", pathlib.Path("QuestWithFriends.toc").read_text(), re.MULTILINE)[1])')"
+          tag="v$version"
+          python3 tools/bundle_addon.py --tag "$tag"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
   tests:
     needs: validate
     uses: ./.github/workflows/test.yml
 
   release:
-    needs: tests
+    needs: [validate, tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      TARGET_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Build addon ZIP
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: python3 tools/bundle_addon.py --tag "$RELEASE_TAG"
+      - name: Create release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$RELEASE_TAG" \
+            -f "sha=$TARGET_SHA"
       - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           flags=()
           if [[ "$RELEASE_TAG" == *-* ]]; then
@@ -55,5 +66,5 @@ jobs:
           gh release create "$RELEASE_TAG" \
             "dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
             --verify-tag --draft --generate-notes \
-            --title "Quest With Friends ${RELEASE_TAG#v}" \
+            --title "$RELEASE_TAG" \
             "${flags[@]}"

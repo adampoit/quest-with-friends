@@ -1,0 +1,91 @@
+name: Publish to CurseForge
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curseforge-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_ID: ${{ github.event.release.id }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+    steps:
+      - name: Validate configuration and published release
+        shell: bash
+        run: |
+          [[ "$CF_PROJECT_ID" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[A-Za-z0-9._-]+$ ]]
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > release.json
+          jq -e --arg tag "$RELEASE_TAG" '
+            .draft == false and .tag_name == $tag
+          ' release.json >/dev/null
+
+      - name: Download published release asset
+        run: |
+          gh release download "$RELEASE_TAG" \
+            --pattern "QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            --dir dist
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: source
+
+      - name: Resolve CurseForge game versions from release ZIP
+        env:
+          CF_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+        run: |
+          test -n "$CF_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --header "X-Api-Token: $CF_TOKEN" \
+            https://wow.curseforge.com/api/game/versions \
+            > curseforge-versions.json
+          python3 source/tools/curseforge_game_versions.py \
+            "dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            curseforge-versions.json > game-versions.json
+
+      - name: Prepare CurseForge metadata
+        run: |
+          jq --slurpfile versions game-versions.json '
+            {
+              changelog: (.body // ""),
+              changelogType: "markdown",
+              displayName: (.name // .tag_name),
+              gameVersions: $versions[0],
+              releaseType: (
+                if (.tag_name | ascii_downcase | contains("alpha"))
+                then "alpha"
+                elif .prerelease then "beta"
+                else "release"
+                end
+              )
+            }
+          ' release.json > metadata.json
+
+      - name: Upload to CurseForge
+        env:
+          CF_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+        run: |
+          test -n "$CF_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --header "X-Api-Token: $CF_TOKEN" \
+            --form "metadata=<metadata.json" \
+            --form "file=@dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            "https://wow.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file" \
+            > upload-result.json
+          file_id="$(jq -er '.id | select(type == "number" and . > 0)' upload-result.json)"
+          printf 'Uploaded %s to CurseForge (file ID: %s).\n' \
+            "$RELEASE_TAG" "$file_id" >> "$GITHUB_STEP_SUMMARY"

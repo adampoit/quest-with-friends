@@ -100,12 +100,8 @@ A tag must equal `v` followed by the TOC version. A mismatch fails before writin
 
 `.github/workflows/test.yml` runs on branch pushes, pull requests, manual dispatch, and calls from the release workflow. It runs all Lua unit tests, the Python tooling suite on Python 3.10 and 3.13, a packaging smoke check, and simulator integration tests. Docker layers are cached. Only read permissions are granted to test jobs.
 
-To prepare a release:
+Add player-facing changes to the **Unreleased** section of `CHANGELOG.md`. Before a release, update `## Version` in `QuestWithFriends.toc`, finalize the changelog, run the suites, and repeat relevant live-client checks.
 
-1. Update `## Version` in `QuestWithFriends.toc` and add player-facing notes to `CHANGELOG.md`.
-2. Run the suites and package locally; repeat relevant live-client checks.
-3. Create and push a Git tag matching the TOC version, such as `v0.1.5`. With a recent Jujutsu version that supports tags and a configured `origin`, use `jj tag set v0.1.5 -r <release-revision>` followed by `jj git push --remote origin --tag v0.1.5`. Select the finalized, described release revision.
-4. `.github/workflows/release.yml` validates the tag, runs the same complete test workflow, then creates a **draft GitHub Release** with the installable ZIP and generated notes. Only the final release job receives `contents: write`.
-5. Review/edit the draft notes, confirm the license/notices and ZIP layout, then publish it in GitHub. Tags whose versions contain `-` are marked as prereleases.
+Maintainers manually dispatch `.github/workflows/release.yml` to prepare a release. It derives the `v<TOC version>` tag, validates packaging, and runs the complete test workflow before creating the tag and a draft GitHub Release titled `v<version>`, with the installable ZIP and generated notes. The workflow creates the tag; contributors do not need to create or push it. Existing tags are never overwritten.
 
-The release workflow uses GitHub's built-in token. Enable Actions for the repository. Update an existing draft and its assets manually. Direct players to the versioned addon ZIP on the Releases page.
+After a maintainer reviews and publishes the draft, `.github/workflows/curseforge.yml` uploads the attached ZIP and reviewed release notes to CurseForge without rebuilding. Supported Retail and Forever versions are resolved from every TOC interface number in the ZIP against CurseForge's version catalog. Unmatched or ambiguous versions fail publication rather than selecting a newer version or silently omitting a client. Versions containing `-` are GitHub prereleases; tags containing `alpha` upload as alpha, other prereleases as beta, and stable releases as release.

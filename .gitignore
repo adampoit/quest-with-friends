@@ -1,3 +1,4 @@
+.env
 .cache/
 .ruff_cache/
 dist/
