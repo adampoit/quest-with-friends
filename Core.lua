@@ -351,9 +351,23 @@ function Core.compare(localQuests, members, zoneID)
 			playerOrder[difference] = playerIndex
 			entryOrder[difference] = #group.differences
 		end
-		local function addStates(mine, theirs, memberIndex)
-			addDifference(0, mine.state == "active" and "needs" or "ahead", mine.state)
-			addDifference(memberIndex, theirs.state == "active" and "needs" or "ahead", theirs.state)
+		local function addQuestState(playerIndex, quest, comparable)
+			local hasRemaining = false
+			if quest.state == "active" and comparable then
+				for index, objective in ipairs(quest.objectives) do
+					if objective.need > 0 and objective.have < objective.need then
+						addDifference(playerIndex, "needs", "objective", index, objective)
+						hasRemaining = true
+					end
+				end
+			end
+			if not hasRemaining then
+				addDifference(playerIndex, quest.state == "active" and "needs" or "ahead", quest.state)
+			end
+		end
+		local function addStates(mine, theirs, memberIndex, comparable)
+			addQuestState(0, mine, comparable)
+			addQuestState(memberIndex, theirs, comparable)
 		end
 		local localQuest = Core.matchQuest(localQuests, id)
 		local useLocalTitle = localQuest and localQuest.state ~= "completed"
@@ -384,27 +398,19 @@ function Core.compare(localQuests, members, zoneID)
 				elseif theirs and not mine and theirs.state ~= "completed" then
 					addDifference(0, "missing", "missing")
 				elseif mine and theirs then
-					if mine.state == "completed" and theirs.state ~= "completed" then
-						addStates(mine, theirs, memberIndex)
-					elseif theirs.state == "completed" and mine.state ~= "completed" then
-						addStates(mine, theirs, memberIndex)
-					elseif mine.state ~= "completed" and theirs.state ~= "completed" then
-						local objectiveDifference = false
-						local comparable = mineID == theirID or Core.questIDs(id).progress ~= "state"
+					local comparable = mineID == theirID or Core.questIDs(id).progress ~= "state"
+					if mine.state ~= theirs.state then
+						addStates(mine, theirs, memberIndex, comparable)
+					elseif mine.state == "active" then
 						for index, objective in ipairs(comparable and mine.objectives or {}) do
 							local other = theirs.objectives[index]
 							if other and objective.need > 0 and other.need == objective.need then
 								if objective.have >= objective.need and other.have < other.need then
 									addDifference(memberIndex, "needs", "objective", index, other)
-									objectiveDifference = true
 								elseif other.have >= other.need and objective.have < objective.need then
 									addDifference(0, "needs", "objective", index, objective)
-									objectiveDifference = true
 								end
 							end
-						end
-						if not objectiveDifference and mine.state ~= theirs.state then
-							addStates(mine, theirs, memberIndex)
 						end
 					end
 				end

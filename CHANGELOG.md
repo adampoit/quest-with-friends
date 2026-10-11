@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show remaining objectives for you or a friend when the other player is ready to turn in or has already completed the quest. Keep readiness and completion labels distinct, with status-only fallbacks when progress is unavailable or quest variants cannot be compared.
+
 ## 0.1.6
 
 - Offline party members now have a distinct **Offline** notice instead of stale data or addon-not-detected messages. Cached comparisons remain visible and party status stays incomplete until fresh data arrives after reconnection.

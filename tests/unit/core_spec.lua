@@ -341,7 +341,66 @@ describe("Quest With Friends core", function()
 		assert.same({ "Local quest", "Their quest", "Shared" }, titles(groups))
 		assert.same({ missing("Julia") }, groups[1].differences)
 		assert.same({ missing("You") }, groups[2].differences)
-		assert.same({ state("You", "ready"), state("Julia", "active") }, groups[3].differences)
+		assert.same({ state("You", "ready"), objective("Julia", 0) }, groups[3].differences)
+	end)
+
+	it("shows only remaining objectives against ready or completed quests in both directions", function()
+		for _, aheadState in ipairs({ "ready", "completed" }) do
+			for _, localAhead in ipairs({ true, false }) do
+				local ahead = { title = "Hunt", state = aheadState, objectives = {} }
+				local active = quest("Hunt", "active", 2)
+				active.objectives[2] = { text = "Crates collected", have = 1, need = 4 }
+				active.objectives[3] = { text = "Scout found", have = 1, need = 1 }
+				active.objectives[4] = { text = "Unknown target", have = 0, need = 0 }
+				local mine, peer = localAhead and ahead or active, localAhead and active or ahead
+				local group = Core.compare({ [1] = mine }, { { name = "Julia", quests = { [1] = peer } } })[1]
+				local expected = localAhead
+						and {
+							state("You", aheadState),
+							objective("Julia", 2),
+							objective("Julia", 1, 4, "Crates collected"),
+						}
+					or { objective("You", 2), objective("You", 1, 4, "Crates collected"), state("Julia", aheadState) }
+				assert.same(expected, group.differences)
+				assert.is_nil(group.shareQuestID)
+			end
+		end
+	end)
+
+	it("uses remaining objectives even when the ready quest has different objective targets", function()
+		local groups = Core.compare({ [1] = quest("Hunt", "ready", 10, 10) }, {
+			{ name = "Julia", quests = { [1] = quest("Hunt", "active", 2, 8) } },
+		})
+		assert.same({ state("You", "ready"), objective("Julia", 2) }, groups[1].differences)
+	end)
+
+	it("falls back to active state when no usable remaining objectives are available", function()
+		for _, aheadState in ipairs({ "ready", "completed" }) do
+			for _, objectives in ipairs({
+				{},
+				{ { text = "Unknown", have = 0, need = 0 } },
+				{ { text = "Done", have = 8, need = 8 } },
+			}) do
+				local active = { title = "Hunt", state = "active", objectives = objectives }
+				local ahead = quest("Hunt", aheadState, 8)
+				for _, localAhead in ipairs({ true, false }) do
+					local mine, peer = localAhead and ahead or active, localAhead and active or ahead
+					local group = Core.compare({ [1] = mine }, { { name = "Julia", quests = { [1] = peer } } })[1]
+					assert.same({ state("You", mine.state), state("Julia", peer.state) }, group.differences)
+				end
+			end
+		end
+	end)
+
+	it("hides matching ready and completed quests without showing old objective counts", function()
+		for _, matchingState in ipairs({ "ready", "completed" }) do
+			assert.same(
+				{},
+				Core.compare({ [1] = quest("Hunt", matchingState, 8) }, {
+					{ name = "Julia", quests = { [1] = quest("Hunt", matchingState, 2) } },
+				})
+			)
+		end
 	end)
 
 	it("keeps completed and ready states distinct", function()
@@ -392,11 +451,11 @@ describe("Quest With Friends core", function()
 		local mine = { [71001] = quest("Branch quest", "ready", 6, 6) }
 		local peer = { [71002] = quest("Branch quest", "active", 2, 6) }
 		local members = { { name = "Julia", quests = peer } }
-		assert.same({ objective("Julia", 2, 6) }, Core.compare(mine, members)[1].differences)
+		assert.same({ state("You", "ready"), objective("Julia", 2, 6) }, Core.compare(mine, members)[1].differences)
 		mine[71001].objectives = {}
-		assert.same({ state("You", "ready"), state("Julia", "active") }, Core.compare(mine, members)[1].differences)
+		assert.same({ state("You", "ready"), objective("Julia", 2, 6) }, Core.compare(mine, members)[1].differences)
 		mine[71001].state = "completed"
-		assert.same({ state("You", "completed"), state("Julia", "active") }, Core.compare(mine, members)[1].differences)
+		assert.same({ state("You", "completed"), objective("Julia", 2, 6) }, Core.compare(mine, members)[1].differences)
 		mine[71001].state, peer[71002].state = "active", "completed"
 		assert.same({ state("You", "active"), state("Julia", "completed") }, Core.compare(mine, members)[1].differences)
 	end)
@@ -434,21 +493,34 @@ describe("Quest With Friends core", function()
 		local peer = { [70002] = quest("Other target", "active", 0, 1) }
 		local members = { { name = "Julia", quests = peer } }
 		assert.same({}, Core.compare(mine, members))
-		mine[70001].state = "ready"
-		assert.same({ state("You", "ready"), state("Julia", "active") }, Core.compare(mine, members)[1].differences)
 		assert.same(peer, Core.decode(Core.encode(peer)))
-		mine[70001].state = "completed"
-		assert.same({ state("You", "completed"), state("Julia", "active") }, Core.compare(mine, members)[1].differences)
+		for _, aheadState in ipairs({ "ready", "completed" }) do
+			mine[70001].state, peer[70002].state = aheadState, "active"
+			assert.same(
+				{ state("You", aheadState), state("Julia", "active") },
+				Core.compare(mine, members)[1].differences
+			)
+			mine[70001].state, peer[70002].state = "active", aheadState
+			assert.same(
+				{ state("You", "active"), state("Julia", aheadState) },
+				Core.compare(mine, members)[1].differences
+			)
+		end
 	end)
 
 	it("still compares identical real IDs within a state-only family", function()
 		QuestWithFriends.QuestEquivalences[70001] = { 70001, 70002, progress = "state" }
 		local mine = { [70001] = quest("Same task", "active", 1, 1) }
 		local peer = { [70001] = quest("Same task", "active", 0, 1) }
-		assert.same(
-			{ objective("Julia", 0, 1) },
-			Core.compare(mine, { { name = "Julia", quests = peer } })[1].differences
-		)
+		local members = { { name = "Julia", quests = peer } }
+		assert.same({ objective("Julia", 0, 1) }, Core.compare(mine, members)[1].differences)
+		for _, aheadState in ipairs({ "ready", "completed" }) do
+			mine[70001].state = aheadState
+			assert.same(
+				{ state("You", aheadState), objective("Julia", 0, 1) },
+				Core.compare(mine, members)[1].differences
+			)
+		end
 	end)
 
 	it("does not infer completion across active-only reviewed variants", function()
@@ -465,7 +537,7 @@ describe("Quest With Friends core", function()
 			mine = { [id] = quest("Same branch", "completed") }
 			peer = { [id] = quest("Same branch", "active") }
 			assert.same(
-				{ state("You", "completed"), state("Julia", "active") },
+				{ state("You", "completed"), objective("Julia", 0) },
 				Core.compare(mine, { { name = "Julia", quests = peer } })[1].differences
 			)
 		end
@@ -485,8 +557,8 @@ describe("Quest With Friends core", function()
 		local mine = { [1] = quest("Hunt", "active", 2), [2] = quest("Scout", "active") }
 		local peer = { [1] = quest("Hunt", "ready", 8), [2] = quest("Scout", "ready") }
 		local groups = Core.compare(mine, { { name = "Julia", quests = peer }, { name = "Bob", quests = peer } })
-		assert.same({ objective("You", 2) }, groups[1].differences)
-		assert.same({ state("You", "active"), state("Bob", "ready"), state("Julia", "ready") }, groups[2].differences)
+		assert.same({ objective("You", 2), state("Bob", "ready"), state("Julia", "ready") }, groups[1].differences)
+		assert.same({ objective("You", 0), state("Bob", "ready"), state("Julia", "ready") }, groups[2].differences)
 	end)
 
 	it("keeps objective order stable within each player", function()

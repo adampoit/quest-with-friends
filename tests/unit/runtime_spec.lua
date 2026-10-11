@@ -403,11 +403,32 @@ describe("Quest With Friends party sync", function()
 			}, 2)
 			assert.are.equal("objective", view.groups[1].differences[1].reason)
 			assert.are.equal(3, view.groups[1].differences[1].objective.have)
+			receiveQuests({
+				[42] = { title = "Errand", state = "completed", mapID = 101, objectives = {} },
+			}, 3)
+			assert.are.equal(3, view.groups[1].differences[1].objective.have)
+			assert.are.equal("completed", view.groups[1].differences[2].reason)
+			receiveQuests({
+				[42] = {
+					title = "Errand",
+					state = "active",
+					mapID = 101,
+					objectives = { { text = "Gnolls slain", have = 8, need = 8 } },
+				},
+			}, 4)
 			currentMap = 202
 			fire("ZONE_CHANGED_NEW_AREA")
 			assert.same({}, view.groups)
 			view.toggle()
 			assert.are.equal(1, #view.groups)
+			receiveQuests({
+				[42] = {
+					title = "Errand",
+					state = "active",
+					mapID = 101,
+					objectives = { { text = "Gnolls slain", have = 3, need = 8 } },
+				},
+			}, 5)
 			objectives[42][1].numFulfilled = 8
 			C_QuestLog.IsComplete = function()
 				return true
@@ -415,10 +436,12 @@ describe("Quest With Friends party sync", function()
 			fire("QUEST_LOG_UPDATE")
 			flush()
 			assert.are.equal("ready", view.groups[1].differences[1].reason)
+			assert.are.equal(3, view.groups[1].differences[2].objective.have)
 			entries, objectives = {}, {}
 			fire("QUEST_TURNED_IN", 42)
 			flush()
 			assert.are.equal("completed", view.groups[1].differences[1].reason)
+			assert.are.equal(3, view.groups[1].differences[2].objective.have)
 			fire("QUEST_ACCEPTED", 42)
 			fire("QUEST_REMOVED", 42)
 			flush()
