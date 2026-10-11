@@ -23,7 +23,10 @@ mode = os.environ["DOCKER_MODE"]
 if args[:2] == ["image", "inspect"]:
     if mode == "missing-image":
         sys.exit(1)
-    print({"old-image": "srgb-no-brightness-boost", "unpatched-image": ""}.get(mode, "srgb-runtime-visibility-boost"))
+    if "preview-text" in args[args.index("--format") + 1]:
+        print("" if mode in {"old-image", "stock-text-image"} else "top-fontstring-inset-2")
+    else:
+        print({"old-image": "srgb-no-brightness-boost", "unpatched-image": ""}.get(mode, "srgb-runtime-visibility-boost"))
     sys.exit(0)
 if args[:2] == ["rm", "--force"]:
     sys.exit(0)
@@ -104,6 +107,7 @@ class PreviewTests(unittest.TestCase):
 				"XDG_CACHE_HOME": str(self.workdir / "cache"),
 				"QWF_SIMULATOR_CACHE_DIR": "",
 				"WOW_SIM_VISIBILITY_BOOST": "1",
+				"WOW_SIM_STOCK_TEXT_POSITION": "1",
 			},
 			capture_output=True,
 			text=True,
@@ -125,6 +129,8 @@ class PreviewTests(unittest.TestCase):
 		run = calls[-1]
 		self.assertIn("WOW_SIM_CASC=0", run)
 		self.assertIn("WOW_SIM_VISIBILITY_BOOST=0", run)
+		self.assertIn("WOW_SIM_STOCK_TEXT_POSITION=0", run)
+		self.assertIn("calibrated top-aligned FontStrings", result.stdout)
 		self.assertIn("Preview mode: faithful colors", result.stdout)
 		self.assertIn("faithful colors", (self.output / "preview.log").read_text())
 		self.assertIn("--init", run)
@@ -133,6 +139,49 @@ class PreviewTests(unittest.TestCase):
 		self.assertIn("screenshot", run)
 		self.assertIn("QuestWithFriendsPanel", run)
 		self.assertIn(f"{self.repo}/tools/simulator/preview_demo.lua:/demo.lua:ro", run)
+
+	def test_stock_text_position_is_opt_in_and_preserves_calibrated_preview(self):
+		result, calls = self.capture(
+			arguments=["--stock-text-position", str(self.output)]
+		)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("WOW_SIM_STOCK_TEXT_POSITION=1", calls[-1])
+		self.assertIn("Text position: stock (calibration disabled)", result.stdout)
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+		self.assertEqual(
+			(self.output / "preview-stock-text-position.webp").read_bytes(), b"preview"
+		)
+
+	def test_stock_text_failure_preserves_both_captures(self):
+		stock = self.output / "preview-stock-text-position.webp"
+		_ = stock.write_bytes(b"previous stock screenshot")
+		result, _ = self.capture(
+			mode="lua-error", arguments=["--stock-text-position", str(self.output)]
+		)
+		self.assertEqual(result.returncode, 1)
+		self.assertEqual(stock.read_bytes(), b"previous stock screenshot")
+		self.assertEqual(self.screenshot.read_bytes(), b"previous screenshot")
+
+	def test_stock_renderer_is_identified_in_the_log(self):
+		result, _ = self.capture(mode="stock-text-image")
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn(
+			"renderer has no text calibration; rebuild to enable it", result.stdout
+		)
+
+	def test_stock_text_and_visibility_boost_can_be_combined(self):
+		result, calls = self.capture(
+			arguments=["--stock-text-position", "--visibility-boost", str(self.output)]
+		)
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn("WOW_SIM_STOCK_TEXT_POSITION=1", calls[-1])
+		self.assertIn("WOW_SIM_VISIBILITY_BOOST=1", calls[-1])
+		self.assertEqual(
+			(
+				self.output / "preview-stock-text-position-visibility-boost.webp"
+			).read_bytes(),
+			b"preview",
+		)
 
 	def test_visibility_boost_is_opt_in_and_does_not_replace_faithful_preview(self):
 		result, calls = self.capture(arguments=["--visibility-boost", str(self.output)])
@@ -184,6 +233,7 @@ class PreviewTests(unittest.TestCase):
 		result, calls = self.capture(arguments=["--help"])
 		self.assertEqual(result.returncode, 0, result.stderr)
 		self.assertIn("--visibility-boost", result.stdout)
+		self.assertIn("--stock-text-position", result.stdout)
 		self.assertEqual(calls, [])
 
 	def test_invalid_arguments_fail_before_accessing_docker(self):

@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from tools.bundle_addon import bundle
+from tools.bundle_addon import ADDON_ROOT, bundle
 
 
 class BundleTests(unittest.TestCase):
@@ -23,6 +23,10 @@ class BundleTests(unittest.TestCase):
 		_ = (self.root / "Core.lua").write_text("-- runtime\n")
 		_ = (self.root / "README.md").write_text("Install under Interface/AddOns.\n")
 		_ = (self.root / "LICENSE").write_text("MIT License\n")
+		(self.root / "Media").mkdir()
+		_ = (self.root / "Media/QuestToggle.tga").write_bytes(
+			(ADDON_ROOT / "Media/QuestToggle.tga").read_bytes()
+		)
 
 	def test_only_runtime_files_and_readme_are_bundled(self):
 		for name in (
@@ -33,6 +37,7 @@ class BundleTests(unittest.TestCase):
 			"tools/__pycache__/tool.pyc",
 			"tests/test.lua",
 			"QuestEquivalences.generated.lua",
+			"Media/unlisted.tga",
 		):
 			path = self.root / name
 			path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,6 +52,7 @@ class BundleTests(unittest.TestCase):
 					"QuestWithFriends/Core.lua",
 					"QuestWithFriends/README.md",
 					"QuestWithFriends/LICENSE",
+					"QuestWithFriends/Media/QuestToggle.tga",
 				},
 				set(archive.namelist()),
 			)
@@ -58,6 +64,33 @@ class BundleTests(unittest.TestCase):
 		output = bundle(self.root)
 		previous = output.read_bytes()
 		(self.root / "Core.lua").unlink()
+		with self.assertRaisesRegex(ValueError, "missing"):
+			_ = bundle(self.root)
+		self.assertEqual(previous, output.read_bytes())
+
+	def test_toggle_texture_is_bundled_with_transparent_edges(self):
+		output = bundle(self.root)
+		with ZipFile(output) as archive:
+			texture = archive.read("QuestWithFriends/Media/QuestToggle.tga")
+		self.assertEqual((self.root / "Media/QuestToggle.tga").read_bytes(), texture)
+		self.assertEqual(2, texture[2])
+		self.assertEqual(32, int.from_bytes(texture[12:14], "little"))
+		self.assertEqual(32, int.from_bytes(texture[14:16], "little"))
+		self.assertEqual(32, texture[16])
+		self.assertEqual(8, texture[17])
+		self.assertEqual(18 + 32 * 32 * 4, len(texture))
+		alpha = texture[21::4]
+		self.assertIn(255, alpha)
+		self.assertTrue(any(0 < value < 255 for value in alpha))
+		for y in range(32):
+			for x in range(32):
+				if x < 4 or x >= 28 or y < 4 or y >= 28:
+					self.assertEqual(0, alpha[y * 32 + x])
+
+	def test_missing_texture_preserves_previous_bundle(self):
+		output = bundle(self.root)
+		previous = output.read_bytes()
+		(self.root / "Media/QuestToggle.tga").unlink()
 		with self.assertRaisesRegex(ValueError, "missing"):
 			_ = bundle(self.root)
 		self.assertEqual(previous, output.read_bytes())

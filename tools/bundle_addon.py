@@ -11,6 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ADDON_NAME = "QuestWithFriends"
 ADDON_ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_ASSETS = ("Media/QuestToggle.tga",)
 
 
 def bundle(root: Path, output: Path | None = None, *, tag: str | None = None) -> Path:
@@ -24,7 +25,7 @@ def bundle(root: Path, output: Path | None = None, *, tag: str | None = None) ->
 	if tag is not None and tag != f"v{version_match[1]}":
 		raise ValueError(f"Release tag must be v{version_match[1]}, got {tag}")
 
-	names = [toc_name, "README.md", "LICENSE"]
+	names = [toc_name, "README.md", "LICENSE", *RUNTIME_ASSETS]
 	for line in toc.splitlines():
 		line = line.strip()
 		if line and not line.startswith("#"):

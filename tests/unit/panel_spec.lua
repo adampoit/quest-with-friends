@@ -40,7 +40,9 @@ describe("Quest With Friends panel", function()
 		function w:SetTexture(texture)
 			self.texture = texture
 		end
-		function w:SetTexCoord(...) end
+		function w:SetTexCoord(...)
+			self.texCoord = { ... }
+		end
 		function w:SetRotation(rotation)
 			self.rotation = rotation
 		end
@@ -534,12 +536,21 @@ describe("Quest With Friends panel", function()
 		end)
 		local first, second = fontStrings[4], fontStrings[6]
 		assert.are.equal(-math.pi / 2, first.toggleButton.indicator.rotation)
-		assert.are.equal("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up", first.toggleButton.indicator.texture)
+		assert.are.equal(
+			"Interface\\AddOns\\QuestWithFriends\\Media\\QuestToggle",
+			first.toggleButton.indicator.texture
+		)
+		assert.is_nil(first.toggleButton.indicator.texCoord)
+		assert.same({ 12, 12 }, first.toggleButton.indicator.size)
+		assert.same({ "LEFT", "LEFT", 0, 2 }, first.toggleButton.indicator.point)
+		assert.same({ 0.72, 0.79, 0.88 }, first.toggleButton.indicator.color)
 		assert.is_false(first.toggleButton.summary.shown)
 		first.toggleButton.OnClick()
 		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
 		assert.is_nil(QuestWithFriendsDB.collapsedQuests[43])
 		assert.are.equal(0, first.toggleButton.indicator.rotation)
+		assert.same({ "LEFT", "LEFT", 0, 2 }, first.toggleButton.indicator.point)
+		assert.are.equal(20, first.toggleButton.size[2])
 		assert.are.equal("1 missing", first.toggleButton.summary.text)
 		assert.is_true(first.toggleButton.summary.shown)
 		assert.is_true(first.shareButton.shown)

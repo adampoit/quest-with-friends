@@ -36,10 +36,11 @@ ENV CARGO_BUILD_JOBS=2
 RUN cargo build --release --bin wow-sim --no-default-features --features gui,client-retail --locked \
     && strip /build/target/release/wow-sim
 
-# Reuse the compiled dependencies when adjusting the preview-only shader.
+# Reuse the compiled dependencies when adjusting the preview-only renderer.
 FROM preview-builder AS preview-color-builder
-COPY preview-color.patch /build/preview-color.patch
-RUN git apply /build/preview-color.patch \
+COPY preview-color.patch preview-text-alignment.patch /build/
+RUN git apply /build/preview-color.patch /build/preview-text-alignment.patch \
+    && cargo test --release --lib preview_text_top_inset --no-default-features --features gui,client-retail --locked \
     && cargo build --release --bin wow-sim --no-default-features --features gui,client-retail --locked \
     && strip /build/target/release/wow-sim
 
@@ -61,6 +62,7 @@ ENV WOW_SIM_NO_SAVED_VARS=1 \
     XDG_RUNTIME_DIR=/tmp/wow-ui-sim-runtime \
     HOME=/tmp
 LABEL local.wow-ui-sim.target-cpu="x86-64" \
-    local.wow-ui-sim.preview-color="srgb-runtime-visibility-boost"
+    local.wow-ui-sim.preview-color="srgb-runtime-visibility-boost" \
+    local.wow-ui-sim.preview-text="top-fontstring-inset-2"
 ENTRYPOINT ["/app/preview-entrypoint.sh"]
 CMD ["--help"]

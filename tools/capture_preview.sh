@@ -13,10 +13,12 @@ usage() {
 	printf '  --name NAME          Output basename (default: preview).\n'
 	printf '  --no-game-assets     Disable local WoW asset discovery and loading.\n'
 	printf '  --visibility-boost   Brighten dark UI for debugging; not faithful colors.\n'
+	printf '  --stock-text-position Disable the preview-only top-aligned text calibration.\n'
 	printf '  WOW_INSTALL_PATH overrides discovery of an installation above the addon directory.\n'
 }
 
 visibility_boost=0
+stock_text_position=0
 no_game_assets=0
 scene="$script_dir/simulator/preview_demo.lua"
 custom_scene=0
@@ -30,6 +32,9 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--visibility-boost)
 		visibility_boost=1
+		;;
+	--stock-text-position)
+		stock_text_position=1
 		;;
 	--no-game-assets)
 		no_game_assets=1
@@ -138,6 +143,16 @@ if [[ "$visibility_boost" == 1 && "$image_color" != srgb-runtime-visibility-boos
 	exit 1
 fi
 
+image_text=$(docker image inspect --format '{{index .Config.Labels "local.wow-ui-sim.preview-text"}}' "$image")
+text_position="stock (renderer has no text calibration; rebuild to enable it)"
+if [[ "$image_text" == top-fontstring-inset-2 ]]; then
+	text_position="calibrated top-aligned FontStrings (2 UI units up)"
+fi
+if [[ "$stock_text_position" == 1 ]]; then
+	text_position="stock (calibration disabled)"
+	preview_name+=-stock-text-position
+fi
+
 preview_mode="faithful colors"
 if [[ "$visibility_boost" == 1 ]]; then
 	preview_name+=-visibility-boost
@@ -155,6 +170,7 @@ args=(
 	--user "$(id -u):$(id -g)"
 	-e WOW_SIM_LOAD_OUT_OF_DATE_ADDONS=1
 	-e "WOW_SIM_VISIBILITY_BOOST=$visibility_boost"
+	-e "WOW_SIM_STOCK_TEXT_POSITION=$stock_text_position"
 	-v "$repo_root:/app/Interface/AddOns/QuestWithFriends:ro"
 	-v "$scene:/demo.lua:ro"
 	-v "$output_dir:/output"
@@ -184,6 +200,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 {
 	printf 'Preview mode: %s\n' "$preview_mode"
+	printf 'Text position: %s\n' "$text_position"
 	printf 'Scene: %s\nFilter: %s\nCanvas: %sx%s\n' "$scene" "$filter" "$width" "$height"
 	printf 'Game assets: %s%s\n' "$asset_source" "${install_path:+ ($install_path)}"
 } | tee "$log_path"

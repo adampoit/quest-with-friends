@@ -1,0 +1,49 @@
+--- a/src/iced_app/quad_builders.rs
++++ b/src/iced_app/quad_builders.rs
+@@ -181,6 +181,9 @@
+     let color = color_with_alpha(&f.text_color, layout.alpha);
+     let shadow = (f.shadow_color.a > 0.0).then(|| color_with_alpha(&f.shadow_color, layout.alpha));
+     let clip_bounds = layout.bounds;
++    if std::env::var("WOW_SIM_STOCK_TEXT_POSITION").as_deref() != Ok("1") {
++        layout.bounds.y -= preview_text_top_inset(f.widget_type, layout.justify_v, f.effective_scale);
++    }
+     let vert_before = text_renderer.batch.vertices.len();
+     if !f.text_segments.is_empty() {
+         emit_widget_text_segment_quads(text_renderer, f, layout, shadow);
+@@ -207,6 +210,36 @@
+         f.text_stripped.as_deref(),
+     );
+     clip_recent_quads(text_renderer.batch, vert_before, clip_bounds);
++}
++
++// Visual calibration against small top-aligned text in the game client; not native font metrics.
++// Keep anchors, clipping, line spacing, and measured sizes unchanged.
++fn preview_text_top_inset(kind: WidgetType, justify_v: TextJustify, scale: f32) -> f32 {
++    if kind == WidgetType::FontString && justify_v == TextJustify::Left {
++        2.0 * scale
++    } else {
++        0.0
++    }
++}
++
++#[cfg(test)]
++mod preview_text_alignment_tests {
++    use super::*;
++
++    #[test]
++    fn preview_text_top_inset_scales_in_ui_units() {
++        for (scale, inset) in [(1.0, 2.0), (1.5, 3.0), (2.0, 4.0)] {
++            assert_eq!(preview_text_top_inset(WidgetType::FontString, TextJustify::Left, scale), inset);
++        }
++    }
++
++    #[test]
++    fn preview_text_top_inset_leaves_other_alignment_unchanged() {
++        for justify in [TextJustify::Center, TextJustify::Right] {
++            assert_eq!(preview_text_top_inset(WidgetType::FontString, justify, 1.5), 0.0);
++        }
++        assert_eq!(preview_text_top_inset(WidgetType::Button, TextJustify::Left, 1.5), 0.0);
++    }
+ }
+ 
+ fn emit_widget_text_segment_quads(

@@ -47,7 +47,11 @@ bash tools/capture_preview.sh
 
 This builds `wow-ui-sim:0.1.32-preview` with the upstream `gui` feature and Mesa software Vulkan renderer. It runs headlessly with software rendering. The heavier build limits compilation to two jobs for memory-constrained environments; CI uses only the lightweight test target.
 
-The preview-only `tools/simulator/preview-color.patch` disables the upstream shader's artificial brightness boost by default and converts display RGB tints to linear light for its sRGB render target. This keeps dark panel backgrounds and status colors closer to the addon's requested colors without changing the addon itself. The lightweight test image remains unpatched. Revalidate the patch when upgrading the pinned simulator revision; previews are still approximations, not substitutes for in-game screenshots.
+The preview-only `tools/simulator/preview-color.patch` disables the upstream shader's artificial brightness boost by default and converts display RGB tints to linear light for its sRGB render target. This keeps dark panel backgrounds and status colors closer to the addon's requested colors without changing the addon itself.
+
+`tools/simulator/preview-text-alignment.patch` moves the painted glyphs of top-aligned FontStrings up two UI units, scaled with their effective scale. This visual calibration makes small quest-title text align more closely with the collapse arrows verified in game. Anchors, textures, measured text sizes, line spacing, and centered button labels are unchanged. It is not a native font-metrics implementation; other fonts and sizes remain unverified. See [Text alignment calibration](tools/simulator/TEXT_ALIGNMENT.md) for scope and before/after captures.
+
+The lightweight test image remains unpatched. Revalidate both patches when upgrading the pinned simulator revision; previews are still approximations, not substitutes for in-game screenshots.
 
 For inspecting dark borders or translucent elements, opt into the debug-only boost:
 
@@ -55,7 +59,15 @@ For inspecting dark borders or translucent elements, opt into the debug-only boo
 bash tools/capture_preview.sh --visibility-boost
 ```
 
-Both modes keep the sRGB correction. The flag selects a shader override at runtime (`WOW_SIM_VISIBILITY_BOOST=1` inside the preview container), so switching modes does not require rebuilding. Rebuild the preview image once after updating the renderer patch. Do not use boosted captures to judge the addon's actual colors.
+Both modes keep the sRGB correction and text calibration. The flag selects a shader override at runtime (`WOW_SIM_VISIBILITY_BOOST=1` inside the preview container), so switching modes does not require rebuilding. Rebuild the preview image once after updating the renderer patches. Do not use boosted captures to judge the addon's actual colors.
+
+To compare against the simulator's original text position without rebuilding:
+
+```sh
+bash tools/capture_preview.sh --stock-text-position
+```
+
+This appends `-stock-text-position` to the output name, preserving the calibrated capture. The log identifies whether the image contains the text calibration; older color-corrected images continue to work but report stock text positioning.
 
 The capture runner discovers a local WoW installation by checking the addon directory's ancestors for `Data` and `.build.info`. Discovery does not depend on the caller's working directory. Override it with `WOW_INSTALL_PATH="/path/to/World of Warcraft"`, or use `--no-game-assets` to disable asset loading. Invalid explicit installation paths fail with an actionable error; when discovery finds nothing, the runner logs that it is using fallback assets, which may be incomplete.
 
@@ -86,7 +98,7 @@ CI exercises synthetic source imports and review policies. Shipped tables are re
 python3 tools/bundle_addon.py
 ```
 
-The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files, `README.md`, and `LICENSE`. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
+The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files, assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
 
 To validate a proposed release tag, pass it to the bundler with `--tag`. The tag must equal `v` followed by the TOC version; a mismatch fails before writing a ZIP.
 
