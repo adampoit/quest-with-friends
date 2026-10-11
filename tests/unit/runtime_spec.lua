@@ -211,6 +211,47 @@ describe("Quest With Friends party sync", function()
 		end
 	end
 
+	it("renders remote-to-remote progress and missing players from received snapshots", function()
+		_G.UnitExists = function(unit)
+			return unit == "party1" or unit == "party2"
+		end
+		_G.UnitFullName = function(unit)
+			return unit == "player" and "Adam" or (unit == "party1" and "Julia" or "Bob"), "Realm"
+		end
+		_G.UnitName = function(unit)
+			return UnitFullName(unit)
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [42] = { title = "Hunt", state = "completed", mapID = 101, objectives = {} } }, 1)
+		local payload = QuestWithFriends.Core.encode({
+			[42] = {
+				title = "Hunt",
+				state = "active",
+				mapID = 101,
+				objectives = { { text = "Gnolls slain", have = 5, need = 8 } },
+			},
+		})
+		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Bob-Realm")
+		assert.is_true(view.complete)
+		assert.same({
+			{ player = "You", kind = "missing", reason = "missing" },
+			{
+				player = "Bob",
+				kind = "needs",
+				reason = "objective",
+				objective = { text = "Gnolls slain", have = 5, need = 8 },
+			},
+			{ player = "Julia", kind = "ahead", reason = "completed" },
+		}, view.groups[1].differences)
+		assert.is_nil(view.groups[1].shareQuestID)
+		receiveSnapshot({}, 2)
+		assert.same({
+			{ player = "You", kind = "missing", reason = "missing" },
+			{ player = "Julia", kind = "missing", reason = "missing" },
+		}, view.groups[1].differences)
+	end)
+
 	it("uses Smart by default and tracks local and remote activity without promoting refreshes", function()
 		entries = {
 			{ questID = 1, title = "Alpha" },

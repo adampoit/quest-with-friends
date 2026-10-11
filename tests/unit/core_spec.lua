@@ -331,7 +331,13 @@ describe("Quest With Friends core", function()
 			{ name = "Julia", quests = { [42] = quest("Supplies", "active") } },
 			{ name = "Bob", quests = { [42] = quest("Supplies", "ready") } },
 		})
-		assert.same({ { questID = 42, title = "Supplies", differences = { missing("You") } } }, groups)
+		assert.same({
+			{
+				questID = 42,
+				title = "Supplies",
+				differences = { missing("You"), state("Bob", "ready"), objective("Julia", 0) },
+			},
+		}, groups)
 	end)
 
 	it("shows both sides of readiness differences without repeating matching quests", function()
@@ -590,6 +596,174 @@ describe("Quest With Friends core", function()
 		local groups = Core.compare({}, { history, a, b })
 		assert.are.equal("A variant", groups[1].title)
 		assert.same(groups, Core.compare({}, { b, a, history }))
+	end)
+
+	it("shows friends' remaining objectives when the local player is missing or unfinished", function()
+		for _, aheadState in ipairs({ "active", "ready", "completed" }) do
+			local julia = { name = "Julia", quests = { [1] = quest("Hunt", aheadState, 8) } }
+			local bob = { name = "Bob", quests = { [1] = quest("Hunt", "active", 5) } }
+			for _, mine in ipairs({ {}, { [1] = quest("Hunt", "active", 3) } }) do
+				local expected = { mine[1] and objective("You", 3) or missing("You"), objective("Bob", 5) }
+				if aheadState ~= "active" then
+					expected[#expected + 1] = state("Julia", aheadState)
+				end
+				local groups = Core.compare(mine, { julia, bob })
+				assert.same(expected, groups[1].differences)
+				assert.is_nil(groups[1].shareQuestID)
+				assert.same(groups, Core.compare(mine, { bob, julia }))
+			end
+		end
+	end)
+
+	it("reports the same affected players regardless of whose viewpoint is local", function()
+		local players = {
+			{ name = "Adam", quests = { [1] = quest("Hunt", "active", 3) } },
+			{ name = "Bob", quests = { [1] = quest("Hunt", "active", 5) } },
+			{ name = "Julia", quests = { [1] = quest("Hunt", "ready", 8) } },
+			{ name = "Charlie", quests = {} },
+		}
+		local expected = {
+			Adam = { objective("Adam", 3) },
+			Bob = { objective("Bob", 5) },
+			Julia = { state("Julia", "ready") },
+			Charlie = { missing("Charlie") },
+		}
+		for localIndex, player in ipairs(players) do
+			local members = {}
+			for index, member in ipairs(players) do
+				if index ~= localIndex then
+					members[#members + 1] = member
+				end
+			end
+			local groups, complete = Core.compare(player.quests, members)
+			assert.is_true(complete)
+			local byPlayer = {}
+			for _, difference in ipairs(groups[1].differences) do
+				if difference.player == "You" then
+					difference.player = player.name
+				end
+				byPlayer[difference.player] = byPlayer[difference.player] or {}
+				table.insert(byPlayer[difference.player], difference)
+			end
+			assert.same(expected, byPlayer)
+		end
+	end)
+
+	it("finds missing friends from remote quests without showing partial-progress differences", function()
+		local julia = { name = "Julia", quests = { [1] = quest("Hunt", "active", 3) } }
+		local bob = { name = "Bob", quests = {} }
+		local charlie = { name = "Charlie", quests = { [1] = quest("Hunt", "active", 5) } }
+		local groups = Core.compare({}, { julia, bob, charlie })
+		assert.same({ missing("You"), missing("Bob") }, groups[1].differences)
+		assert.is_nil(groups[1].shareQuestID)
+		assert.same(groups, Core.compare({}, { charlie, bob, julia }))
+	end)
+
+	it("deduplicates objectives found by multiple finished players", function()
+		local mine = { [1] = quest("Hunt", "active", 3) }
+		local julia = { name = "Julia", quests = { [1] = quest("Hunt", "ready", 8) } }
+		local bob = { name = "Bob", quests = { [1] = quest("Hunt", "active", 5) } }
+		local charlie = { name = "Charlie", quests = { [1] = quest("Hunt", "ready", 8) } }
+		local groups = Core.compare(mine, { julia, bob, charlie })
+		assert.same(
+			{ objective("You", 3), objective("Bob", 5), state("Charlie", "ready"), state("Julia", "ready") },
+			groups[1].differences
+		)
+		assert.same(groups, Core.compare(mine, { charlie, bob, julia }))
+	end)
+
+	it("keeps objective ordering stable when different friends finish different objectives", function()
+		local mine = quest("Hunt", "active", 1)
+		local julia = quest("Hunt", "active", 1)
+		local bob = quest("Hunt", "active", 8)
+		mine.objectives[2] = { text = "Crates collected", have = 1, need = 4 }
+		julia.objectives[2] = { text = "Crates collected", have = 4, need = 4 }
+		bob.objectives[2] = { text = "Crates collected", have = 1, need = 4 }
+		local a, b = { name = "Julia", quests = { [1] = julia } }, { name = "Bob", quests = { [1] = bob } }
+		local groups = Core.compare({ [1] = mine }, { a, b })
+		assert.same({
+			objective("You", 1),
+			objective("You", 1, 4, "Crates collected"),
+			objective("Bob", 1, 4, "Crates collected"),
+			objective("Julia", 1),
+		}, groups[1].differences)
+		assert.same(groups, Core.compare({ [1] = mine }, { b, a }))
+	end)
+
+	it("compares remote progress and completion across reviewed objective variants", function()
+		local julia = { name = "Julia", quests = { [71001] = quest("Hunt", "completed", 6, 6) } }
+		local bob = { name = "Bob", quests = { [71002] = quest("Hunt", "active", 2, 6) } }
+		local charlie = { name = "Charlie", quests = { [71003] = quest("Hunt", "ready", 6, 6) } }
+		local groups = Core.compare({}, { julia, bob, charlie })
+		assert.same(
+			{ missing("You"), objective("Bob", 2, 6), state("Charlie", "ready"), state("Julia", "completed") },
+			groups[1].differences
+		)
+		assert.is_nil(groups[1].shareQuestID)
+		assert.same(groups, Core.compare({}, { charlie, bob, julia }))
+	end)
+
+	it("retains state-only safeguards between remote variants", function()
+		local ids = { 70001, 70002, progress = "state" }
+		QuestWithFriends.QuestEquivalences[70001], QuestWithFriends.QuestEquivalences[70002] = ids, ids
+		local julia = { name = "Julia", quests = { [70001] = quest("Hunt", "ready", 8) } }
+		local bob = { name = "Bob", quests = { [70002] = quest("Hunt", "active", 3) } }
+		local groups = Core.compare({}, { julia, bob })
+		assert.same({ missing("You"), state("Bob", "active"), state("Julia", "ready") }, groups[1].differences)
+		assert.same(groups, Core.compare({}, { bob, julia }))
+	end)
+
+	it("does not infer completion between remote active-only variants", function()
+		local ids = { 70001, 70002, progress = "objectives", history = false }
+		QuestWithFriends.QuestEquivalences[70001], QuestWithFriends.QuestEquivalences[70002] = ids, ids
+		local julia = { name = "Julia", quests = { [70001] = quest("Hunt", "completed", 8) } }
+		local bob = { name = "Bob", quests = { [70002] = quest("Hunt", "active", 3) } }
+		local groups = Core.compare({}, { julia, bob })
+		assert.same({ missing("You"), missing("Julia") }, groups[1].differences)
+		assert.same(groups, Core.compare({}, { bob, julia }))
+	end)
+
+	it("prefers usable objectives over redundant active status from a state-only comparison", function()
+		local ids = { 70001, 70002, progress = "state" }
+		QuestWithFriends.QuestEquivalences[70001], QuestWithFriends.QuestEquivalences[70002] = ids, ids
+		local mine = { [70001] = quest("Hunt", "active", 3) }
+		local julia = { name = "Julia", quests = { [70002] = quest("Hunt", "ready", 8) } }
+		local bob = { name = "Bob", quests = { [70001] = quest("Hunt", "ready", 8) } }
+		local groups = Core.compare(mine, { julia, bob })
+		assert.same({ objective("You", 3), state("Bob", "ready"), state("Julia", "ready") }, groups[1].differences)
+		assert.same(groups, Core.compare(mine, { bob, julia }))
+	end)
+
+	it("uses only the real local quest ID for sharing with multiple remote variants", function()
+		local mine = { [71002] = quest("Local title", "active", 3) }
+		local julia = { name = "Julia", quests = { [71003] = quest("Remote title", "ready", 8) } }
+		local bob = { name = "Bob", quests = {} }
+		local groups = Core.compare(mine, { julia, bob })
+		assert.are.equal(71002, groups[1].shareQuestID)
+		assert.are.equal("Local title", groups[1].title)
+		assert.same({ objective("You", 3), missing("Bob"), state("Julia", "ready") }, groups[1].differences)
+		assert.same(groups, Core.compare(mine, { bob, julia }))
+	end)
+
+	it("compares cached remote snapshots while excluding members whose quests are unknown", function()
+		local groups, complete, notices = Core.compare({}, {
+			{ name = "Julia", quests = { [1] = quest("Hunt", "completed", 8) }, syncStatus = "offline" },
+			{ name = "Charlie" },
+			{ name = "Bob", quests = { [1] = quest("Hunt", "active", 3) } },
+		})
+		assert.is_false(complete)
+		assert.same({ { player = "Charlie", reason = "unknown" }, { player = "Julia", reason = "offline" } }, notices)
+		assert.same({ missing("You"), objective("Bob", 3), state("Julia", "completed") }, groups[1].differences)
+	end)
+
+	it("does not show completion history as a missing quest when all known holders are done", function()
+		assert.same(
+			{},
+			Core.compare({}, {
+				{ name = "Julia", quests = { [1] = quest("Hunt", "completed", 8) } },
+				{ name = "Bob", quests = { [1] = quest("Hunt", "completed", 8) } },
+			})
+		)
 	end)
 
 	it("never calls an unknown member synchronized or assigns them quest differences", function()

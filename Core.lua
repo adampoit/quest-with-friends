@@ -290,12 +290,15 @@ end
 function Core.compare(localQuests, members, zoneID)
 	local groups, notices = {}, {}
 	local complete = true
+	local snapshots = { [0] = localQuests }
+	local reasonOrder = { missing = 1, active = 2, objective = 3, ready = 4, completed = 5 }
 	local ids = {}
 	for id in pairs(localQuests) do
 		ids[Core.questIDs(id)[1]] = true
 	end
-	for _, member in ipairs(members) do
+	for memberIndex, member in ipairs(members) do
 		if member.quests then
+			snapshots[memberIndex] = member.quests
 			for id in pairs(member.quests) do
 				ids[Core.questIDs(id)[1]] = true
 			end
@@ -332,7 +335,7 @@ function Core.compare(localQuests, members, zoneID)
 	table.sort(ordered)
 	for _, id in ipairs(ordered) do
 		local group = { questID = id, differences = {} }
-		local seen, playerOrder, entryOrder = {}, {}, {}
+		local seen, playerOrder, objectiveOrder, hasObjectives = {}, {}, {}, {}
 		local function addDifference(playerIndex, kind, reason, objectiveIndex, objective)
 			local key = playerIndex .. ":" .. reason .. ":" .. (objectiveIndex or 0)
 			if seen[key] then
@@ -349,7 +352,10 @@ function Core.compare(localQuests, members, zoneID)
 			end
 			group.differences[#group.differences + 1] = difference
 			playerOrder[difference] = playerIndex
-			entryOrder[difference] = #group.differences
+			objectiveOrder[difference] = objectiveIndex or 0
+			if objective then
+				hasObjectives[playerIndex] = true
+			end
 		end
 		local function addQuestState(playerIndex, quest, comparable)
 			local hasRemaining = false
@@ -365,55 +371,71 @@ function Core.compare(localQuests, members, zoneID)
 				addDifference(playerIndex, quest.state == "active" and "needs" or "ahead", quest.state)
 			end
 		end
-		local function addStates(mine, theirs, memberIndex, comparable)
-			addQuestState(0, mine, comparable)
-			addQuestState(memberIndex, theirs, comparable)
-		end
 		local localQuest = Core.matchQuest(localQuests, id)
 		local useLocalTitle = localQuest and localQuest.state ~= "completed"
 		if useLocalTitle then
 			group.title = safeText(localQuest.title)
-		end
-		for memberIndex, member in ipairs(members) do
-			if member.quests then
-				local mine, mineID = Core.matchQuest(localQuests, id)
-				local theirs, theirID = Core.matchQuest(member.quests, id)
-				if Core.questIDs(id).history == false then
-					if theirs and theirs.state ~= "completed" and (not mine or mine.state == "completed") then
-						mine, mineID = localQuests[theirID], theirID
-					elseif mine and mine.state ~= "completed" and (not theirs or theirs.state == "completed") then
-						theirs, theirID = member.quests[mineID], mineID
-					end
-				end
-				local current = (mine and mine.state ~= "completed" and mine) or theirs or mine
-				if current and current.state ~= "completed" and not useLocalTitle then
-					local title = safeText(current.title)
+		else
+			for _, member in ipairs(members) do
+				local quest = member.quests and Core.matchQuest(member.quests, id)
+				if quest and quest.state ~= "completed" then
+					local title = safeText(quest.title)
 					if not group.title or title < group.title then
 						group.title = title
 					end
 				end
-				if mine and not theirs and mine.state ~= "completed" then
-					addDifference(memberIndex, "missing", "missing")
-					group.shareQuestID = mineID
-				elseif theirs and not mine and theirs.state ~= "completed" then
-					addDifference(0, "missing", "missing")
-				elseif mine and theirs then
-					local comparable = mineID == theirID or Core.questIDs(id).progress ~= "state"
-					if mine.state ~= theirs.state then
-						addStates(mine, theirs, memberIndex, comparable)
-					elseif mine.state == "active" then
-						for index, objective in ipairs(comparable and mine.objectives or {}) do
-							local other = theirs.objectives[index]
-							if other and objective.need > 0 and other.need == objective.need then
-								if objective.have >= objective.need and other.have < other.need then
-									addDifference(memberIndex, "needs", "objective", index, other)
-								elseif other.have >= other.need and objective.have < objective.need then
-									addDifference(0, "needs", "objective", index, objective)
-								end
+			end
+		end
+		local function comparePair(firstIndex, secondIndex)
+			local firstQuests, secondQuests = snapshots[firstIndex], snapshots[secondIndex]
+			local first, firstID = Core.matchQuest(firstQuests, id)
+			local second, secondID = Core.matchQuest(secondQuests, id)
+			if Core.questIDs(id).history == false then
+				if second and second.state ~= "completed" and (not first or first.state == "completed") then
+					first, firstID = firstQuests[secondID], secondID
+				elseif first and first.state ~= "completed" and (not second or second.state == "completed") then
+					second, secondID = secondQuests[firstID], firstID
+				end
+			end
+			if first and not second and first.state ~= "completed" then
+				addDifference(secondIndex, "missing", "missing")
+				if firstIndex == 0 then
+					group.shareQuestID = firstID
+				end
+			elseif second and not first and second.state ~= "completed" then
+				addDifference(firstIndex, "missing", "missing")
+			elseif first and second then
+				local comparable = firstID == secondID or Core.questIDs(id).progress ~= "state"
+				if first.state ~= second.state then
+					addQuestState(firstIndex, first, comparable)
+					addQuestState(secondIndex, second, comparable)
+				elseif first.state == "active" then
+					for index, objective in ipairs(comparable and first.objectives or {}) do
+						local other = second.objectives[index]
+						if other and objective.need > 0 and other.need == objective.need then
+							if objective.have >= objective.need and other.have < other.need then
+								addDifference(secondIndex, "needs", "objective", index, other)
+							elseif other.have >= other.need and objective.have < objective.need then
+								addDifference(firstIndex, "needs", "objective", index, objective)
 							end
 						end
 					end
 				end
+			end
+		end
+		for firstIndex = 0, #members do
+			if snapshots[firstIndex] then
+				for secondIndex = firstIndex + 1, #members do
+					if snapshots[secondIndex] then
+						comparePair(firstIndex, secondIndex)
+					end
+				end
+			end
+		end
+		for index = #group.differences, 1, -1 do
+			local difference = group.differences[index]
+			if difference.reason == "active" and hasObjectives[playerOrder[difference]] then
+				table.remove(group.differences, index)
 			end
 		end
 		if #group.differences > 0 then
@@ -425,7 +447,10 @@ function Core.compare(localQuests, members, zoneID)
 					end
 					return a.player == b.player and ai < bi or a.player < b.player
 				end
-				return entryOrder[a] < entryOrder[b]
+				if a.reason ~= b.reason then
+					return reasonOrder[a.reason] < reasonOrder[b.reason]
+				end
+				return objectiveOrder[a] < objectiveOrder[b]
 			end)
 			groups[#groups + 1] = group
 		end

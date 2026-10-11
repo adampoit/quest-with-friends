@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Compare quests across the whole party, including differences between friends when you are missing or still working on a quest. Deduplicate each player's status and objective rows, retain stable objective ordering, and keep Share tied to your own active quest ID.
 - Show remaining objectives for you or a friend when the other player is ready to turn in or has already completed the quest. Keep readiness and completion labels distinct, with status-only fallbacks when progress is unavailable or quest variants cannot be compared.
 
 ## 0.1.6

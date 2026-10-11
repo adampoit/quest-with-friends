@@ -58,7 +58,7 @@ Smart activity comes from actual pickups, objective changes, readiness, completi
 
 ### Make differences actionable
 
-Compare missing, active, ready-to-turn-in and known-completed states. Highlight objective progress when one player has finished and another still needs it. When you or a friend is ready to turn in or has already completed a quest, show the other player's remaining objectives alongside that readiness or completion status. Fall back to quest states when no usable remaining objective counts are available or variant comparisons are state-only. Keep related differences together under the same quest heading.
+Compare missing, active, ready-to-turn-in and known-completed states across all known party snapshots, including differences between friends when you are missing or still working on a quest. Highlight objective progress when any comparable party member has finished and another still needs it. When a player is ready to turn in or has already completed a quest, show unfinished players' remaining objectives alongside that readiness or completion status. Fall back to quest states when no usable remaining objective counts are available or variant comparisons are state-only. Deduplicate each player's status and objective rows, preserve objective order, and keep related differences together under the same quest heading. Unknown members receive connection notices, not assumed quest differences; cached snapshots remain comparable with their connection status.
 
 Reviewed Retail variant families let friends on different class/race versions of the same task compare progress and completion. Sharing always uses the real active quest ID.
 
