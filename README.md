@@ -43,7 +43,7 @@ The compact, draggable panel remembers its position and hides when you leave the
 3. Enable **Quest With Friends** in the character-selection AddOns menu, then log in or `/reload`.
 4. Have your friends install the same release so everyone can exchange compatible quest data.
 
-Install a separate copy in each client if you play both Retail and Forever. The current TOC targets Retail 12.1 (`120100`) and WoW Forever beta 1.60.1 (`16001`); Forever beta interface numbers may change. Version 0.1.5 uses protocol 1.0. Peers using older development builds or a different protocol major receive an update notice.
+Install a separate copy in each client if you play both Retail and Forever. The current TOC targets Retail 12.1 (`120100`) and WoW Forever beta 1.60.1 (`16001`); Forever beta interface numbers may change. The addon uses protocol 1.0. Peers using older development builds or a different protocol major receive an update notice.
 
 ## Use it
 

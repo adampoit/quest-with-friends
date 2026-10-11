@@ -88,13 +88,7 @@ python3 tools/bundle_addon.py
 
 The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files, `README.md`, and `LICENSE`. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
 
-For a release, also validate the tag:
-
-```sh
-python3 tools/bundle_addon.py --tag v0.1.5
-```
-
-A tag must equal `v` followed by the TOC version. A mismatch fails before writing a ZIP.
+To validate a proposed release tag, pass it to the bundler with `--tag`. The tag must equal `v` followed by the TOC version; a mismatch fails before writing a ZIP.
 
 ## GitHub CI and releases
 

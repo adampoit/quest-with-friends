@@ -1,6 +1,6 @@
 # Quest With Friends protocol 1.0
 
-Protocol versions are independent of addon release versions. Release **0.1.5** sends protocol **1.0** using the `QWF` addon prefix and `PARTY` channel. Readers accept any supported **major** version regardless of its minor version, validating and skipping unknown optional extensions. There is no negotiation or fallback to unversioned or integer-version development formats.
+Protocol versions are independent of addon release versions. The addon sends protocol **1.0** using the `QWF` addon prefix and `PARTY` channel. Readers accept any supported **major** version regardless of its minor version, validating and skipping unknown optional extensions. There is no negotiation or fallback to unversioned or integer-version development formats.
 
 ## Compatibility rules
 
