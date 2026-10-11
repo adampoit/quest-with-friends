@@ -2,6 +2,7 @@
 ## Title: Quest With Friends
 ## Notes: Shows actionable quest differences in your party
 ## Version: 0.1.6
+## X-Wago-ID: 4N2bO9NL
 ## OptionalDeps: AddonKit
 ## SavedVariables: QuestWithFriendsDB
 

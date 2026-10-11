@@ -1,0 +1,72 @@
+name: Publish to Wago
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wago-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_ID: ${{ github.event.release.id }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Validate published release
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[A-Za-z0-9._-]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > release.json
+          jq -e --arg tag "$RELEASE_TAG" '
+            .draft == false and .tag_name == $tag
+          ' release.json >/dev/null
+
+      - name: Download published release asset
+        run: |
+          gh release download "$RELEASE_TAG" \
+            --pattern "QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            --dir dist
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: source
+
+      - name: Prepare Wago metadata from release ZIP
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --header "Accept: application/json" \
+            https://addons.wago.io/api/data/game > wago-catalog.json
+          python3 source/tools/wago_metadata.py \
+            "dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            release.json wago-catalog.json > wago-release.json
+          jq '.metadata' wago-release.json > wago-metadata.json
+
+      - name: Upload to Wago
+        env:
+          WAGO_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          test -n "$WAGO_TOKEN"
+          project_id="$(jq -er '.project_id' wago-release.json)"
+          status="$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer $WAGO_TOKEN" \
+            --header "Accept: application/json" \
+            --form "metadata=<wago-metadata.json" \
+            --form "file=@dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
+            --output wago-result.json --write-out '%{http_code}' \
+            "https://addons.wago.io/api/projects/$project_id/version")"
+          if [[ "$status" != 200 && "$status" != 201 ]]; then
+            printf 'Unexpected Wago response: HTTP %s\n' "$status" >&2
+            exit 1
+          fi
+          printf 'Uploaded %s to Wago Addons (project: %s).\n' \
+            "$RELEASE_TAG" "$project_id" >> "$GITHUB_STEP_SUMMARY"

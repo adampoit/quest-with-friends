@@ -3,42 +3,20 @@
 
 import argparse
 import json
-import re
+import sys
 from pathlib import Path
 from typing import cast
-from zipfile import BadZipFile, ZipFile
+from zipfile import BadZipFile
+
+if not __package__:
+	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools.release_package import interface_versions
 
 
 RETAIL_VERSION_TYPE_ID = 517
 FOREVER_VERSION_TYPE_ID = 88568
 SUPPORTED_VERSION_TYPE_IDS = (RETAIL_VERSION_TYPE_ID, FOREVER_VERSION_TYPE_ID)
-TOC_PATH = "QuestWithFriends/QuestWithFriends.toc"
-
-
-def interface_versions(archive: Path) -> list[str]:
-	with ZipFile(archive) as package:
-		try:
-			toc = package.read(TOC_PATH).decode("utf-8-sig")
-		except KeyError:
-			raise ValueError(f"Release ZIP is missing {TOC_PATH}") from None
-
-	match = re.search(r"^##[ \t]*Interface:[ \t]*([^\r\n]+)", toc, re.MULTILINE)
-	if match is None:
-		raise ValueError("Release TOC is missing Interface metadata")
-
-	values = [value.strip() for value in match[1].split(",")]
-	if any(re.fullmatch(r"[0-9]+", value) is None for value in values):
-		raise ValueError("Release TOC contains invalid Interface metadata")
-
-	interfaces = [int(value) for value in values]
-	if any(interface < 10000 for interface in interfaces):
-		raise ValueError("Release TOC contains invalid Interface metadata")
-	return list(
-		dict.fromkeys(
-			f"{interface // 10000}.{interface // 100 % 100}.{interface % 100}"
-			for interface in interfaces
-		)
-	)
 
 
 def resolve_game_versions(archive: Path, versions: object) -> list[int]:

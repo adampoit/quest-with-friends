@@ -11,10 +11,9 @@ from zipfile import ZipFile
 from tools.curseforge_game_versions import (
 	FOREVER_VERSION_TYPE_ID,
 	RETAIL_VERSION_TYPE_ID,
-	TOC_PATH,
-	interface_versions,
 	resolve_game_versions,
 )
+from tools.release_package import TOC_PATH, interface_versions
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "curseforge_game_versions.py"
