@@ -34,6 +34,9 @@ describe("Quest With Friends party sync", function()
 		end
 		_G.QuestWithFriendsDB = nil
 		QuestWithFriends.Panel = {
+			setLocked = function(locked)
+				QuestWithFriendsDB.panelLocked = locked ~= false
+			end,
 			show = function(groups, complete, zoneFilter, toggle, share, notices, filters, presentation)
 				view = {
 					groups = groups,
@@ -880,6 +883,31 @@ describe("Quest With Friends party sync", function()
 		}
 		return captured
 	end
+
+	it("registers an account-wide lock setting and routes the panel lock action through it", function()
+		local settings = captureSettings()
+		local locks = {}
+		rawset(QuestWithFriends.Panel, "setLocked", function(locked)
+			locks[#locks + 1] = locked
+			QuestWithFriendsDB.panelLocked = locked ~= false
+		end)
+		assert(loadfile("QuestWithFriends.lua"))()
+		local record = settings.settings.QuestWithFriendsPanelLocked
+		assert.are.equal("Lock panel", record.name)
+		assert.is_true(record.default)
+		assert.is_true(record.setting:GetValue())
+		_G.QuestWithFriendsDB = { panelLocked = false }
+		fire("ADDON_LOADED", "QuestWithFriends")
+		assert.is_false(record.setting:GetValue())
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		view.presentation.onLock()
+		assert.same({ true }, locks)
+		assert.is_true(record.setting:GetValue())
+		record.setting:SetValue(false)
+		assert.same({ true, false }, locks)
+		assert.is_false(QuestWithFriendsDB.panelLocked)
+	end)
 
 	for _, game in ipairs({ "retail", "forever" }) do
 		it("restores debug logging when SavedVariables arrive after Lua files on " .. game, function()

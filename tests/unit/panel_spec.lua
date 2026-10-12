@@ -1,24 +1,95 @@
 describe("Quest With Friends panel", function()
-	local panel, buttons, fontStrings, textures
+	local panel, buttons, fontStrings, textures, panelFontCount
 
 	local function widget()
 		local w = {}
 		function w:SetSize(width, height)
 			self.size = { width, height }
+			self.width, self.height = width, height
+			if self.OnSizeChanged then
+				self.OnSizeChanged(self, width, height)
+			end
 		end
-		function w:SetPoint(point, _, relativePoint, x, y)
+		function w:SetParent(parent)
+			self.parent = parent
+		end
+		function w:GetParent()
+			return self.parent
+		end
+		function w:GetEffectiveScale()
+			return self.scale or 1
+		end
+		function w:GetWidth()
+			return self.width
+		end
+		function w:GetHeight()
+			return self.height
+		end
+		function w:RegisterEvent(...) end
+		function w:SetResizable(value)
+			self.resizable = value
+		end
+		function w:SetResizeBounds(...)
+			self.bounds = { ... }
+		end
+		function w:StartSizing(corner)
+			self.sizing = corner
+		end
+		function w:EnableMouseWheel(value)
+			self.mouseWheel = value
+		end
+		function w:SetScrollChild(child)
+			self.scrollChild = child
+		end
+		function w:GetVerticalScroll()
+			return self.scroll or 0
+		end
+		function w:SetVerticalScroll(value)
+			self.scroll = value
+		end
+		function w:SetMinMaxValues(low, high)
+			self.range = { low, high }
+		end
+		function w:SetValue(value)
+			self.value = value
+		end
+		function w:SetNormalTexture(...) end
+		function w:SetHighlightTexture(...) end
+		function w:SetPushedTexture(...) end
+		function w:GetScript(event)
+			return self[event]
+		end
+		function w:SetShown(value)
+			if value then
+				self:Show()
+			else
+				self:Hide()
+			end
+		end
+		function w:IsShown()
+			return self.shown == true
+		end
+		function w:SetPoint(point, relativeTo, relativePoint, x, y)
 			self.point = { point, relativePoint, x, y }
+			if self == panel and relativeTo == UIParent then
+				self.left = point == "TOPRIGHT" and UIParent.width - self.width + x or x
+				self.top = UIParent.top + y
+			end
 		end
 		function w:SetFrameStrata(...) end
 		function w:SetBackdrop(...) end
 		function w:SetBackdropColor(...) end
 		function w:SetBackdropBorderColor(...) end
 		function w:SetMovable(...) end
-		function w:EnableMouse(...) end
+		function w:EnableMouse(value)
+			self.mouseEnabled = value
+		end
 		function w:RegisterForDrag(...) end
 		function w:RegisterForClicks(...) end
 		function w:SetClampedToScreen(...) end
-		function w:StartMoving(...) end
+		function w:StartMoving()
+			self.moving = true
+		end
 		function w:StopMovingOrSizing()
 			self.stopped = true
 		end
@@ -54,6 +125,9 @@ describe("Quest With Friends panel", function()
 		end
 		function w:SetWidth(width)
 			self.width = width
+			if self.OnSizeChanged then
+				self.OnSizeChanged(self, width, self.height)
+			end
 		end
 		function w:SetJustifyH(...) end
 		function w:SetJustifyV(...) end
@@ -78,9 +152,13 @@ describe("Quest With Friends panel", function()
 		function w:ClearAllPoints(...) end
 		function w:SetHeight(height)
 			self.height = height
+			if self.OnSizeChanged then
+				self.OnSizeChanged(self, self.width, height)
+			end
 		end
 		function w:GetStringHeight()
-			return 15
+			return self.wordWrap == false and 15
+				or math.max(1, math.ceil(self:GetStringWidth() / (self.width or 10000))) * 15
 		end
 		function w:SetScript(event, callback)
 			self[event] = callback
@@ -124,14 +202,19 @@ describe("Quest With Friends panel", function()
 		end
 		function w:CreateTexture(_, _)
 			local texture = widget()
-			if self == panel then
+			texture.parent = self
+			if self == panel or self == panel.content then
 				textures[#textures + 1] = texture
 			end
 			return texture
 		end
 		function w:CreateFontString(_, _, _)
 			local text = widget()
+			text.parent = self
 			if self == panel then
+				panelFontCount = panelFontCount + 1
+			end
+			if (self == panel and panelFontCount ~= 4) or self == panel.content then
 				fontStrings[#fontStrings + 1] = text
 			end
 			return text
@@ -155,7 +238,7 @@ describe("Quest With Friends panel", function()
 	end
 
 	before_each(function()
-		buttons, fontStrings, textures = {}, {}, {}
+		buttons, fontStrings, textures, panelFontCount = {}, {}, {}, 0
 		_G.GameTooltip = widget()
 		function GameTooltip:SetOwner(owner, anchor)
 			assert.are.equal("ANCHOR_RIGHT", anchor)
@@ -170,14 +253,21 @@ describe("Quest With Friends panel", function()
 		end
 		_G.UIParent = widget()
 		UIParent.left, UIParent.top = 0, 900
+		UIParent.width, UIParent.height = 1600, 900
 		_G.QuestWithFriendsDB = {}
-		rawset(_G, "CreateFrame", function(kind, _, _, template)
+		rawset(_G, "CreateFrame", function(kind, name, parent, template)
 			local w = widget()
-			w.kind, w.template = kind, template
-			if kind == "Button" or kind == "DropdownButton" then
-				buttons[#buttons + 1] = w
-			elseif kind == "Frame" then
+			w.kind, w.template, w.parent = kind, template, parent
+			if name == "QuestWithFriendsPanel" then
 				panel = w
+				panelFontCount = 0
+			elseif kind == "ScrollFrame" then
+				w.ScrollBar = widget()
+			elseif kind == "Button" or kind == "DropdownButton" then
+				local layoutButton = parent == panel and #buttons == 1 and not panel.resize
+				if not layoutButton then
+					buttons[#buttons + 1] = w
+				end
 			end
 			return w
 		end)
@@ -308,7 +398,8 @@ describe("Quest With Friends panel", function()
 		assert.is_false(panel.filter.menuOpen)
 		loadPanel()
 		panel.filter:OpenMenu()
-		panel.OnDragStart(panel)
+		QuestWithFriends.Panel.setLocked(false)
+		panel.header.OnDragStart(panel.header)
 		assert.is_false(panel.filter.menuOpen)
 	end)
 
@@ -479,7 +570,7 @@ describe("Quest With Friends panel", function()
 		assert.is_false(buttons[3].shown)
 	end)
 
-	it("truncates whole quest groups without creating orphan headings or actions", function()
+	it("keeps every quest and action reachable by scrolling and clears reused rows", function()
 		loadPanel()
 		local groups = {}
 		for index = 1, 25 do
@@ -487,12 +578,16 @@ describe("Quest With Friends panel", function()
 			groups[index].title = "Errand " .. index
 		end
 		QuestWithFriends.Panel.show(groups, true, true, nil, function() end)
-		assert.are.equal(19, #buttons)
-		assert.are.equal(9, #textures)
-		assert.are.equal("Errand 9", fontStrings[20].text)
-		assert.are.equal("Julia: Missing", fontStrings[21].text)
-		assert.are.equal("+16 more quests with differences", fontStrings[22].text)
-		assert.is_nil(fontStrings[22].icon)
+		assert.are.equal(51, #buttons)
+		assert.are.equal(25, #textures)
+		assert.are.equal("Errand 25", fontStrings[52].text)
+		assert.are.equal("Julia: Missing", fontStrings[53].text)
+		assert.are.equal(360, panel.height)
+		assert.is_true(panel.scroll.ScrollBar.shown)
+		panel.scroll.OnMouseWheel(panel.scroll, -1000)
+		assert.are.equal(panel.scrollRange, panel.scroll.scroll)
+		assert.are.equal(panel.content, fontStrings[52]:GetParent())
+		assert.are.equal(220, fontStrings[52].width)
 		QuestWithFriends.Panel.show({}, true, true)
 		for index = 2, #buttons do
 			assert.is_false(buttons[index].shown)
@@ -502,7 +597,7 @@ describe("Quest With Friends panel", function()
 		end
 	end)
 
-	it("shows part of an oversized first quest and counts its hidden details separately", function()
+	it("renders every detail of an oversized quest and pins connection notices outside the scroll body", function()
 		loadPanel()
 		local differences = {}
 		for index = 1, 25 do
@@ -522,10 +617,16 @@ describe("Quest With Friends panel", function()
 			{ { player = "Bob", reason = "unknown" } }
 		)
 		assert.are.equal("Errand", fontStrings[5].text)
-		assert.are.equal("Julia: Task 15 0/1", fontStrings[20].text)
-		assert.are.equal("  +10 more differences for this quest", fontStrings[21].text)
-		assert.are.equal("+1 more quest with differences", fontStrings[22].text)
-		assert.are.equal(3, #buttons)
+		assert.are.equal("Julia: Task 25 0/1", fontStrings[30].text)
+		assert.are.equal("Errand", fontStrings[31].text)
+		assert.are.equal(5, #buttons)
+		assert.are.equal(panel, fontStrings[4]:GetParent())
+		assert.are.equal(panel.content, fontStrings[5]:GetParent())
+		assert.are.equal(panel.content, fontStrings[30]:GetParent())
+		assert.is_true(panel.scrollRange > 0)
+		local noticePoint = fontStrings[4].point
+		panel.scroll.OnMouseWheel(panel.scroll, -3)
+		assert.same(noticePoint, fontStrings[4].point)
 	end)
 
 	it("toggles independently while keeping Share and the comparison status visible", function()
@@ -614,7 +715,7 @@ describe("Quest With Friends panel", function()
 		assert.are.equal("2 affected", row.toggleButton.summary.text)
 	end)
 
-	it("uses one row per collapsed quest and restores the overflow budget when expanded", function()
+	it("uses one row per collapsed quest and expands the scroll range with its details", function()
 		loadPanel()
 		local groups = {}
 		for index = 1, 25 do
@@ -623,12 +724,12 @@ describe("Quest With Friends panel", function()
 			QuestWithFriendsDB.collapsedQuests[index] = true
 		end
 		QuestWithFriends.Panel.show(groups, true, true)
-		assert.are.equal("Errand 18", fontStrings[21].text)
-		assert.are.equal("+7 more quests with differences", fontStrings[22].text)
+		assert.are.equal("Errand 25", fontStrings[28].text)
+		local range = panel.scrollRange
 		fontStrings[4].toggleButton.OnClick()
 		assert.are.equal("Julia: Missing", fontStrings[5].text)
-		assert.are.equal("Errand 17", fontStrings[21].text)
-		assert.are.equal("+8 more quests with differences", fontStrings[22].text)
+		assert.are.equal("Errand 25", fontStrings[29].text)
+		assert.are.equal(range + 18, panel.scrollRange)
 	end)
 
 	it("keeps notices visible and clears heading actions and tooltips when rows are reused", function()
@@ -668,12 +769,15 @@ describe("Quest With Friends panel", function()
 
 	it("saves a dragged position and restores it after a reload", function()
 		loadPanel()
-		assert.same({ "TOPRIGHT", "TOPRIGHT", -36, -180 }, panel.point)
+		assert.same({ "TOPLEFT", "TOPLEFT", 1216, -180 }, panel.point)
+		QuestWithFriends.Panel.setLocked(false)
+		panel.header.OnDragStart(panel.header)
 		panel.left, panel.top = 140, 620
-		panel.OnDragStop(panel)
+		panel.header.OnDragStop(panel.header)
 		assert.is_true(panel.stopped)
 		assert.same({ x = 140, y = -280 }, QuestWithFriendsDB.panelPosition)
 		assert.same({ "TOPLEFT", "TOPLEFT", 140, -280 }, panel.point)
+		assert.are.equal(1460, panel.bounds[3])
 		loadPanel()
 		assert.same({ "TOPLEFT", "TOPLEFT", 140, -280 }, panel.point)
 	end)
@@ -727,9 +831,167 @@ describe("Quest With Friends panel", function()
 		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
 	end)
 
+	it("only permits moving and resizing while unlocked and shrinks again when locked", function()
+		loadPanel()
+		assert.are.equal(78, panel.height)
+		assert.is_false(panel.header.mouseEnabled)
+		assert.is_false(panel.lock.shown)
+		assert.is_false(panel.resize.shown)
+		panel.header.OnDragStart(panel.header)
+		panel.resize.OnMouseDown(panel.resize, "LeftButton")
+		assert.is_nil(panel.moving)
+		assert.is_nil(panel.sizing)
+		QuestWithFriends.Panel.setLocked(false)
+		assert.are.equal(360, panel.height)
+		assert.is_true(panel.header.mouseEnabled)
+		assert.is_true(panel.lock.shown)
+		assert.is_true(panel.resize.shown)
+		panel.resize.OnMouseDown(panel.resize, "RightButton")
+		assert.is_nil(panel.sizing)
+		panel.resize.OnMouseDown(panel.resize, "LeftButton")
+		assert.are.equal("BOTTOMRIGHT", panel.sizing)
+		panel:SetSize(420, 240)
+		panel.resize.OnMouseUp(panel.resize)
+		assert.same({ width = 420, height = 240 }, QuestWithFriendsDB.panelSize)
+		assert.are.equal(240, panel.height)
+		panel.lock.OnClick()
+		assert.is_true(QuestWithFriendsDB.panelLocked)
+		assert.are.equal(78, panel.height)
+		assert.are.equal(420, panel.width)
+		assert.is_false(panel.resize.shown)
+		QuestWithFriends.Panel.setLocked(false)
+		assert.are.equal(240, panel.height)
+	end)
+
+	it("restores account-wide size and lock preferences after reloading", function()
+		QuestWithFriendsDB.panelSize = { width = 480, height = 220 }
+		QuestWithFriendsDB.panelLocked = false
+		loadPanel()
+		assert.are.equal(480, panel.width)
+		assert.are.equal(220, panel.height)
+		loadPanel()
+		assert.are.equal(480, panel.width)
+		assert.are.equal(220, panel.height)
+		QuestWithFriends.Panel.setLocked(true)
+		loadPanel()
+		assert.are.equal(480, panel.width)
+		assert.are.equal(78, panel.height)
+	end)
+
+	it("reflows wrapped objectives on resize without scaling text or changing sharing", function()
+		loadPanel()
+		QuestWithFriends.Panel.show({
+			group(42, {
+				{
+					player = "Julia",
+					kind = "needs",
+					reason = "objective",
+					objective = {
+						text = string.rep("Long objective ", 12),
+						have = 2,
+						need = 8,
+					},
+				},
+			}),
+		}, true, true, nil, function() end)
+		local narrow = panel.content.height
+		QuestWithFriends.Panel.setLocked(false)
+		panel.resize.OnMouseDown(panel.resize, "LeftButton")
+		panel:SetSize(600, 360)
+		panel.resize.OnMouseUp(panel.resize)
+		assert.is_true(panel.content.height < narrow)
+		assert.are.equal(544, fontStrings[5].width)
+		assert.is_true(fontStrings[4].shareButton.shown)
+	end)
+
+	it("preserves the visible quest when activity sorting or notices change", function()
+		loadPanel()
+		local groups = {}
+		for index = 1, 15 do
+			groups[index] = group(index)
+		end
+		QuestWithFriends.Panel.show(groups, true, true)
+		panel.scroll:SetVerticalScroll(43 * 4 + 5)
+		local last = table.remove(groups)
+		table.insert(groups, 1, last)
+		QuestWithFriends.Panel.show(groups, false, true, nil, nil, { { player = "Bob", reason = "offline" } })
+		assert.are.equal(43 * 5 + 5, panel.scroll.scroll)
+		QuestWithFriends.Panel.show({}, true, true)
+		assert.are.equal(0, panel.scroll.scroll)
+		assert.is_false(panel.scroll.ScrollBar.shown)
+	end)
+
+	it("raises the usable minimum for pinned notices without overwriting the saved ceiling", function()
+		QuestWithFriendsDB.panelSize = { width = 300, height = 150 }
+		loadPanel()
+		local notices = {}
+		for index = 1, 4 do
+			notices[index] = { player = "Friend " .. index, reason = "waiting" }
+		end
+		local differences = {}
+		for index = 1, 20 do
+			differences[index] = { player = "Julia", kind = "missing", reason = "missing" }
+		end
+		QuestWithFriends.Panel.show({ group(nil, differences) }, false, true, nil, nil, notices)
+		assert.is_true(panel.height > 150)
+		assert.are.equal(150, QuestWithFriendsDB.panelSize.height)
+		assert.is_true(panel.scrollRange > 0)
+		for index = 4, 7 do
+			assert.are.equal(panel, fontStrings[index]:GetParent())
+		end
+		QuestWithFriends.Panel.show({ group(nil, differences) }, true, true)
+		assert.are.equal(150, panel.height)
+	end)
+
+	it("validates non-finite and out-of-range saved dimensions and clamps offscreen positions", function()
+		for _, size in ipairs({ "bad", { width = 0 / 0, height = math.huge }, { width = -1, height = -1 } }) do
+			QuestWithFriendsDB.panelSize = size
+			QuestWithFriendsDB.panelPosition = { x = 100000, y = -100000 }
+			loadPanel()
+			assert.is_true(panel.width >= 300 and panel.width <= UIParent.width)
+			assert.is_true(panel.height >= 78 and panel.height <= UIParent.height)
+			assert.is_true(QuestWithFriendsDB.panelPosition.x <= UIParent.width - panel.width)
+			assert.is_true(QuestWithFriendsDB.panelPosition.y >= panel.height - UIParent.height)
+		end
+	end)
+
+	it("adapts to display and UI-scale changes without discarding the preferred size", function()
+		QuestWithFriendsDB.panelSize = { width = 800, height = 700 }
+		QuestWithFriendsDB.panelLocked = false
+		loadPanel()
+		UIParent.width, UIParent.height = 640, 480
+		panel.OnEvent(panel, "DISPLAY_SIZE_CHANGED")
+		assert.are.equal(640, panel.width)
+		assert.are.equal(480, panel.height)
+		assert.same({ width = 800, height = 700 }, QuestWithFriendsDB.panelSize)
+		UIParent.width, UIParent.height = 1600, 900
+		panel.OnEvent(panel, "DISPLAY_SIZE_CHANGED")
+		assert.are.equal(800, panel.width)
+		assert.are.equal(700, panel.height)
+		panel.scale = 2
+		panel.OnEvent(panel, "UI_SCALE_CHANGED")
+		assert.are.equal(800, panel.width)
+		assert.are.equal(450, panel.height)
+	end)
+
+	it("does not reopen a hidden panel when unlocking and safely ends an interrupted resize", function()
+		loadPanel()
+		QuestWithFriends.Panel.hide()
+		QuestWithFriends.Panel.setLocked(false)
+		assert.is_false(panel.shown)
+		QuestWithFriends.Panel.show({}, true, true)
+		panel.resize.OnMouseDown(panel.resize, "LeftButton")
+		panel:SetSize(420, 260)
+		QuestWithFriends.Panel.hide()
+		assert.is_true(panel.stopped)
+		assert.same({ width = 420, height = 260 }, QuestWithFriendsDB.panelSize)
+		QuestWithFriends.Panel.show({}, true, true)
+		assert.are.equal(260, panel.height)
+	end)
+
 	it("uses the default position if saved coordinates are invalid", function()
 		QuestWithFriendsDB.panelPosition = { x = "bad", y = -280 }
 		loadPanel()
-		assert.same({ "TOPRIGHT", "TOPRIGHT", -36, -180 }, panel.point)
+		assert.same({ "TOPLEFT", "TOPLEFT", 1216, -180 }, panel.point)
 	end)
 end)

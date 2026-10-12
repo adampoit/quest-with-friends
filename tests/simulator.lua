@@ -38,12 +38,26 @@ test("native debug setting shares the persistent slash-command preference", func
 	end
 end)
 
+local function panelRegions()
+	local regions = { QuestWithFriendsPanel:GetRegions() }
+	for _, region in ipairs({ QuestWithFriendsPanel.content:GetRegions() }) do
+		regions[#regions + 1] = region
+	end
+	return regions
+end
+
 local function panelTexts()
-	local texts = {}
-	for _, region in ipairs({ QuestWithFriendsPanel:GetRegions() }) do
+	local regions, texts = {}, {}
+	for _, region in ipairs(panelRegions()) do
 		if region:IsShown() and region:GetObjectType() == "FontString" then
-			texts[#texts + 1] = region:GetText()
+			regions[#regions + 1] = region
 		end
+	end
+	table.sort(regions, function(a, b)
+		return a:GetTop() > b:GetTop()
+	end)
+	for _, region in ipairs(regions) do
+		texts[#texts + 1] = region:GetText()
 	end
 	return texts
 end
@@ -222,7 +236,7 @@ test("solo preview uses the real panel and filters without sending or sharing sa
 		local setting = Settings.GetSetting("QuestWithFriendsPreviewMode")
 		assertTrue(setting:GetValue())
 		local foundShare = false
-		for _, child in ipairs({ panel:GetChildren() }) do
+		for _, child in ipairs({ panel.content:GetChildren() }) do
 			if child:GetObjectType() == "Button" and child:GetText() == "Share" and child:IsShown() then
 				foundShare = true
 				assertFalse(child:IsEnabled())
@@ -437,10 +451,13 @@ partyTest("panel bounds long lists and hides reused rows when back in sync", fun
 	end
 	QuestWithFriends.Panel.show(groups, true, true, function() end)
 	local texts = panelTexts()
-	assertContains(texts, "Errand 9")
-	assertContains(texts, "+16 more quests with differences")
-	assertEquals(22, #texts)
-	assertTrue(QuestWithFriendsPanel:GetHeight() > 58)
+	assertContains(texts, "Errand 25")
+	assertEquals(53, #texts)
+	assertAlmostEquals(360, QuestWithFriendsPanel:GetHeight())
+	local panel = QuestWithFriendsPanel
+	assertTrue(panel.scrollRange > 0)
+	panel.scroll:GetScript("OnMouseWheel")(panel.scroll, -1000)
+	assertAlmostEquals(panel.scrollRange, panel.scroll:GetVerticalScroll())
 	sendSnapshot(quests)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
 	assertEquals(3, #panelTexts())
@@ -464,7 +481,7 @@ partyTest("status icons render once per detail and hide when rows are reused", f
 	})
 	QuestWithFriends.Panel.show(groups, complete, true, nil, nil, notices)
 	local icons = {}
-	for _, region in ipairs({ QuestWithFriendsPanel:GetRegions() }) do
+	for _, region in ipairs(panelRegions()) do
 		if region:IsShown() and region:GetObjectType() == "Texture" and region:GetWidth() == 14 then
 			icons[#icons + 1] = region
 		end
@@ -508,7 +525,7 @@ partyTest("real Share buttons use current row IDs and disappear when differences
 	show(42)
 	local shareButton
 	local shareCount, titleCount = 0, 0
-	for _, child in ipairs({ QuestWithFriendsPanel:GetChildren() }) do
+	for _, child in ipairs({ QuestWithFriendsPanel.content:GetChildren() }) do
 		if child:IsShown() and child:GetObjectType() == "Button" and child:GetText() == "Share" then
 			shareButton = child
 			shareCount = shareCount + 1
@@ -564,7 +581,7 @@ partyTest("quest heading clicks persist collapse choices without hiding sharing 
 	end
 	show()
 	local heading
-	for _, region in ipairs({ QuestWithFriendsPanel:GetRegions() }) do
+	for _, region in ipairs(panelRegions()) do
 		if region:GetObjectType() == "FontString" and region:GetText() == title then
 			heading = region
 		end
@@ -662,9 +679,11 @@ end)
 
 partyTest("drag-stop saves real frame coordinates relative to UIParent", function()
 	local panel = QuestWithFriendsPanel
+	QuestWithFriends.Panel.setLocked(false)
+	panel.header:GetScript("OnDragStart")(panel.header)
 	panel:ClearAllPoints()
 	panel:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 140, -280)
-	panel:GetScript("OnDragStop")(panel)
+	panel.header:GetScript("OnDragStop")(panel.header)
 	assertAlmostEquals(140, QuestWithFriendsDB.panelPosition.x)
 	assertAlmostEquals(-280, QuestWithFriendsDB.panelPosition.y)
 	local point, relativeTo, relativePoint, x, y = panel:GetPoint(1)
@@ -673,4 +692,30 @@ partyTest("drag-stop saves real frame coordinates relative to UIParent", functio
 	assertEquals("TOPLEFT", relativePoint)
 	assertAlmostEquals(140, x)
 	assertAlmostEquals(-280, y)
+	QuestWithFriends.Panel.setLocked(true)
+end)
+
+partyTest("native lock settings expand the ceiling and the panel control locks it again", function(quests)
+	sendSnapshot(quests)
+	local panel = QuestWithFriendsPanel
+	local setting = Settings.GetSetting("QuestWithFriendsPanelLocked")
+	assertTrue(setting:GetValue())
+	assertFalse(panel.resize:IsShown())
+	assertFalse(panel.lock:IsShown())
+	setting:SetValue(false)
+	assertFalse(QuestWithFriendsDB.panelLocked)
+	assertAlmostEquals(360, panel:GetHeight())
+	assertTrue(panel.resize:IsShown())
+	assertTrue(panel.lock:IsShown())
+	panel.resize:GetScript("OnMouseDown")(panel.resize, "LeftButton")
+	panel:SetSize(420, 240)
+	panel.resize:GetScript("OnMouseUp")(panel.resize, "LeftButton")
+	assertAlmostEquals(420, QuestWithFriendsDB.panelSize.width)
+	assertAlmostEquals(240, QuestWithFriendsDB.panelSize.height)
+	panel.lock:Click()
+	assertTrue(setting:GetValue())
+	assertAlmostEquals(78, panel:GetHeight())
+	assertAlmostEquals(420, panel:GetWidth())
+	assertFalse(panel.resize:IsShown())
+	QuestWithFriendsDB.panelSize = nil
 end)

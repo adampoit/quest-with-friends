@@ -34,7 +34,7 @@ The first build downloads dependencies and compiles Rust, requiring several minu
 
 When upgrading the simulator, update the source revision, runtime image digest, and versioned image tags in the build script, workflows, and these instructions together. The interface override loads our TOC in the simulator.
 
-`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, row truncation/reuse, persistent quest-heading toggles, collapsed summaries, sharing, panel position persistence, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
+`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, scrolling and row reuse, persistent quest-heading toggles, collapsed summaries, sharing, locked/unlocked layout controls, saved panel dimensions and position, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
 
 ## Simulator screenshots
 
@@ -49,9 +49,11 @@ This builds `wow-ui-sim:0.1.32-preview` with the upstream `gui` feature and Mesa
 
 The preview-only `tools/simulator/preview-color.patch` disables the upstream shader's artificial brightness boost by default and converts display RGB tints to linear light for its sRGB render target. This keeps dark panel backgrounds and status colors closer to the addon's requested colors without changing the addon itself.
 
-`tools/simulator/preview-text-alignment.patch` moves the painted glyphs of top-aligned FontStrings up two UI units, scaled with their effective scale. This visual calibration makes small quest-title text align more closely with the collapse arrows verified in game. Anchors, textures, measured text sizes, line spacing, and centered button labels are unchanged. It is not a native font-metrics implementation; other fonts and sizes remain unverified. See [Text alignment calibration](tools/simulator/TEXT_ALIGNMENT.md) for scope and before/after captures.
+`tools/simulator/preview-text-alignment.patch` moves the painted glyphs of top-aligned FontStrings up two UI units, scaled with their effective scale. This visual calibration makes small quest-title text align more closely with the collapse arrows verified in game. Anchors, textures, measured text sizes, line spacing, and centered button labels are unchanged. It is not a native font-metrics implementation; other fonts and sizes remain unverified.
 
 The lightweight test image remains unpatched. Revalidate both patches when upgrading the pinned simulator revision; previews are still approximations, not substitutes for in-game screenshots.
+
+The pinned simulator can report changed vertical scroll offsets without moving the rendered quest list, and its scrollbar rendering is incomplete. Tests verify the panel's range, offsets and pinned notices, but live-client checks must cover wheel scrolling, scrollbar dragging, and clipping of quest text and clickable controls.
 
 For inspecting dark borders or translucent elements, opt into the debug-only boost:
 

@@ -13,7 +13,7 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Exclude class and profession quests**
 - [ ] **More compact mode**
 - [x] **Collapsible quest headers**
-- [ ] **Resizable panel**
+- [x] **Resizable panel**
 - [x] **Show remaining objective counts after turn-in.** Compare unfinished players with ready-to-turn-in or completed quests across the whole party.
 - [x] **Offline member handling.** Show a distinct Offline notice, retain cached comparisons, and resume syncing automatically on reconnection.
 - [ ] **Redundant counts in the UI**

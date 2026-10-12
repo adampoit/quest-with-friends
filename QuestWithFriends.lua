@@ -44,12 +44,14 @@ local prefixRegistered
 local previewMode = false
 local previewCollapsed = {}
 local previewSetting
+local panelLockSetting
 local render
 local setPreviewMode
 local frame = CreateFrame("Frame")
 local function initializeSettings()
 	QuestWithFriendsDB = type(QuestWithFriendsDB) == "table" and QuestWithFriendsDB or {}
 	QuestWithFriendsDB.debugMode = QuestWithFriendsDB.debugMode == true
+	QuestWithFriendsDB.panelLocked = QuestWithFriendsDB.panelLocked ~= false
 	if QuestWithFriendsDB.sortMode ~= "title" then
 		QuestWithFriendsDB.sortMode = "smart"
 	end
@@ -268,6 +270,13 @@ local function showPanel(groups, complete, notices)
 			end,
 		},
 		{
+			onLock = function()
+				if panelLockSetting then
+					panelLockSetting:SetValue(true)
+				else
+					QWF.Panel.setLocked(true)
+				end
+			end,
 			sortMode = QuestWithFriendsDB.sortMode,
 			onSort = function(mode)
 				QuestWithFriendsDB.sortMode = mode == "title" and "title" or "smart"
@@ -962,6 +971,25 @@ then
 		"Capture detailed Quest With Friends logs with AddonKit. Requires AddonKit to be installed and enabled. "
 			.. "Applies immediately and stays enabled across reloads and logins. Turn off to return to normal INFO logging."
 	)
+	panelLockSetting = Settings.RegisterProxySetting(
+		category,
+		"QuestWithFriendsPanelLocked",
+		Settings.VarType.Boolean,
+		"Lock panel",
+		true,
+		function()
+			return QuestWithFriendsDB.panelLocked
+		end,
+		function(locked)
+			QWF.Panel.setLocked(locked)
+		end
+	)
+	Settings.CreateCheckbox(
+		category,
+		panelLockSetting,
+		"Uncheck to move and resize the panel. While unlocked, it shows its full maximum height. "
+			.. "Click Unlocked · Lock on the panel when finished. Layout is shared across characters."
+	)
 	previewSetting = Settings.RegisterProxySetting(
 		category,
 		"QuestWithFriendsPreviewMode",
@@ -976,7 +1004,7 @@ then
 	Settings.CreateCheckbox(
 		category,
 		previewSetting,
-		"Show sample party quest data while solo. Try filters, collapse quest headings, or drag the panel. "
+		"Show sample party quest data while solo. Try filters, collapse quest headings, or unlock the panel to move and resize it. "
 			.. "Sample quests cannot be shared. Preview ends when you join a group or reload."
 	)
 	Settings.RegisterAddOnCategory(category)

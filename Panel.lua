@@ -13,9 +13,64 @@ local collapsedQuests
 local stopPreview
 local sortMode = "smart"
 local selectSort
-local WIDTH = 348
-local MAX_ROWS = 18
+local DEFAULT_WIDTH = 348
+local DEFAULT_HEIGHT = 360
+local MIN_WIDTH = 300
+local MIN_HEIGHT = 150
+local MIN_QUEST_HEIGHT = 60
 local DETAIL_X = 41
+local layoutBusy = false
+local resizing = false
+local moving = false
+local onLock
+local groupOffsets = {}
+local reflow
+
+local function finite(value)
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
+local function clamp(value, low, high)
+	return math.max(low, math.min(high, value))
+end
+
+local function screenSize()
+	local scale = panel:GetEffectiveScale() / UIParent:GetEffectiveScale()
+	return UIParent:GetWidth() / scale, UIParent:GetHeight() / scale
+end
+
+local function savePosition()
+	local scale = panel:GetEffectiveScale() / UIParent:GetEffectiveScale()
+	local x = panel:GetLeft() - UIParent:GetLeft() / scale
+	local y = panel:GetTop() - UIParent:GetTop() / scale
+	local width, height = screenSize()
+	x = clamp(x, 0, math.max(0, width - panel:GetWidth()))
+	y = clamp(y, math.min(0, panel:GetHeight() - height), 0)
+	panel:ClearAllPoints()
+	panel:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+	QuestWithFriendsDB.panelPosition = { x = x, y = y }
+end
+
+local function finishLayout()
+	if moving or resizing then
+		panel:StopMovingOrSizing()
+		if resizing then
+			QuestWithFriendsDB.panelSize = { width = panel:GetWidth(), height = panel:GetHeight() }
+		end
+		moving, resizing = false, false
+		savePosition()
+	end
+end
+
+function QWF.Panel.setLocked(locked)
+	QuestWithFriendsDB.panelLocked = locked ~= false
+	if panel then
+		finishLayout()
+		if redraw and panel:IsShown() then
+			redraw()
+		end
+	end
+end
 local styles = {
 	missing = { color = { 0.98, 0.73, 0.40 }, icon = "Interface\\GossipFrame\\AvailableQuestIcon" },
 	needs = { color = { 0.57, 0.78, 1.00 }, icon = "Interface\\QuestFrame\\UI-Quest-BulletPoint" },
@@ -77,9 +132,9 @@ local function createPanel()
 			and QuestWithFriendsDB.collapsedQuests
 		or {}
 	panel = CreateFrame("Frame", "QuestWithFriendsPanel", UIParent, "BackdropTemplate")
-	panel:SetSize(WIDTH, 58)
+	panel:SetSize(DEFAULT_WIDTH, 78)
 	local position = QuestWithFriendsDB.panelPosition
-	if position and type(position.x) == "number" and type(position.y) == "number" then
+	if type(position) == "table" and finite(position.x) and finite(position.y) then
 		panel:SetPoint("TOPLEFT", UIParent, "TOPLEFT", position.x, position.y)
 	else
 		panel:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -36, -180)
@@ -96,21 +151,40 @@ local function createPanel()
 	panel:SetBackdropColor(0.025, 0.035, 0.055, 0.94)
 	panel:SetBackdropBorderColor(0.28, 0.34, 0.43, 0.8)
 	panel:SetMovable(true)
-	panel:EnableMouse(true)
-	panel:RegisterForDrag("LeftButton")
-	panel:SetScript("OnDragStart", function(self)
-		self.filter:CloseMenu()
-		self:StartMoving()
-	end)
-	panel:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		local x = self:GetLeft() - UIParent:GetLeft()
-		local y = self:GetTop() - UIParent:GetTop()
-		self:ClearAllPoints()
-		self:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
-		QuestWithFriendsDB.panelPosition = { x = x, y = y }
-	end)
+	panel:SetResizable(true)
 	panel:SetClampedToScreen(true)
+	panel.header = CreateFrame("Frame", nil, panel)
+	panel.header:SetPoint("TOPLEFT", 4, -4)
+	panel.header:SetPoint("TOPRIGHT", -4, -4)
+	panel.header:SetHeight(26)
+	panel.header:EnableMouse(true)
+	panel.header:RegisterForDrag("LeftButton")
+	panel.header:SetScript("OnDragStart", function()
+		if QuestWithFriendsDB.panelLocked == false then
+			panel.filter:CloseMenu()
+			savePosition()
+			moving = true
+			panel:StartMoving()
+		end
+	end)
+	panel.header:SetScript("OnDragStop", function()
+		if moving then
+			finishLayout()
+			reflow()
+		end
+	end)
+	panel:SetScript("OnSizeChanged", function()
+		if not layoutBusy and reflow then
+			reflow()
+		end
+	end)
+	panel:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	panel:RegisterEvent("UI_SCALE_CHANGED")
+	panel:SetScript("OnEvent", function()
+		if reflow then
+			reflow()
+		end
+	end)
 
 	local heading = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	heading:SetPoint("TOPLEFT", 14, -12)
@@ -124,18 +198,83 @@ local function createPanel()
 	panel.filter:SetupMenu(generateFilterMenu)
 	panel:SetScript("OnHide", function(self)
 		self.filter:CloseMenu()
+		finishLayout()
 	end)
 
 	panel.status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	panel.status:SetPoint("TOPLEFT", 14, -32)
-	panel.status:SetWidth(WIDTH - 28)
+	panel.status:SetWidth(DEFAULT_WIDTH - 28)
 	panel.status:SetJustifyH("LEFT")
 
 	panel.scope = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	panel.scope:SetPoint("TOPLEFT", 14, -50)
-	panel.scope:SetWidth(WIDTH - 28)
+	panel.scope:SetWidth(DEFAULT_WIDTH - 28)
 	panel.scope:SetJustifyH("LEFT")
 	panel.scope:SetTextColor(0.72, 0.78, 0.85)
+
+	panel.lock = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+	panel.lock:SetSize(110, 22)
+	panel.lock:SetText("Unlocked · Lock")
+	panel.lock:RegisterForClicks("LeftButtonUp")
+	panel.lock:SetScript("OnClick", function()
+		if onLock then
+			onLock()
+		else
+			QWF.Panel.setLocked(true)
+		end
+	end)
+	panel.hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	panel.hint:SetJustifyH("LEFT")
+	panel.hint:SetTextColor(0.72, 0.78, 0.85)
+	panel.hint:SetText("Drag header or corner")
+
+	panel.scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+	panel.content = CreateFrame("Frame", nil, panel.scroll)
+	panel.content:SetSize(DEFAULT_WIDTH, 1)
+	panel.scroll:SetScrollChild(panel.content)
+	panel.scroll:EnableMouseWheel(true)
+	panel.scroll:SetScript("OnMouseWheel", function(self, delta)
+		self:SetVerticalScroll(clamp(self:GetVerticalScroll() - delta * 36, 0, panel.scrollRange or 0))
+	end)
+
+	panel.resize = CreateFrame("Button", nil, panel)
+	panel.resize:SetSize(20, 20)
+	panel.resize:SetPoint("BOTTOMRIGHT", -4, 4)
+	panel.resize:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+	panel.resize:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+	panel.resize:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+	panel.resize:SetScript("OnMouseDown", function(_, button)
+		if button == "LeftButton" and QuestWithFriendsDB.panelLocked == false then
+			panel.filter:CloseMenu()
+			savePosition()
+			resizing = true
+			panel:StartSizing("BOTTOMRIGHT")
+		end
+	end)
+	panel.resize:SetScript("OnMouseUp", function()
+		if resizing then
+			finishLayout()
+			reflow()
+		end
+	end)
+	panel.resize:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText("Drag to resize")
+		GameTooltip:AddLine(
+			"Sets the width and maximum height. Lock the panel to shrink it to fit its contents.",
+			1,
+			1,
+			1,
+			true
+		)
+		GameTooltip:Show()
+	end)
+	panel.resize:SetScript("OnLeave", function(self)
+		if GameTooltip:IsOwned(self) then
+			GameTooltip:Hide()
+		end
+	end)
+	panel.resize:SetScript("OnHide", panel.resize:GetScript("OnLeave"))
 end
 
 local function hideTooltip(self)
@@ -165,7 +304,7 @@ end
 
 local function setQuestHeading(row, group, collapsed, y, width)
 	if not row.toggleButton then
-		local button = CreateFrame("Button", nil, panel)
+		local button = CreateFrame("Button", nil, panel.content)
 		row.toggleButton = button
 		button:RegisterForClicks("LeftButtonUp")
 		local highlight = button:CreateTexture(nil, "HIGHLIGHT")
@@ -202,7 +341,10 @@ local function setQuestHeading(row, group, collapsed, y, width)
 	local summary, color = collapsedSummary(group)
 	row.summaryText = summary
 	button:ClearAllPoints()
-	button:SetPoint("TOPLEFT", panel, "TOPLEFT", 15, -y)
+	if button:GetParent() ~= row:GetParent() then
+		button:SetParent(row:GetParent())
+	end
+	button:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 15, -y)
 	button:SetSize(width + 16, 20)
 	button.indicator:SetRotation(collapsed and 0 or -math.pi / 2)
 	local summaryWidth = 0
@@ -219,20 +361,22 @@ local function setQuestHeading(row, group, collapsed, y, width)
 	button:Show()
 end
 
-local function addRow(text, y, kind, questID, group, collapsed)
+local function addRow(text, y, kind, questID, group, collapsed, parent, availableWidth)
 	activeRows = activeRows + 1
 	local row = rows[activeRows]
 	if not row then
-		row = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-		row:SetWidth(WIDTH - 30)
+		row = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		row:SetJustifyH("LEFT")
 		row:SetJustifyV("TOP")
 		row:SetWordWrap(true)
 		rows[#rows + 1] = row
 	end
+	if row:GetParent() ~= parent then
+		row:SetParent(parent)
+	end
 	row.questID = questID
 	if questID and not row.shareButton then
-		row.shareButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+		row.shareButton = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 		row.shareButton:SetSize(52, 20)
 		row.shareButton:SetText("Share")
 		row.shareButton:RegisterForClicks("LeftButtonUp")
@@ -265,24 +409,30 @@ local function addRow(text, y, kind, questID, group, collapsed)
 	end
 	local style = styles[kind]
 	if style and not row.icon then
-		row.icon = panel:CreateTexture(nil, "OVERLAY")
+		row.icon = parent:CreateTexture(nil, "OVERLAY")
 		row.icon:SetSize(14, 14)
 		row.icon:SetDesaturated(true)
 	end
 	if style then
+		if row.icon:GetParent() ~= parent then
+			row.icon:SetParent(parent)
+		end
 		row.icon:ClearAllPoints()
-		row.icon:SetPoint("TOPLEFT", panel, "TOPLEFT", DETAIL_X - 18, -y)
+		row.icon:SetPoint("TOPLEFT", parent, "TOPLEFT", DETAIL_X - 18, -y)
 		row.icon:SetTexture(style.icon)
 		row.icon:SetVertexColor(unpack(style.color))
 		row.icon:Show()
 	end
 	local x = group and 31 or (style and DETAIL_X or 15)
-	local width = WIDTH - x - 15 - (questID and 60 or 0)
+	local width = availableWidth - x - 15 - (questID and 60 or 0)
 	row:SetWidth(width)
 	row:SetWordWrap(not group)
 	if questID then
+		if row.shareButton:GetParent() ~= parent then
+			row.shareButton:SetParent(parent)
+		end
 		row.shareButton:ClearAllPoints()
-		row.shareButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -y)
+		row.shareButton:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -15, -y)
 		row.shareButton:SetEnabled(not isPreview)
 		row.shareButton:Show()
 	end
@@ -335,6 +485,7 @@ end
 
 function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters, presentation)
 	presentation = presentation or {}
+	local previewChanged = isPreview ~= (presentation.preview == true)
 	isPreview = presentation.preview == true
 	stopPreview = presentation.onStop
 	sortMode = presentation.sortMode or "smart"
@@ -349,26 +500,13 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	if not panel then
 		createPanel()
 	end
+	if previewChanged then
+		panel.scroll:SetVerticalScroll(0)
+		groupOffsets = {}
+	end
 	collapsedQuests = presentation.collapsedQuests or QuestWithFriendsDB.collapsedQuests
 	panel.scope:SetText(scopeText())
 	panel.filter:GenerateMenu()
-	for _, row in ipairs(rows) do
-		row:Hide()
-		row:ClearAllPoints()
-		row.questID = nil
-		row.groupID = nil
-		if row.toggleButton then
-			row.toggleButton:Hide()
-		end
-		if row.icon then
-			row.icon:Hide()
-		end
-		if row.shareButton then
-			row.shareButton:Hide()
-		end
-	end
-	activeRows = 0
-	local y = 70
 	if isPreview then
 		panel.status:SetText("Preview · Sample party data")
 		panel.status:SetTextColor(0.72, 0.79, 0.88)
@@ -379,46 +517,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.status:SetText(complete and "Party out of sync" or "Party status incomplete")
 		panel.status:SetTextColor(0.98, 0.73, 0.40)
 	end
-	local count = 0
-	for _, notice in ipairs(notices or {}) do
-		local text = connectionLabels[notice.reason] or "Quest status unknown · /qwf to refresh"
-		y = addRow(notice.player .. ": " .. text, y, "unknown")
-		count = count + 1
-	end
-	if count > 0 then
-		y = y + 3
-	end
-	local remaining = 0
-	for index, group in ipairs(groups) do
-		local collapsed = collapsedQuests[group.questID] == true
-		local size = collapsed and 1 or #group.differences + 1
-		local available = MAX_ROWS - count
-		-- Never hide the first quest entirely just because its details exceed the row budget.
-		local oversized = size > available and index == 1 and available >= 3
-		if size <= available or oversized then
-			local questID = (onShare or isPreview) and group.shareQuestID
-			y = addRow(group.title, y, "quest", questID, group, collapsed)
-			count = count + 1
-			local shown = collapsed and 0 or (oversized and available - 2 or #group.differences)
-			for detailIndex = 1, shown do
-				local difference = group.differences[detailIndex]
-				y = addRow(differenceText(difference), y, difference.kind)
-				count = count + 1
-			end
-			if not collapsed and shown < #group.differences then
-				y = addRow("  +" .. (#group.differences - shown) .. " more differences for this quest", y, "muted")
-				count = count + 1
-			end
-			y = y + 3
-		else
-			remaining = #groups - index + 1
-			break
-		end
-	end
-	if remaining > 0 then
-		local noun = remaining == 1 and "quest" or "quests"
-		y = addRow("+" .. remaining .. " more " .. noun .. " with differences", y, "muted")
-	end
+	onLock = presentation.onLock
 	if isPreview and stopPreview then
 		if not panel.stopPreview then
 			panel.stopPreview = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
@@ -432,12 +531,147 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 			end)
 		end
 		panel.stopPreview:ClearAllPoints()
-		panel.stopPreview:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -y)
+		panel.stopPreview:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 8)
 		panel.stopPreview:Show()
-		y = y + 27
 	elseif panel.stopPreview then
 		panel.stopPreview:Hide()
 	end
-	panel:SetHeight(math.max(58, y + 8))
+	reflow = function()
+		if layoutBusy then
+			return
+		end
+		layoutBusy = true
+		local scroll = panel.scroll:GetVerticalScroll()
+		-- Anchor to a quest, not an absolute offset, when Smart sorting moves groups.
+		local anchorID, anchorDelta
+		if scroll > 0 then
+			for _, offset in ipairs(groupOffsets) do
+				if offset.y <= scroll then
+					anchorID, anchorDelta = offset.id, scroll - offset.y
+				end
+			end
+		end
+		local unlocked = QuestWithFriendsDB.panelLocked == false
+		local screenWidth, screenHeight = screenSize()
+		local saved = type(QuestWithFriendsDB.panelSize) == "table" and QuestWithFriendsDB.panelSize or {}
+		local width = resizing and panel:GetWidth() or (finite(saved.width) and saved.width or DEFAULT_WIDTH)
+		width = clamp(width, math.min(MIN_WIDTH, screenWidth), screenWidth)
+		local ceiling = resizing and panel:GetHeight() or (finite(saved.height) and saved.height or DEFAULT_HEIGHT)
+		panel:SetWidth(width)
+		panel.status:SetWidth(width - 28)
+		panel.scope:SetWidth(width - 28)
+		local scopeY = 32 + math.max(15, panel.status:GetStringHeight()) + 3
+		panel.scope:ClearAllPoints()
+		panel.scope:SetPoint("TOPLEFT", 14, -scopeY)
+		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + 5
+		panel.lock:SetShown(unlocked)
+		panel.hint:SetShown(unlocked)
+		panel.resize:SetShown(unlocked)
+		panel.header:EnableMouse(unlocked)
+		if unlocked then
+			panel.lock:ClearAllPoints()
+			panel.lock:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -headerHeight)
+			panel.hint:ClearAllPoints()
+			panel.hint:SetPoint("TOPLEFT", 15, -headerHeight - 4)
+			panel.hint:SetWidth(width - 140)
+			headerHeight = headerHeight + 28
+		end
+		local footer = isPreview and stopPreview and 35 or (unlocked and 24 or 8)
+		local function draw(bodyWidth)
+			for _, row in ipairs(rows) do
+				row:Hide()
+				row:ClearAllPoints()
+				row.questID, row.groupID = nil, nil
+				if row.toggleButton then
+					row.toggleButton:Hide()
+				end
+				if row.icon then
+					row.icon:Hide()
+				end
+				if row.shareButton then
+					row.shareButton:Hide()
+				end
+			end
+			activeRows = 0
+			local pinned = headerHeight
+			for _, notice in ipairs(notices or {}) do
+				local text = connectionLabels[notice.reason] or "Quest status unknown · /qwf to refresh"
+				pinned = addRow(notice.player .. ": " .. text, pinned, "unknown", nil, nil, nil, panel, width)
+			end
+			if #(notices or {}) > 0 then
+				pinned = pinned + 3
+			end
+			local y = 0
+			groupOffsets = {}
+			for _, group in ipairs(groups) do
+				groupOffsets[#groupOffsets + 1] = { id = group.questID, y = y }
+				local collapsed = collapsedQuests[group.questID] == true
+				local questID = (onShare or isPreview) and group.shareQuestID
+				y = addRow(group.title, y, "quest", questID, group, collapsed, panel.content, bodyWidth)
+				if not collapsed then
+					for _, difference in ipairs(group.differences) do
+						y = addRow(
+							differenceText(difference),
+							y,
+							difference.kind,
+							nil,
+							nil,
+							nil,
+							panel.content,
+							bodyWidth
+						)
+					end
+				end
+				y = y + 3
+			end
+			return pinned, y
+		end
+		local pinned, contentHeight = draw(width)
+		-- Notices may raise the effective ceiling without changing the saved allowance.
+		local minimum = math.min(screenHeight, math.max(MIN_HEIGHT, pinned + MIN_QUEST_HEIGHT + footer))
+		ceiling = clamp(ceiling, minimum, screenHeight)
+		local height = unlocked and ceiling or math.min(ceiling, pinned + contentHeight + footer)
+		local viewport = math.max(1, height - pinned - footer)
+		local overflow = contentHeight > viewport
+		local gutter = overflow and 22 or 0
+		if overflow then
+			-- Only overflowing lists give up text width to the native scrollbar.
+			pinned, contentHeight = draw(width - gutter)
+		end
+		local scale = panel:GetEffectiveScale() / UIParent:GetEffectiveScale()
+		local left = panel:GetLeft() - UIParent:GetLeft() / scale
+		local top = panel:GetTop() - UIParent:GetTop() / scale
+		panel:SetResizeBounds(
+			math.min(MIN_WIDTH, screenWidth),
+			minimum,
+			math.max(math.min(MIN_WIDTH, screenWidth), screenWidth - math.max(0, left)),
+			math.max(minimum, screenHeight + math.min(0, top))
+		)
+		panel:SetHeight(height)
+		panel.content:SetSize(width - gutter, math.max(1, contentHeight))
+		panel.scroll:ClearAllPoints()
+		panel.scroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -pinned)
+		panel.scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -gutter, footer)
+		panel.scroll.ScrollBar:ClearAllPoints()
+		panel.scroll.ScrollBar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -pinned - 16)
+		panel.scroll.ScrollBar:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -6, footer + 16)
+		panel.scroll.ScrollBar:SetShown(overflow)
+		panel.scrollRange = math.max(0, contentHeight - viewport)
+		for _, offset in ipairs(groupOffsets) do
+			if offset.id == anchorID then
+				scroll = offset.y + anchorDelta
+				break
+			end
+		end
+		scroll = clamp(scroll, 0, panel.scrollRange)
+		panel.scroll.ScrollBar:SetMinMaxValues(0, panel.scrollRange)
+		panel.scroll:SetVerticalScroll(scroll)
+		panel.scroll.ScrollBar:SetValue(scroll)
+		if not moving and not resizing then
+			savePosition()
+		end
+		layoutBusy = false
+	end
+	reflow()
 	panel:Show()
 end

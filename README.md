@@ -29,7 +29,7 @@ The Missing Scout
   ✓ Alex: Ready to turn in
 ```
 
-The compact, draggable panel remembers its position and hides when you leave the party. Click a quest heading to collapse or expand its details; choices persist across reloads and logins. Collapsed headings retain a short summary and the **Share** button when available.
+The compact panel remembers its layout across characters and hides when you leave the party. Click a quest heading to collapse or expand its details; choices persist across reloads and logins. Collapsed headings retain a short summary and the **Share** button when available.
 
 ## Install
 
@@ -49,7 +49,7 @@ Install a separate copy in each client if you play both Retail and Forever. The 
 
 Join a party and the panel appears automatically. Quest changes update it as you play. Comparisons cover the whole party, including differences between friends even when you are missing or still working on a quest. Each player's remaining objective appears once when any comparable party member has finished it; ready-to-turn-in and completed quests also reveal unfinished players' remaining progress.
 
-**Try it solo:** use **`/qwf preview`**, or enable **Preview appearance** in the addon's settings, to show sample party data. Try the filters, collapse quest headings, and drag the panel into position. Share buttons are shown but disabled. Click **End preview**, use `/qwf preview` again, or `/qwf preview off` to stop. Preview also ends when you join a group or reload; it never sends sample data. Position and filter changes are saved normally, but sample collapse choices are not.
+**Try it solo:** use **`/qwf preview`**, or enable **Preview appearance** in the addon's settings, to show sample party data. Try the filters, collapse quest headings, and unlock the panel to arrange it. Share buttons are shown but disabled. Click **End preview**, use `/qwf preview` again, or `/qwf preview off` to stop. Preview also ends when you join a group or reload; it never sends sample data. Position and filter changes are saved normally, but sample collapse choices are not.
 
 - **Missing:** a player is missing a quest known to another party member.
 - **Still in progress:** someone else has finished an objective or quest that this player still needs.
@@ -74,7 +74,13 @@ The dropdown also includes **Sort by**:
 
 Equal or unknown activity falls back to title, then quest ID. Activity is tracked during the current login, including quests outside the selected filters and quests currently in sync. Initial snapshots establish a baseline rather than counting as activity; activity history resets on reload. Preview uses fixed sample activity.
 
-Settings, including the sort choice, persist across reloads. Collapsing a quest only hides its details—it still contributes to party status. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists show a count of hidden quests or differences.
+Settings, including the sort choice, persist across reloads. Collapsing a quest only hides its details—it still contributes to party status. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists scroll so every quest difference remains reachable; the heading, status, scope, and connection notices stay pinned.
+
+### Arrange the panel
+
+The panel is locked by default. Uncheck **Lock panel** in **Settings → AddOns → Quest With Friends** to arrange it, using **Preview appearance** while solo if needed. Drag the header to move it and the bottom-right corner to set its width and maximum height. Text and buttons keep their normal size.
+
+While unlocked, the panel shows its full height allowance. Click **Unlocked · Lock** on the panel when finished; it then shrinks to fit content, scrolling when the list exceeds that allowance. A minimum usable height protects pinned notices and quest space; extra notices may temporarily raise a small ceiling without changing your saved preference. Position, dimensions, and the lock preference persist across reloads and characters, with screen-boundary checks after display or UI-scale changes.
 
 Recently completed quests stay available for comparisons during the current login, up to 30 entries. Use **`/qwf`** to request a fresh party comparison. Automatic retries and stalled-transfer recovery keep updates flowing.
 

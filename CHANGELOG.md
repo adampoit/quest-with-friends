@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Resize the panel with a saved width and maximum-height ceiling shared across characters. All quest differences are reachable by scrolling, while the heading, status, scope, and connection notices remain pinned. The panel starts locked; uncheck **Lock panel** in addon settings to move or resize it at its full height allowance, then click **Unlocked · Lock** to restore compact automatic sizing. Saved layouts are validated and kept on screen after display or UI-scale changes.
 - Compare quests across the whole party, including differences between friends when you are missing or still working on a quest. Deduplicate each player's status and objective rows, retain stable objective ordering, and keep Share tied to your own active quest ID.
 - Show remaining objectives for you or a friend when the other player is ready to turn in or has already completed the quest. Keep readiness and completion labels distinct, with status-only fallbacks when progress is unavailable or quest variants cannot be compared.
 

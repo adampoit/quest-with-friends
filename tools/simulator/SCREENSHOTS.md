@@ -79,7 +79,7 @@ Other optional states can be composed before capture. For instance, to collapse 
 
 ```lua
 local found = false
-for _, region in ipairs({ panel:GetRegions() }) do
+for _, region in ipairs({ panel.content:GetRegions() }) do
     if region:GetObjectType() == "FontString"
         and region:GetText() == "The Lost Supplies"
         and region.toggleButton then
@@ -101,4 +101,4 @@ For sort or filter states, use their menu responders or saved preferences before
 - The runner logs the scene, filter, canvas, asset source and renderer output. Docker failures, reported setup errors and missing/empty images fail without replacing the previous screenshot. Temporary capture directories and containers are cleaned up; the log remains.
 - Add scene assertions for the UI state you expect. Capture success alone cannot prove the relevant UI is visible. Open the generated image and check for clipping, incorrect scale, missing assets and unexpected overlays.
 - `--visibility-boost` is for debugging dark surfaces, not color judgments. Label images as **simulator previews**; they do not replace live-client validation.
-- The preview renderer applies a two-UI-unit optical correction to top-aligned FontStrings. `--stock-text-position` disables it and preserves a separately named capture. This is a small-font visual calibration, not native font-metrics parity; see [Text alignment calibration](TEXT_ALIGNMENT.md).
+- The preview renderer applies a two-UI-unit optical correction to top-aligned FontStrings. `--stock-text-position` disables it and preserves a separately named capture. This is a small-font visual calibration, not native font-metrics parity; see [Simulator screenshots](../../DEVELOPING.md#simulator-screenshots) for the calibration scope and comparison flags.

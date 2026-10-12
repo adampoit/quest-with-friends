@@ -35,9 +35,9 @@ The Missing Scout
 
 Click a quest heading to collapse or expand its player details. Collapsed headings retain a compact summary counting distinct affected players and any **Share** button. Collapse choices persist across sessions and do not change comparison status.
 
-When everyone is caught up, the panel shows **Party in sync**. Its draggable position and filter choices persist across sessions.
+When everyone is caught up, the panel shows **Party in sync**. The panel is locked by default. Uncheck **Lock panel** in addon settings to drag its header or resize from the bottom-right corner, then click **Unlocked · Lock** on the panel when finished. Width and a maximum-height ceiling are user-controlled; fonts and controls do not scale. While unlocked, the full height allowance is visible. While locked, the panel shrinks to content and scrolls all quest differences beyond the ceiling, keeping the heading, status, scope and connection notices pinned. Pinned notices can temporarily raise the minimum usable height without changing the saved ceiling. Position, dimensions, lock preference and filters persist account-wide; saved layout is validated and kept on screen after display or UI-scale changes.
 
-While solo, **Preview appearance** in addon settings or `/qwf preview` shows plausible sample differences through the same panel. Filters, heading toggles and dragging work normally; sample sharing is disabled. A clear preview label and **End preview** button distinguish it from live data. Preview is session-only and ends on joining a group or reloading. Sample quests never enter synchronization or saved collapse preferences.
+While solo, **Preview appearance** in addon settings or `/qwf preview` shows plausible sample differences through the same panel. Filters, heading toggles, scrolling and unlocked layout controls work normally; sample sharing is disabled. A clear preview label and **End preview** button distinguish it from live data. Preview is session-only and ends on joining a group or reloading. Sample quests never enter synchronization or saved collapse preferences.
 
 ### Focus the view
 
