@@ -78,9 +78,9 @@ Settings, including the sort choice, persist across reloads. Collapsing a quest 
 
 ### Arrange the panel
 
-The panel is locked by default. Uncheck **Lock panel** in **Settings → AddOns → Quest With Friends** to arrange it, using **Preview appearance** while solo if needed. Drag the header to move it and the bottom-right corner to set its width and maximum height. Text and buttons keep their normal size.
+The panel is locked by default. Click the lock icon beside **View** to unlock it, using **Preview appearance** while solo if needed. **Lock panel** in **Settings → AddOns → Quest With Friends** controls the same preference. Drag the header to move it and the bottom-right corner to set its width and maximum height. Text and buttons keep their normal size.
 
-While unlocked, the panel shows its full height allowance. Click **Unlocked · Lock** on the panel when finished; it then shrinks to fit content, scrolling when the list exceeds that allowance. A minimum usable height protects pinned notices and quest space; extra notices may temporarily raise a small ceiling without changing your saved preference. Position, dimensions, and the lock preference persist across reloads and characters, with screen-boundary checks after display or UI-scale changes.
+While unlocked, the panel shows its full height allowance. Click the open lock icon when finished; it then shrinks to fit content, scrolling when the list exceeds that allowance. A minimum usable height protects pinned notices and quest space; extra notices may temporarily raise a small ceiling without changing your saved preference. Position, dimensions, and the lock preference persist across reloads and characters, with screen-boundary checks after display or UI-scale changes.
 
 Recently completed quests stay available for comparisons during the current login, up to 30 entries. Use **`/qwf`** to request a fresh party comparison. Automatic retries and stalled-transfer recovery keep updates flowing.
 

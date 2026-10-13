@@ -229,6 +229,9 @@ test("solo preview uses the real panel and filters without sending or sharing sa
 		local panel = QuestWithFriendsPanel
 		assertTrue(panel:IsShown())
 		assertEquals("Preview · Sample party data", panel.status:GetText())
+		assertContains(panelTexts(), "Quest With Friends")
+		assertEquals("GameFontHighlightSmall", panel.status:GetFontObject():GetName())
+		assertEquals("LEFT", panel.status:GetJustifyH())
 		assertContains(panelTexts(), "The Lost Supplies")
 		assertContains(panelTexts(), "Alex: Gnolls slain 5/8")
 		assertContains(panelTexts(), "Alex: Ready to turn in")
@@ -260,6 +263,8 @@ test("solo preview uses the real panel and filters without sending or sharing sa
 		A_Admin.SetPartyMember(1, "Julia", 8, 80)
 		assertFalse(setting:GetValue())
 		assertEquals("Party status incomplete", panel.status:GetText())
+		assertEquals("GameFontHighlight", panel.status:GetFontObject():GetName())
+		assertEquals("LEFT", panel.status:GetJustifyH())
 		assertFalse(panel.stopPreview:IsShown())
 	end)
 	SlashCmdList.QUESTWITHFRIENDS("preview off")
@@ -268,6 +273,56 @@ test("solo preview uses the real panel and filters without sending or sharing sa
 	QuestWithFriendsDB.showProfessionQuests = false
 	QuestWithFriendsDB.showClassQuests = false
 	C_ChatInfo.SendAddonMessage, QuestLogPushQuest = originalSend, originalPush
+	if not ok then
+		error(err)
+	end
+end)
+
+test("preview footer stays left while scroll controls align right at different sizes", function()
+	A_Admin.SetPartySize(0)
+	local savedSize, savedLocked = QuestWithFriendsDB.panelSize, QuestWithFriendsDB.panelLocked
+	local ok, err = pcall(function()
+		for _, width in ipairs({ 300, 348, 480 }) do
+			QuestWithFriendsDB.panelSize = { width = width, height = 180 }
+			SlashCmdList.QUESTWITHFRIENDS("preview on")
+			local panel = QuestWithFriendsPanel
+			for _, locked in ipairs({ true, false }) do
+				QuestWithFriends.Panel.setLocked(locked)
+				assertAlmostEquals(14, panel.stopPreview:GetLeft() - panel:GetLeft())
+				assertAlmostEquals(
+					8 + math.max(0, (panel.status:GetStringHeight() - 22) / 2),
+					panel.stopPreview:GetBottom() - panel:GetBottom()
+				)
+				local point, relative, relativePoint, x, y = panel.status:GetPoint()
+				assertEquals("LEFT", point)
+				assertEquals(panel.stopPreview, relative)
+				assertEquals("RIGHT", relativePoint)
+				assertEquals(8, x)
+				assertEquals(0, y)
+				assertTrue(panel.status:GetBottom() >= panel:GetBottom() + 8)
+				assertTrue(panel.status:GetTop() < panel.scroll:GetBottom())
+				if not locked then
+					assertTrue(panel.status:GetRight() < panel.resize:GetLeft())
+				end
+				assertAlmostEquals(10, panel:GetRight() - panel.filter:GetRight())
+				assertAlmostEquals(10, panel:GetTop() - panel.filter:GetTop())
+				assertAlmostEquals(
+					panel.filter:GetTop() - panel.filter:GetHeight() / 2,
+					panel.lock:GetTop() - panel.lock:GetHeight() / 2
+				)
+				local scrollBar = panel.scroll.ScrollBar
+				assertTrue(scrollBar:IsShown())
+				assertAlmostEquals(10, panel:GetRight() - scrollBar.ScrollUpButton:GetRight())
+				assertAlmostEquals(10, panel:GetRight() - scrollBar.ScrollDownButton:GetRight())
+				assertAlmostEquals(panel.scroll:GetTop(), scrollBar.ScrollUpButton:GetTop())
+				assertAlmostEquals(panel.scroll:GetBottom(), scrollBar.ScrollDownButton:GetBottom())
+				assertTrue(panel.stopPreview:GetRight() < panel.resize:GetLeft())
+			end
+		end
+	end)
+	SlashCmdList.QUESTWITHFRIENDS("preview off")
+	QuestWithFriendsDB.panelSize = savedSize
+	QuestWithFriends.Panel.setLocked(savedLocked)
 	if not ok then
 		error(err)
 	end
@@ -285,7 +340,7 @@ end)
 partyTest("matching snapshots show party in sync", function(quests)
 	sendSnapshot(quests)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
-	assertAlmostEquals(78, QuestWithFriendsPanel:GetHeight())
+	assertAlmostEquals(82, QuestWithFriendsPanel:GetHeight())
 	assertEquals("View", QuestWithFriendsPanel.filter:GetText())
 	assertEquals("Current zone · Standard quests", QuestWithFriendsPanel.scope:GetText())
 end)
@@ -461,7 +516,7 @@ partyTest("panel bounds long lists and hides reused rows when back in sync", fun
 	sendSnapshot(quests)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
 	assertEquals(3, #panelTexts())
-	assertAlmostEquals(78, QuestWithFriendsPanel:GetHeight())
+	assertAlmostEquals(82, QuestWithFriendsPanel:GetHeight())
 end)
 
 partyTest("status icons render once per detail and hide when rows are reused", function(quests)
@@ -695,17 +750,20 @@ partyTest("drag-stop saves real frame coordinates relative to UIParent", functio
 	QuestWithFriends.Panel.setLocked(true)
 end)
 
-partyTest("native lock settings expand the ceiling and the panel control locks it again", function(quests)
+partyTest("header lock toggle and native settings stay in sync in both directions", function(quests)
 	sendSnapshot(quests)
 	local panel = QuestWithFriendsPanel
 	local setting = Settings.GetSetting("QuestWithFriendsPanelLocked")
 	assertTrue(setting:GetValue())
 	assertFalse(panel.resize:IsShown())
-	assertFalse(panel.lock:IsShown())
-	setting:SetValue(false)
+	assertTrue(panel.lock:IsShown())
+	assertFalse(panel.hint:IsShown())
+	panel.lock:Click()
+	assertFalse(setting:GetValue())
 	assertFalse(QuestWithFriendsDB.panelLocked)
 	assertAlmostEquals(360, panel:GetHeight())
 	assertTrue(panel.resize:IsShown())
+	assertTrue(panel.hint:IsShown())
 	assertTrue(panel.lock:IsShown())
 	panel.resize:GetScript("OnMouseDown")(panel.resize, "LeftButton")
 	panel:SetSize(420, 240)
@@ -714,8 +772,15 @@ partyTest("native lock settings expand the ceiling and the panel control locks i
 	assertAlmostEquals(240, QuestWithFriendsDB.panelSize.height)
 	panel.lock:Click()
 	assertTrue(setting:GetValue())
-	assertAlmostEquals(78, panel:GetHeight())
+	assertAlmostEquals(82, panel:GetHeight())
 	assertAlmostEquals(420, panel:GetWidth())
 	assertFalse(panel.resize:IsShown())
+	assertTrue(panel.lock:IsShown())
+	setting:SetValue(false)
+	assertFalse(QuestWithFriendsDB.panelLocked)
+	assertAlmostEquals(240, panel:GetHeight())
+	assertTrue(panel.resize:IsShown())
+	panel.lock:Click()
+	assertTrue(setting:GetValue())
 	QuestWithFriendsDB.panelSize = nil
 end)

@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Resize the panel with a saved width and maximum-height ceiling shared across characters. All quest differences are reachable by scrolling, while the heading, status, scope, and connection notices remain pinned. The panel starts locked; uncheck **Lock panel** in addon settings to move or resize it at its full height allowance, then click **Unlocked · Lock** to restore compact automatic sizing. Saved layouts are validated and kept on screen after display or UI-scale changes.
+- Move quest status icons and objective bullets up two UI units to align more closely with their text.
+- Group the sample-data notice beside **End preview** in the pinned footer, leaving the preview header focused on the selected scope.
+- Resize the panel with a saved width and maximum-height ceiling shared across characters. All quest differences are reachable by scrolling, while the heading, status, scope, and connection notices remain pinned. The panel starts locked; use the lock icon beside **View** to move or resize it at its full height allowance, then click it again to restore compact automatic sizing. The icon shows closed/open state with action tooltips and stays in sync with **Lock panel** in addon settings. Saved layouts are validated and kept on screen after display or UI-scale changes.
+- Balance the View dropdown's top and right padding, center the header controls, and align the scroll controls with the same right inset. Move End preview to the bottom-left footer, clear of the resize handle. Give the addon title more emphasis and make the preview notice secondary, keeping the header compact and live status prominent.
 - Compare quests across the whole party, including differences between friends when you are missing or still working on a quest. Deduplicate each player's status and objective rows, retain stable objective ordering, and keep Share tied to your own active quest ID.
 - Show remaining objectives for you or a friend when the other player is ready to turn in or has already completed the quest. Keep readiness and completion labels distinct, with status-only fallbacks when progress is unavailable or quest variants cannot be compared.
 

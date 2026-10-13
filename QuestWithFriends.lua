@@ -270,11 +270,11 @@ local function showPanel(groups, complete, notices)
 			end,
 		},
 		{
-			onLock = function()
+			onLock = function(locked)
 				if panelLockSetting then
-					panelLockSetting:SetValue(true)
+					panelLockSetting:SetValue(locked)
 				else
-					QWF.Panel.setLocked(true)
+					QWF.Panel.setLocked(locked)
 				end
 			end,
 			sortMode = QuestWithFriendsDB.sortMode,
@@ -988,7 +988,7 @@ then
 		category,
 		panelLockSetting,
 		"Uncheck to move and resize the panel. While unlocked, it shows its full maximum height. "
-			.. "Click Unlocked · Lock on the panel when finished. Layout is shared across characters."
+			.. "The lock icon beside View also toggles this setting. Layout is shared across characters."
 	)
 	previewSetting = Settings.RegisterProxySetting(
 		category,

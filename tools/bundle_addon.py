@@ -11,7 +11,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ADDON_NAME = "QuestWithFriends"
 ADDON_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_ASSETS = ("Media/QuestToggle.tga",)
+RUNTIME_ASSETS = ("Media/QuestToggle.tga", "Media/PanelLock.tga")
 
 
 def bundle(root: Path, output: Path | None = None, *, tag: str | None = None) -> Path:

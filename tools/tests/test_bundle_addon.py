@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from tools.bundle_addon import ADDON_ROOT, bundle
+from tools.bundle_addon import ADDON_ROOT, RUNTIME_ASSETS, bundle
+from tools.generate_panel_lock import generate
 
 
 class BundleTests(unittest.TestCase):
@@ -24,9 +25,8 @@ class BundleTests(unittest.TestCase):
 		_ = (self.root / "README.md").write_text("Install under Interface/AddOns.\n")
 		_ = (self.root / "LICENSE").write_text("MIT License\n")
 		(self.root / "Media").mkdir()
-		_ = (self.root / "Media/QuestToggle.tga").write_bytes(
-			(ADDON_ROOT / "Media/QuestToggle.tga").read_bytes()
-		)
+		for asset in RUNTIME_ASSETS:
+			_ = (self.root / asset).write_bytes((ADDON_ROOT / asset).read_bytes())
 
 	def test_only_runtime_files_and_readme_are_bundled(self):
 		for name in (
@@ -53,6 +53,7 @@ class BundleTests(unittest.TestCase):
 					"QuestWithFriends/README.md",
 					"QuestWithFriends/LICENSE",
 					"QuestWithFriends/Media/QuestToggle.tga",
+					"QuestWithFriends/Media/PanelLock.tga",
 				},
 				set(archive.namelist()),
 			)
@@ -86,6 +87,39 @@ class BundleTests(unittest.TestCase):
 			for x in range(32):
 				if x < 4 or x >= 28 or y < 4 or y >= 28:
 					self.assertEqual(0, alpha[y * 32 + x])
+
+	def test_lock_texture_contains_reproducible_distinct_states(self):
+		output = bundle(self.root)
+		with ZipFile(output) as archive:
+			texture = archive.read("QuestWithFriends/Media/PanelLock.tga")
+		self.assertEqual(generate(), texture)
+		self.assertEqual(2, texture[2])
+		self.assertEqual(64, int.from_bytes(texture[12:14], "little"))
+		self.assertEqual(32, int.from_bytes(texture[14:16], "little"))
+		self.assertEqual(32, texture[16])
+		self.assertEqual(0x28, texture[17])
+		self.assertEqual(18 + 64 * 32 * 4, len(texture))
+		alpha = texture[21::4]
+		states = [
+			bytes(alpha[y * 64 + offset + x] for y in range(32) for x in range(32))
+			for offset in (0, 32)
+		]
+		self.assertNotEqual(*states)
+		for state in states:
+			self.assertIn(255, state)
+			self.assertTrue(any(0 < value < 255 for value in state))
+			for y in range(32):
+				for x in range(32):
+					if x < 4 or x >= 28 or y < 4 or y >= 28:
+						self.assertEqual(0, state[y * 32 + x])
+
+	def test_missing_lock_texture_preserves_previous_bundle(self):
+		output = bundle(self.root)
+		previous = output.read_bytes()
+		(self.root / "Media/PanelLock.tga").unlink()
+		with self.assertRaisesRegex(ValueError, "missing"):
+			_ = bundle(self.root)
+		self.assertEqual(previous, output.read_bytes())
 
 	def test_missing_texture_preserves_previous_bundle(self):
 		output = bundle(self.root)

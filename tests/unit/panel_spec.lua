@@ -71,6 +71,8 @@ describe("Quest With Friends panel", function()
 		end
 		function w:SetPoint(point, relativeTo, relativePoint, x, y)
 			self.point = { point, relativePoint, x, y }
+			self.points = self.points or {}
+			self.points[point] = { relativeTo, relativePoint, x, y }
 			if self == panel and relativeTo == UIParent then
 				self.left = point == "TOPRIGHT" and UIParent.width - self.width + x or x
 				self.top = UIParent.top + y
@@ -108,6 +110,10 @@ describe("Quest With Friends panel", function()
 		function w:SetTextColor(...)
 			self.color = { ... }
 		end
+		function w:SetFontObject(fontObject)
+			self.fontObject = fontObject
+			self.justifyH = "CENTER"
+		end
 		function w:SetTexture(texture)
 			self.texture = texture
 		end
@@ -129,7 +135,9 @@ describe("Quest With Friends panel", function()
 				self.OnSizeChanged(self, width, self.height)
 			end
 		end
-		function w:SetJustifyH(...) end
+		function w:SetJustifyH(value)
+			self.justifyH = value
+		end
 		function w:SetJustifyV(...) end
 		function w:SetWordWrap(value)
 			self.wordWrap = value
@@ -149,7 +157,9 @@ describe("Quest With Friends panel", function()
 				self.OnHide(self)
 			end
 		end
-		function w:ClearAllPoints(...) end
+		function w:ClearAllPoints()
+			self.points = {}
+		end
 		function w:SetHeight(height)
 			self.height = height
 			if self.OnSizeChanged then
@@ -208,9 +218,10 @@ describe("Quest With Friends panel", function()
 			end
 			return texture
 		end
-		function w:CreateFontString(_, _, _)
+		function w:CreateFontString(_, _, fontObject)
 			local text = widget()
 			text.parent = self
+			text.fontObject = fontObject
 			if self == panel then
 				panelFontCount = panelFontCount + 1
 			end
@@ -263,6 +274,11 @@ describe("Quest With Friends panel", function()
 				panelFontCount = 0
 			elseif kind == "ScrollFrame" then
 				w.ScrollBar = widget()
+				w.ScrollBar:SetWidth(16)
+				w.ScrollBar.ScrollUpButton = widget()
+				w.ScrollBar.ScrollUpButton:SetSize(18, 16)
+				w.ScrollBar.ScrollDownButton = widget()
+				w.ScrollBar.ScrollDownButton:SetSize(18, 16)
 			elseif kind == "Button" or kind == "DropdownButton" then
 				local layoutButton = parent == panel and #buttons == 1 and not panel.resize
 				if not layoutButton then
@@ -307,7 +323,13 @@ describe("Quest With Friends panel", function()
 		assert.are.equal("WowStyle1DropdownTemplate", panel.filter.template)
 		assert.are.equal("View", panel.filter.text)
 		assert.same({ 92, 24 }, panel.filter.size)
-		assert.same({ "TOPRIGHT", "TOPRIGHT", -10, -7 }, panel.filter.point)
+		assert.same({ "TOPRIGHT", "TOPRIGHT", -10, -10 }, panel.filter.point)
+		assert.same({ panel, "TOPLEFT", 14, -22 }, fontStrings[1].points.LEFT)
+		assert.are.equal(30, panel.header.height)
+		assert.are.equal("Quest With Friends", fontStrings[1].text)
+		assert.are.equal("GameFontNormal", fontStrings[1].fontObject)
+		assert.same({ 0.94, 0.95, 0.97 }, fontStrings[1].color)
+		assert.are.equal("GameFontHighlight", panel.status.fontObject)
 		assert.are.equal("Party in sync", panel.status.text)
 		panel.filter:OpenMenu()
 		local entries = panel.filter.entries
@@ -478,6 +500,7 @@ describe("Quest With Friends panel", function()
 			assert.are.equal(case[4], row.icon.texture)
 			assert.is_true(row.icon.desaturated)
 			assert.is_true(row.icon.shown)
+			assert.are.equal(row.points.TOPLEFT[2] + 2, row.icon.points.TOPLEFT[4])
 			assert.are.equal(292, row.width)
 		end
 		assert.are.equal(1, #textures)
@@ -552,7 +575,7 @@ describe("Quest With Friends panel", function()
 		local row = fontStrings[4]
 		assert.are.equal(242, row.width)
 		assert.is_false(row.wordWrap)
-		assert.are.equal(121, panel.height)
+		assert.are.equal(125, panel.height)
 		row.toggleButton.OnEnter(row.toggleButton)
 		assert.are.equal(data.title, GameTooltip.text)
 		assert.are.equal("Click to collapse", GameTooltip.line)
@@ -587,7 +610,7 @@ describe("Quest With Friends panel", function()
 		panel.scroll.OnMouseWheel(panel.scroll, -1000)
 		assert.are.equal(panel.scrollRange, panel.scroll.scroll)
 		assert.are.equal(panel.content, fontStrings[52]:GetParent())
-		assert.are.equal(220, fontStrings[52].width)
+		assert.are.equal(218, fontStrings[52].width)
 		QuestWithFriends.Panel.show({}, true, true)
 		for index = 2, #buttons do
 			assert.is_false(buttons[index].shown)
@@ -806,6 +829,13 @@ describe("Quest With Friends panel", function()
 			}
 		)
 		assert.are.equal("Preview · Sample party data", panel.status.text)
+		assert.are.equal("GameFontHighlightSmall", panel.status.fontObject)
+		assert.are.equal("LEFT", panel.status.justifyH)
+		assert.same({ 0.72, 0.78, 0.85 }, panel.status.color)
+		assert.same({ panel.stopPreview, "RIGHT", 8, 0 }, panel.status.points.LEFT)
+		assert.is_nil(panel.status.points.TOPLEFT)
+		assert.are.equal(-36, panel.scope.points.TOPLEFT[2])
+		assert.are.equal(-56, panel.scroll.points.TOPLEFT[4])
 		local row = fontStrings[4]
 		assert.is_true(row.shareButton.shown)
 		assert.is_false(row.shareButton.enabled)
@@ -824,27 +854,48 @@ describe("Quest With Friends panel", function()
 
 		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, function() end)
 		assert.are.equal("Party out of sync", panel.status.text)
+		assert.are.equal("GameFontHighlight", panel.status.fontObject)
+		assert.are.equal("LEFT", panel.status.justifyH)
+		assert.same({ 0.98, 0.73, 0.40 }, panel.status.color)
 		assert.is_false(panel.stopPreview.shown)
+		assert.are.equal(-36, panel.status.points.TOPLEFT[2])
+		assert.is_nil(panel.status.points.LEFT)
+		assert.are.equal(-54, panel.scope.points.TOPLEFT[2])
+		assert.are.equal(-74, panel.scroll.points.TOPLEFT[4])
 		assert.is_true(row.shareButton.enabled)
 		assert.is_false(row.collapsed)
 		row.toggleButton.OnClick()
 		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
 	end)
 
+	it("keeps the preview notice in the footer even without an exit callback", function()
+		loadPanel()
+		QuestWithFriends.Panel.show({ group(-1) }, true, true, nil, nil, nil, nil, { preview = true })
+		assert.are.equal("Preview · Sample party data", panel.status.text)
+		assert.same({ panel, "BOTTOMLEFT", 14, 19 }, panel.status.points.LEFT)
+		assert.are.equal(35, panel.scroll.points.BOTTOMRIGHT[4])
+		assert.is_nil(panel.stopPreview)
+	end)
+
 	it("only permits moving and resizing while unlocked and shrinks again when locked", function()
 		loadPanel()
-		assert.are.equal(78, panel.height)
+		assert.are.equal(82, panel.height)
 		assert.is_false(panel.header.mouseEnabled)
-		assert.is_false(panel.lock.shown)
+		assert.is_true(panel.lock.shown)
+		assert.is_false(panel.hint.shown)
+		assert.same({ 0, 0.5, 0, 1 }, panel.lock.icon.texCoord)
 		assert.is_false(panel.resize.shown)
 		panel.header.OnDragStart(panel.header)
 		panel.resize.OnMouseDown(panel.resize, "LeftButton")
 		assert.is_nil(panel.moving)
 		assert.is_nil(panel.sizing)
-		QuestWithFriends.Panel.setLocked(false)
+		panel.lock.OnClick()
+		assert.is_false(QuestWithFriendsDB.panelLocked)
 		assert.are.equal(360, panel.height)
 		assert.is_true(panel.header.mouseEnabled)
 		assert.is_true(panel.lock.shown)
+		assert.is_true(panel.hint.shown)
+		assert.same({ 0.5, 1, 0, 1 }, panel.lock.icon.texCoord)
 		assert.is_true(panel.resize.shown)
 		panel.resize.OnMouseDown(panel.resize, "RightButton")
 		assert.is_nil(panel.sizing)
@@ -856,11 +907,93 @@ describe("Quest With Friends panel", function()
 		assert.are.equal(240, panel.height)
 		panel.lock.OnClick()
 		assert.is_true(QuestWithFriendsDB.panelLocked)
-		assert.are.equal(78, panel.height)
+		assert.are.equal(82, panel.height)
 		assert.are.equal(420, panel.width)
 		assert.is_false(panel.resize.shown)
 		QuestWithFriends.Panel.setLocked(false)
 		assert.are.equal(240, panel.height)
+	end)
+
+	it("aligns the scroll controls with the header and keeps preview exit clear of resizing", function()
+		loadPanel()
+		for _, width in ipairs({ 300, 348, 480 }) do
+			QuestWithFriendsDB.panelSize = { width = width, height = 360 }
+			for _, unlocked in ipairs({ false, true }) do
+				QuestWithFriends.Panel.setLocked(not unlocked)
+				for _, count in ipairs({ 1, 25 }) do
+					local groups = {}
+					for index = 1, count do
+						groups[index] = group(index)
+					end
+					QuestWithFriends.Panel.show(groups, true, true, nil, nil, nil, nil, {
+						preview = true,
+						onStop = function() end,
+					})
+					local noticeHeight = panel.status:GetStringHeight()
+					local footer = math.max(35, noticeHeight + 16)
+					assert.same(
+						{ "BOTTOMLEFT", "BOTTOMLEFT", 14, 8 + math.max(0, (noticeHeight - 22) / 2) },
+						panel.stopPreview.point
+					)
+					assert.are.equal(100, panel.stopPreview.width)
+					assert.same({ panel.stopPreview, "RIGHT", 8, 0 }, panel.status.points.LEFT)
+					assert.are.equal(width - 122 - (unlocked and 30 or 14), panel.status.width)
+					assert.are.equal(panel, panel.status.parent)
+					assert.are.equal(footer, panel.scroll.points.BOTTOMRIGHT[4])
+					assert.are.equal(unlocked, panel.resize.shown)
+					local scrollBar = panel.scroll.ScrollBar
+					local top, bottom = scrollBar.points.TOPRIGHT, scrollBar.points.BOTTOMRIGHT
+					assert.are.equal(-11, top[3])
+					assert.are.equal(-11, bottom[3])
+					assert.are.equal(footer + 16, bottom[4])
+					assert.are.equal(panel.scroll.points.TOPLEFT[4] - 16, top[4])
+					assert.are.equal(count > 1, scrollBar.shown)
+					assert.are.equal(width - (count > 1 and 24 or 0), panel.content.width)
+				end
+			end
+		end
+	end)
+
+	it("updates the lock tooltip and icon when toggled or changed externally", function()
+		loadPanel()
+		assert.same({ 24, 24 }, panel.lock.size)
+		assert.are.equal("Interface\\AddOns\\QuestWithFriends\\Media\\PanelLock", panel.lock.icon.texture)
+		assert.same({ "RIGHT", "LEFT", -4, 0 }, panel.lock.point)
+		panel.lock.OnEnter(panel.lock)
+		assert.are.equal("Unlock to move and resize", GameTooltip.text)
+		assert.is_true(GameTooltip.shown)
+		local lockedColor = panel.lock.icon.color
+		panel.filter:OpenMenu()
+		panel.lock.OnClick()
+		assert.is_false(panel.filter.menuOpen)
+		assert.are.equal("Lock panel", GameTooltip.text)
+		assert.are_not.same(lockedColor, panel.lock.icon.color)
+		QuestWithFriends.Panel.setLocked(true)
+		assert.are.equal("Unlock to move and resize", GameTooltip.text)
+		assert.same(lockedColor, panel.lock.icon.color)
+		panel.lock.OnLeave(panel.lock)
+		assert.is_false(GameTooltip.shown)
+		QuestWithFriends.Panel.setLocked(false)
+		assert.is_false(GameTooltip.shown)
+		panel.lock.OnEnter(panel.lock)
+		panel.lock:Hide()
+		assert.is_false(GameTooltip.shown)
+	end)
+
+	it("passes both lock states through the presentation callback", function()
+		loadPanel()
+		local locks = {}
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, {
+			onLock = function(locked)
+				locks[#locks + 1] = locked
+				QuestWithFriends.Panel.setLocked(locked)
+			end,
+		})
+		panel.lock.OnClick()
+		assert.is_false(QuestWithFriendsDB.panelLocked)
+		panel.lock.OnClick()
+		assert.is_true(QuestWithFriendsDB.panelLocked)
+		assert.same({ false, true }, locks)
 	end)
 
 	it("restores account-wide size and lock preferences after reloading", function()
@@ -875,7 +1008,7 @@ describe("Quest With Friends panel", function()
 		QuestWithFriends.Panel.setLocked(true)
 		loadPanel()
 		assert.are.equal(480, panel.width)
-		assert.are.equal(78, panel.height)
+		assert.are.equal(82, panel.height)
 	end)
 
 	it("reflows wrapped objectives on resize without scaling text or changing sharing", function()
@@ -949,7 +1082,7 @@ describe("Quest With Friends panel", function()
 			QuestWithFriendsDB.panelPosition = { x = 100000, y = -100000 }
 			loadPanel()
 			assert.is_true(panel.width >= 300 and panel.width <= UIParent.width)
-			assert.is_true(panel.height >= 78 and panel.height <= UIParent.height)
+			assert.is_true(panel.height >= 82 and panel.height <= UIParent.height)
 			assert.is_true(QuestWithFriendsDB.panelPosition.x <= UIParent.width - panel.width)
 			assert.is_true(QuestWithFriendsDB.panelPosition.y >= panel.height - UIParent.height)
 		end

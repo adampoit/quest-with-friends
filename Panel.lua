@@ -19,6 +19,11 @@ local MIN_WIDTH = 300
 local MIN_HEIGHT = 150
 local MIN_QUEST_HEIGHT = 60
 local DETAIL_X = 41
+local PANEL_INSET = 14
+local CONTROL_INSET = 10
+local SCROLLBAR_GAP = 6
+local STATUS_Y = 36
+local HEADER_BODY_GAP = 5
 local layoutBusy = false
 local resizing = false
 local moving = false
@@ -127,6 +132,12 @@ local function generateFilterMenu(_, root)
 	end
 end
 
+local function lockTooltip(self)
+	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	GameTooltip:SetText(QuestWithFriendsDB.panelLocked == false and "Lock panel" or "Unlock to move and resize")
+	GameTooltip:Show()
+end
+
 local function createPanel()
 	QuestWithFriendsDB.collapsedQuests = type(QuestWithFriendsDB.collapsedQuests) == "table"
 			and QuestWithFriendsDB.collapsedQuests
@@ -156,7 +167,7 @@ local function createPanel()
 	panel.header = CreateFrame("Frame", nil, panel)
 	panel.header:SetPoint("TOPLEFT", 4, -4)
 	panel.header:SetPoint("TOPRIGHT", -4, -4)
-	panel.header:SetHeight(26)
+	panel.header:SetHeight(30)
 	panel.header:EnableMouse(true)
 	panel.header:RegisterForDrag("LeftButton")
 	panel.header:SetScript("OnDragStart", function()
@@ -186,14 +197,14 @@ local function createPanel()
 		end
 	end)
 
-	local heading = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	heading:SetPoint("TOPLEFT", 14, -12)
-	heading:SetText("QUEST WITH FRIENDS")
-	heading:SetTextColor(0.72, 0.79, 0.88)
+	local heading = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	heading:SetPoint("LEFT", panel, "TOPLEFT", PANEL_INSET, -CONTROL_INSET - 12)
+	heading:SetText("Quest With Friends")
+	heading:SetTextColor(0.94, 0.95, 0.97)
 
 	panel.filter = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
 	panel.filter:SetSize(92, 24)
-	panel.filter:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -7)
+	panel.filter:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -CONTROL_INSET, -CONTROL_INSET)
 	panel.filter:OverrideText("View")
 	panel.filter:SetupMenu(generateFilterMenu)
 	panel:SetScript("OnHide", function(self)
@@ -202,27 +213,46 @@ local function createPanel()
 	end)
 
 	panel.status = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	panel.status:SetPoint("TOPLEFT", 14, -32)
-	panel.status:SetWidth(DEFAULT_WIDTH - 28)
+	panel.status:SetPoint("TOPLEFT", PANEL_INSET, -STATUS_Y)
+	panel.status:SetWidth(DEFAULT_WIDTH - 2 * PANEL_INSET)
 	panel.status:SetJustifyH("LEFT")
 
 	panel.scope = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	panel.scope:SetPoint("TOPLEFT", 14, -50)
-	panel.scope:SetWidth(DEFAULT_WIDTH - 28)
+	panel.scope:SetPoint("TOPLEFT", PANEL_INSET, -STATUS_Y - 18)
+	panel.scope:SetWidth(DEFAULT_WIDTH - 2 * PANEL_INSET)
 	panel.scope:SetJustifyH("LEFT")
 	panel.scope:SetTextColor(0.72, 0.78, 0.85)
 
-	panel.lock = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-	panel.lock:SetSize(110, 22)
-	panel.lock:SetText("Unlocked · Lock")
+	panel.lock = CreateFrame("Button", nil, panel)
+	panel.lock:SetSize(24, 24)
+	panel.lock:SetPoint("RIGHT", panel.filter, "LEFT", -4, 0)
+	panel.lock.icon = panel.lock:CreateTexture(nil, "ARTWORK")
+	panel.lock.icon:SetSize(20, 20)
+	panel.lock.icon:SetPoint("CENTER")
+	panel.lock.icon:SetTexture("Interface\\AddOns\\QuestWithFriends\\Media\\PanelLock")
+	local lockHighlight = panel.lock:CreateTexture(nil, "HIGHLIGHT")
+	lockHighlight:SetAllPoints()
+	lockHighlight:SetColorTexture(1, 1, 1, 0.08)
+	heading:SetPoint("RIGHT", panel.lock, "LEFT", -8, 0)
+	heading:SetJustifyH("LEFT")
+	heading:SetWordWrap(false)
 	panel.lock:RegisterForClicks("LeftButtonUp")
 	panel.lock:SetScript("OnClick", function()
+		panel.filter:CloseMenu()
+		local locked = QuestWithFriendsDB.panelLocked == false
 		if onLock then
-			onLock()
+			onLock(locked)
 		else
-			QWF.Panel.setLocked(true)
+			QWF.Panel.setLocked(locked)
 		end
 	end)
+	panel.lock:SetScript("OnEnter", lockTooltip)
+	panel.lock:SetScript("OnLeave", function(self)
+		if GameTooltip:IsOwned(self) then
+			GameTooltip:Hide()
+		end
+	end)
+	panel.lock:SetScript("OnHide", panel.lock:GetScript("OnLeave"))
 	panel.hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	panel.hint:SetJustifyH("LEFT")
 	panel.hint:SetTextColor(0.72, 0.78, 0.85)
@@ -418,7 +448,7 @@ local function addRow(text, y, kind, questID, group, collapsed, parent, availabl
 			row.icon:SetParent(parent)
 		end
 		row.icon:ClearAllPoints()
-		row.icon:SetPoint("TOPLEFT", parent, "TOPLEFT", DETAIL_X - 18, -y)
+		row.icon:SetPoint("TOPLEFT", parent, "TOPLEFT", DETAIL_X - 18, -y + 2)
 		row.icon:SetTexture(style.icon)
 		row.icon:SetVertexColor(unpack(style.color))
 		row.icon:Show()
@@ -507,9 +537,11 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	collapsedQuests = presentation.collapsedQuests or QuestWithFriendsDB.collapsedQuests
 	panel.scope:SetText(scopeText())
 	panel.filter:GenerateMenu()
+	panel.status:SetFontObject(isPreview and "GameFontHighlightSmall" or "GameFontHighlight")
+	panel.status:SetJustifyH("LEFT")
 	if isPreview then
 		panel.status:SetText("Preview · Sample party data")
-		panel.status:SetTextColor(0.72, 0.79, 0.88)
+		panel.status:SetTextColor(0.72, 0.78, 0.85)
 	elseif #groups == 0 and complete then
 		panel.status:SetText("Party in sync")
 		panel.status:SetTextColor(0.52, 0.87, 0.62)
@@ -530,8 +562,6 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 				end
 			end)
 		end
-		panel.stopPreview:ClearAllPoints()
-		panel.stopPreview:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -28, 8)
 		panel.stopPreview:Show()
 	elseif panel.stopPreview then
 		panel.stopPreview:Hide()
@@ -558,25 +588,49 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		width = clamp(width, math.min(MIN_WIDTH, screenWidth), screenWidth)
 		local ceiling = resizing and panel:GetHeight() or (finite(saved.height) and saved.height or DEFAULT_HEIGHT)
 		panel:SetWidth(width)
-		panel.status:SetWidth(width - 28)
-		panel.scope:SetWidth(width - 28)
-		local scopeY = 32 + math.max(15, panel.status:GetStringHeight()) + 3
+		panel.status:ClearAllPoints()
+		local footer = unlocked and 24 or 8
+		if isPreview then
+			local noticeX = PANEL_INSET + (stopPreview and panel.stopPreview:GetWidth() + 8 or 0)
+			panel.status:SetWidth(math.max(1, width - noticeX - (unlocked and 30 or PANEL_INSET)))
+			local noticeHeight = panel.status:GetStringHeight()
+			local footerCenter = 8 + math.max(22, noticeHeight) / 2
+			footer = math.max(35, noticeHeight + 16)
+			if stopPreview then
+				panel.stopPreview:ClearAllPoints()
+				panel.stopPreview:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", PANEL_INSET, footerCenter - 11)
+				panel.status:SetPoint("LEFT", panel.stopPreview, "RIGHT", 8, 0)
+			else
+				panel.status:SetPoint("LEFT", panel, "BOTTOMLEFT", PANEL_INSET, footerCenter)
+			end
+		else
+			panel.status:SetWidth(width - 2 * PANEL_INSET)
+			panel.status:SetPoint("TOPLEFT", PANEL_INSET, -STATUS_Y)
+		end
+		panel.scope:SetWidth(width - 2 * PANEL_INSET)
+		local scopeY = STATUS_Y + (isPreview and 0 or math.max(15, panel.status:GetStringHeight()) + 3)
 		panel.scope:ClearAllPoints()
-		panel.scope:SetPoint("TOPLEFT", 14, -scopeY)
-		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + 5
-		panel.lock:SetShown(unlocked)
+		panel.scope:SetPoint("TOPLEFT", PANEL_INSET, -scopeY)
+		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + HEADER_BODY_GAP
+		panel.lock:Show()
+		panel.lock.icon:SetTexCoord(unlocked and 0.5 or 0, unlocked and 1 or 0.5, 0, 1)
+		if unlocked then
+			panel.lock.icon:SetVertexColor(0.98, 0.73, 0.40)
+		else
+			panel.lock.icon:SetVertexColor(0.72, 0.79, 0.88)
+		end
+		if GameTooltip:IsShown() and GameTooltip:IsOwned(panel.lock) then
+			lockTooltip(panel.lock)
+		end
 		panel.hint:SetShown(unlocked)
 		panel.resize:SetShown(unlocked)
 		panel.header:EnableMouse(unlocked)
 		if unlocked then
-			panel.lock:ClearAllPoints()
-			panel.lock:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -15, -headerHeight)
 			panel.hint:ClearAllPoints()
 			panel.hint:SetPoint("TOPLEFT", 15, -headerHeight - 4)
-			panel.hint:SetWidth(width - 140)
+			panel.hint:SetWidth(width - 30)
 			headerHeight = headerHeight + 28
 		end
-		local footer = isPreview and stopPreview and 35 or (unlocked and 24 or 8)
 		local function draw(bodyWidth)
 			for _, row in ipairs(rows) do
 				row:Hide()
@@ -633,7 +687,10 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		local height = unlocked and ceiling or math.min(ceiling, pinned + contentHeight + footer)
 		local viewport = math.max(1, height - pinned - footer)
 		local overflow = contentHeight > viewport
-		local gutter = overflow and 22 or 0
+		local scrollBar = panel.scroll.ScrollBar
+		local controlWidth =
+			math.max(scrollBar:GetWidth(), scrollBar.ScrollUpButton:GetWidth(), scrollBar.ScrollDownButton:GetWidth())
+		local gutter = overflow and (controlWidth + SCROLLBAR_GAP) or 0
 		if overflow then
 			-- Only overflowing lists give up text width to the native scrollbar.
 			pinned, contentHeight = draw(width - gutter)
@@ -652,10 +709,18 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.scroll:ClearAllPoints()
 		panel.scroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -pinned)
 		panel.scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -gutter, footer)
-		panel.scroll.ScrollBar:ClearAllPoints()
-		panel.scroll.ScrollBar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -pinned - 16)
-		panel.scroll.ScrollBar:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -6, footer + 16)
-		panel.scroll.ScrollBar:SetShown(overflow)
+		-- Center the wider arrow buttons on the slider while aligning their outer edge.
+		local scrollRight = CONTROL_INSET + (controlWidth - scrollBar:GetWidth()) / 2
+		scrollBar:ClearAllPoints()
+		scrollBar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -scrollRight, -pinned - scrollBar.ScrollUpButton:GetHeight())
+		scrollBar:SetPoint(
+			"BOTTOMRIGHT",
+			panel,
+			"BOTTOMRIGHT",
+			-scrollRight,
+			footer + scrollBar.ScrollDownButton:GetHeight()
+		)
+		scrollBar:SetShown(overflow)
 		panel.scrollRange = math.max(0, contentHeight - viewport)
 		for _, offset in ipairs(groupOffsets) do
 			if offset.id == anchorID then
