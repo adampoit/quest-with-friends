@@ -182,7 +182,7 @@ local function collectQuests()
 			for _, objective in ipairs(raw) do
 				local need = tonumber(objective.numRequired) or 0
 				local have = tonumber(objective.numFulfilled) or (objective.finished and need or 0)
-				local text = (objective.text or ""):gsub(":%s*%d+/%d+%s*$", "")
+				local text = (objective.text or ""):gsub("^%s*%d+/%d+%s+", ""):gsub(":%s*%d+/%d+%s*$", "")
 				objectives[#objectives + 1] = { text = text, have = have, need = need }
 			end
 			quests[id] = {

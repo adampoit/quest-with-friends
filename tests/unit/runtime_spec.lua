@@ -226,6 +226,38 @@ describe("Quest With Friends party sync", function()
 		end
 	end
 
+	for _, case in ipairs({
+		{ text = "0/1 Felix's Chest", expected = "Felix's Chest" },
+		{ text = "  0/1   Felix's Chest", expected = "Felix's Chest" },
+		{ text = "Felix's Chest: 0/1", expected = "Felix's Chest" },
+		{ text = "Felix's Chest: 0/1  ", expected = "Felix's Chest" },
+		{ text = "Felix's Chest", expected = "Felix's Chest" },
+		{ text = "7 chests opened", expected = "7 chests opened" },
+		{ text = "Reach 1/2 health", expected = "Reach 1/2 health" },
+	}) do
+		it("normalizes objective counts for display and sync: " .. case.text, function()
+			entries = { { questID = 42, title = "Errand" } }
+			objectives[42] = { { text = case.text, numFulfilled = 3, numRequired = 8 } }
+			questMaps[42] = 101
+			fire("PLAYER_ENTERING_WORLD")
+			flush()
+
+			local parts = {}
+			for _, message in ipairs(messages) do
+				local payload = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$")
+				if payload then
+					parts[#parts + 1] = payload
+				end
+			end
+			local expected = { text = case.expected, have = 3, need = 8 }
+			local snapshot = QuestWithFriends.Core.decode(table.concat(parts))
+			assert.same(expected, snapshot[42].objectives[1])
+
+			receiveSnapshot({ [42] = { title = "Errand", state = "completed", mapID = 101, objectives = {} } }, 1)
+			assert.same(expected, view.groups[1].differences[1].objective)
+		end)
+	end
+
 	it("renders remote-to-remote progress and missing players from received snapshots", function()
 		_G.UnitExists = function(unit)
 			return unit == "party1" or unit == "party2"
