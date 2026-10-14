@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.7
+
 - Move quest status icons and objective bullets up two UI units to align more closely with their text.
 - Group the sample-data notice beside **End preview** in the pinned footer, leaving the preview header focused on the selected scope.
 - Resize the panel with a saved width and maximum-height ceiling shared across characters. All quest differences are reachable by scrolling, while the heading, status, scope, and connection notices remain pinned. The panel starts locked; use the lock icon beside **View** to move or resize it at its full height allowance, then click it again to restore compact automatic sizing. The icon shows closed/open state with action tooltips and stays in sync with **Lock panel** in addon settings. Saved layouts are validated and kept on screen after display or UI-scale changes.
