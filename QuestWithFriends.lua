@@ -42,6 +42,10 @@ local refresh
 local queueRequest
 local prefixRegistered
 local previewMode = false
+local screenshotMode = false
+local screenshotScenario = "differences"
+local screenshotToolsShown = false
+local screenshotLayout
 local previewCollapsed = {}
 local previewSetting
 local panelLockSetting
@@ -283,8 +287,10 @@ local function showPanel(groups, complete, notices)
 				render()
 			end,
 			preview = previewMode,
+			screenshot = screenshotMode,
+			scenario = screenshotMode and screenshotScenario or nil,
 			collapsedQuests = previewMode and previewCollapsed or nil,
-			onStop = previewMode and function()
+			onStop = previewMode and not screenshotMode and function()
 				if previewSetting then
 					previewSetting:SetValue(false)
 				else
@@ -301,6 +307,8 @@ render = function()
 	end
 	if previewMode and IsInGroup() then
 		previewMode = false
+		screenshotMode = false
+		screenshotScenario = "differences"
 		previewCollapsed = {}
 		if previewSetting then
 			previewSetting:SetValue(false)
@@ -311,7 +319,8 @@ render = function()
 			QWF.Preview.compare(
 				QuestWithFriendsDB.zoneFilter,
 				QuestWithFriendsDB.showProfessionQuests,
-				QuestWithFriendsDB.showClassQuests
+				QuestWithFriendsDB.showClassQuests,
+				screenshotMode and screenshotScenario or nil
 			)
 		)
 		return
@@ -388,16 +397,31 @@ render = function()
 	showPanel(groups, complete, notices)
 end
 
-setPreviewMode = function(enabled)
+setPreviewMode = function(enabled, screenshot, scenario)
 	if enabled and IsInGroup() then
 		print("Quest With Friends: Leave your group to preview sample quest data.")
-		return
+		return false
 	end
+	local wasScreenshot = screenshotMode
 	previewMode = enabled == true
-	if not previewMode then
+	screenshotMode = previewMode and screenshot == true
+	screenshotScenario = screenshotMode and (scenario or screenshotScenario) or "differences"
+	if not previewMode or wasScreenshot ~= screenshotMode or scenario then
 		previewCollapsed = {}
+		if screenshotMode and screenshotScenario == "collapsed" then
+			for _, group in ipairs(QWF.Preview.compare(false, true, true)) do
+				previewCollapsed[group.questID] = true
+			end
+		end
 	end
 	render()
+	return true
+end
+
+local function showScreenshotScenario(scenario)
+	if setPreviewMode(true, true, scenario) and SettingsPanel then
+		SettingsPanel:Hide()
+	end
 end
 
 local function send(message)
@@ -953,7 +977,7 @@ if
 	and Settings.RegisterProxySetting
 	and Settings.CreateCheckbox
 then
-	local category = Settings.RegisterVerticalLayoutCategory("Quest With Friends")
+	local category, layout = Settings.RegisterVerticalLayoutCategory("Quest With Friends")
 	debugSetting = Settings.RegisterProxySetting(
 		category,
 		"QuestWithFriendsDebugMode",
@@ -999,7 +1023,9 @@ then
 		function()
 			return previewMode
 		end,
-		setPreviewMode
+		function(enabled)
+			setPreviewMode(enabled)
+		end
 	)
 	Settings.CreateCheckbox(
 		category,
@@ -1007,6 +1033,49 @@ then
 		"Show sample party quest data while solo. Try filters, collapse quest headings, or unlock the panel to move and resize it. "
 			.. "Sample quests cannot be shared. Preview ends when you join a group or reload."
 	)
+	if layout and CreateSettingsListSectionHeaderInitializer and CreateSettingsButtonInitializer then
+		screenshotLayout = layout
+		local function addScreenshotControl(initializer)
+			initializer:AddShownPredicate(function()
+				return screenshotToolsShown
+			end)
+			layout:AddInitializer(initializer)
+		end
+		addScreenshotControl(
+			CreateSettingsListSectionHeaderInitializer(
+				"Screenshot tools",
+				"Solo-only sample scenes for promotional screenshots, without preview labels. "
+					.. "Sharing is inert; samples are never synchronized. Scenes end when you join a group or reload."
+			)
+		)
+		for _, option in ipairs({
+			{ "differences", "Quest differences", "Missing quests, multiple objectives, readiness and completion." },
+			{
+				"collapsed",
+				"Collapsed headings",
+				"Compact affected-player summaries with all sample headings collapsed.",
+			},
+			{ "synced", "Party in sync", "A caught-up party with no quest differences." },
+		}) do
+			local scenario, name, tooltip = unpack(option)
+			local initializer = CreateSettingsButtonInitializer(name, "Show scenario", function()
+				showScreenshotScenario(scenario)
+			end, tooltip .. " Shows sample data and closes settings. Solo only.", false)
+			initializer:AddModifyPredicate(function()
+				return not IsInGroup()
+			end)
+			addScreenshotControl(initializer)
+		end
+		local stop = CreateSettingsButtonInitializer("Screenshot view", "End screenshot view", function()
+			if screenshotMode then
+				setPreviewMode(false)
+			end
+		end, "Return to real party data, or hide the panel while solo.", false)
+		stop:AddModifyPredicate(function()
+			return screenshotMode
+		end)
+		addScreenshotControl(stop)
+	end
 	Settings.RegisterAddOnCategory(category)
 end
 
@@ -1018,9 +1087,29 @@ end
 SLASH_QUESTWITHFRIENDS1 = "/qwf"
 SlashCmdList.QUESTWITHFRIENDS = function(command)
 	command = (command or ""):lower():match("^%s*(.-)%s*$")
+	if command == "screenshot" or command == "screenshot on" or command == "screenshot off" then
+		if not screenshotLayout then
+			print("Quest With Friends: Screenshot tools require the addon settings panel.")
+			return
+		end
+		screenshotToolsShown = command == "screenshot on" or (command == "screenshot" and not screenshotToolsShown)
+		if SettingsPanel and SettingsPanel:IsShown() and SettingsPanel:GetCurrentLayout() == screenshotLayout then
+			if SettingsInbound and SettingsInbound.RepairDisplay then
+				SettingsInbound.RepairDisplay()
+			else
+				SettingsPanel:GetSettingsList():RepairDisplay(screenshotLayout)
+			end
+		end
+		print(
+			"Quest With Friends: Screenshot tools "
+				.. (screenshotToolsShown and "shown" or "hidden")
+				.. " in addon settings."
+		)
+		return
+	end
 	if command == "preview" or command == "preview on" or command == "preview off" then
 		local enabled = command == "preview on" or (command == "preview" and not previewMode)
-		if previewSetting then
+		if previewSetting and not screenshotMode then
 			previewSetting:SetValue(enabled)
 		else
 			setPreviewMode(enabled)

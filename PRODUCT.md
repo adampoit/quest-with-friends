@@ -39,6 +39,8 @@ When everyone is caught up, the panel shows **Party in sync**. The panel is lock
 
 While solo, **Preview appearance** in addon settings or `/qwf preview` shows plausible sample differences through the same panel. Filters, heading toggles, scrolling and unlocked layout controls work normally; sample sharing is disabled. The brighter, title-case addon heading leads the panel; live synchronization status remains prominent in the header, while preview shows the scope directly beneath the heading. The muted **Preview · Sample party data** notice sits beside **End preview** in the pinned bottom-left footer, distinguishing samples from live data and keeping both clear of the bottom-right resize handle. The notice wraps at narrow widths, with footer space reserved for all its lines. Preview is session-only and ends on joining a group or reloading. Sample quests never enter synchronization or saved collapse preferences.
 
+A hidden **Screenshot tools** section in addon settings offers quest-difference, collapsed-heading and party-in-sync scenarios. A maintainer slash command reveals or hides the section without changing the active view. Scenario buttons close settings and reuse isolated samples with the live header/status and no preview footer. Samples demonstrate multiple remaining objectives and progress alongside ready/completed friends. Share buttons look live but remain inert. Tool visibility and sample views are session-only; sample views end on joining a group or reloading, and normal appearance preview remains clearly labeled. See [DEVELOPING.md](DEVELOPING.md) for promotional capture instructions.
+
 ### Focus the view
 
 A **View** dropdown groups visibility and ordering controls. Its **Show** section contains three independent choices:

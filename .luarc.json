@@ -25,6 +25,8 @@
     "IsInGroup",
     "IsInRaid",
     "SlashCmdList",
+    "SettingsInbound",
+    "ScrollBoxConstants",
     "UIParent",
     "UnitExists",
     "UnitFullName",

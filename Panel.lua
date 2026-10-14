@@ -9,6 +9,8 @@ local questFilters = {}
 local shareQuest
 local redraw
 local isPreview = false
+local isScreenshot = false
+local previewScenario
 local collapsedQuests
 local stopPreview
 local sortMode = "smart"
@@ -419,7 +421,7 @@ local function addRow(text, y, kind, questID, group, collapsed, parent, availabl
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:SetText("Share quest")
 			GameTooltip:AddLine(
-				isPreview and "Sample quest only. Sharing is disabled in preview."
+				isPreview and not isScreenshot and "Sample quest only. Sharing is disabled in preview."
 					or "Offers this quest to the party. WoW determines who can accept it.",
 				1,
 				1,
@@ -463,7 +465,8 @@ local function addRow(text, y, kind, questID, group, collapsed, parent, availabl
 		end
 		row.shareButton:ClearAllPoints()
 		row.shareButton:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -15, -y)
-		row.shareButton:SetEnabled(not isPreview)
+		-- Screenshot controls look live, but the click handler still rejects sample quests.
+		row.shareButton:SetEnabled(not isPreview or isScreenshot)
 		row.shareButton:Show()
 	end
 	row:SetPoint("TOPLEFT", x, -y - (group and 3 or 0))
@@ -516,7 +519,12 @@ end
 function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters, presentation)
 	presentation = presentation or {}
 	local previewChanged = isPreview ~= (presentation.preview == true)
+		or isScreenshot ~= (presentation.screenshot == true)
+		or previewScenario ~= presentation.scenario
+	previewScenario = presentation.scenario
 	isPreview = presentation.preview == true
+	isScreenshot = isPreview and presentation.screenshot == true
+	local showPreviewNotice = isPreview and not isScreenshot
 	stopPreview = presentation.onStop
 	sortMode = presentation.sortMode or "smart"
 	selectSort = presentation.onSort
@@ -537,9 +545,9 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	collapsedQuests = presentation.collapsedQuests or QuestWithFriendsDB.collapsedQuests
 	panel.scope:SetText(scopeText())
 	panel.filter:GenerateMenu()
-	panel.status:SetFontObject(isPreview and "GameFontHighlightSmall" or "GameFontHighlight")
+	panel.status:SetFontObject(showPreviewNotice and "GameFontHighlightSmall" or "GameFontHighlight")
 	panel.status:SetJustifyH("LEFT")
-	if isPreview then
+	if showPreviewNotice then
 		panel.status:SetText("Preview · Sample party data")
 		panel.status:SetTextColor(0.72, 0.78, 0.85)
 	elseif #groups == 0 and complete then
@@ -550,7 +558,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.status:SetTextColor(0.98, 0.73, 0.40)
 	end
 	onLock = presentation.onLock
-	if isPreview and stopPreview then
+	if showPreviewNotice and stopPreview then
 		if not panel.stopPreview then
 			panel.stopPreview = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 			panel.stopPreview:SetSize(100, 22)
@@ -590,7 +598,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel:SetWidth(width)
 		panel.status:ClearAllPoints()
 		local footer = unlocked and 24 or 8
-		if isPreview then
+		if showPreviewNotice then
 			local noticeX = PANEL_INSET + (stopPreview and panel.stopPreview:GetWidth() + 8 or 0)
 			panel.status:SetWidth(math.max(1, width - noticeX - (unlocked and 30 or PANEL_INSET)))
 			local noticeHeight = panel.status:GetStringHeight()
@@ -608,7 +616,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 			panel.status:SetPoint("TOPLEFT", PANEL_INSET, -STATUS_Y)
 		end
 		panel.scope:SetWidth(width - 2 * PANEL_INSET)
-		local scopeY = STATUS_Y + (isPreview and 0 or math.max(15, panel.status:GetStringHeight()) + 3)
+		local scopeY = STATUS_Y + (showPreviewNotice and 0 or math.max(15, panel.status:GetStringHeight()) + 3)
 		panel.scope:ClearAllPoints()
 		panel.scope:SetPoint("TOPLEFT", PANEL_INSET, -scopeY)
 		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + HEADER_BODY_GAP

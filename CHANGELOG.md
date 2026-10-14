@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add hidden screenshot tools in addon settings with buttons for quest differences, collapsed headings and a synchronized party. Scenario views use the live panel appearance for promotional captures; normal preview remains labeled, and samples are never shared or synchronized.
+- Improve sample quests with multiple grouped objectives and remaining progress alongside ready-to-turn-in and completed party members.
+
 ## 0.1.7
 
 - Move quest status icons and objective bullets up two UI units to align more closely with their text.

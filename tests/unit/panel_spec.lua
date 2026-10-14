@@ -868,6 +868,62 @@ describe("Quest With Friends panel", function()
 		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
 	end)
 
+	it("makes screenshot samples look live without allowing sharing or saving sample collapse choices", function()
+		loadPanel()
+		local shared, stopped = false, false
+		local collapsed = {}
+		local presentation = {
+			preview = true,
+			collapsedQuests = collapsed,
+			onStop = function()
+				stopped = true
+			end,
+		}
+		local function show(groups, complete)
+			QuestWithFriends.Panel.show(groups, complete, true, nil, function()
+				shared = true
+			end, nil, nil, presentation)
+		end
+		show({ group(-1) }, true)
+		assert.is_true(panel.stopPreview.shown)
+		panel.scroll:SetVerticalScroll(20)
+		presentation.screenshot = true
+		show({ group(-1) }, true)
+		assert.are.equal(0, panel.scroll:GetVerticalScroll())
+		assert.are.equal("Party out of sync", panel.status.text)
+		assert.are.equal("GameFontHighlight", panel.status.fontObject)
+		assert.same({ 0.98, 0.73, 0.40 }, panel.status.color)
+		assert.are.equal(-36, panel.status.points.TOPLEFT[2])
+		assert.is_nil(panel.status.points.LEFT)
+		assert.are.equal(-54, panel.scope.points.TOPLEFT[2])
+		assert.are.equal(-74, panel.scroll.points.TOPLEFT[4])
+		assert.are.equal(8, panel.scroll.points.BOTTOMRIGHT[4])
+		assert.is_false(panel.stopPreview.shown)
+		assert.is_false(stopped)
+		local row = fontStrings[4]
+		assert.is_true(row.shareButton.shown)
+		assert.is_true(row.shareButton.enabled)
+		row.shareButton.OnClick()
+		assert.is_false(shared)
+		row.shareButton.OnEnter(row.shareButton)
+		assert.are.equal("Offers this quest to the party. WoW determines who can accept it.", GameTooltip.line)
+		row.toggleButton.OnClick()
+		assert.is_true(collapsed[-1])
+		assert.same({}, QuestWithFriendsDB.collapsedQuests)
+		panel.scroll:SetVerticalScroll(20)
+		presentation.scenario = "synced"
+		show({}, true)
+		assert.are.equal(0, panel.scroll:GetVerticalScroll())
+		assert.are.equal("Party in sync", panel.status.text)
+		show({}, false)
+		assert.are.equal("Party status incomplete", panel.status.text)
+		presentation.screenshot = false
+		show({ group(-1) }, true)
+		assert.are.equal("Preview · Sample party data", panel.status.text)
+		assert.is_true(panel.stopPreview.shown)
+		assert.is_false(row.shareButton.enabled)
+	end)
+
 	it("keeps the preview notice in the footer even without an exit callback", function()
 		loadPanel()
 		QuestWithFriends.Panel.show({ group(-1) }, true, true, nil, nil, nil, nil, { preview = true })

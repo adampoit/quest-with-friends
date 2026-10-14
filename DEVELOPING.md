@@ -34,7 +34,21 @@ The first build downloads dependencies and compiles Rust, requiring several minu
 
 When upgrading the simulator, update the source revision, runtime image digest, and versioned image tags in the build script, workflows, and these instructions together. The interface override loads our TOC in the simulator.
 
-`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, scrolling and row reuse, persistent quest-heading toggles, collapsed summaries, sharing, locked/unlocked layout controls, saved panel dimensions and position, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
+`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), hidden screenshot-tool visibility and native scenario buttons, party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, scrolling and row reuse, persistent quest-heading toggles, collapsed summaries, sharing, locked/unlocked layout controls, saved panel dimensions and position, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
+
+## In-game promotional screenshots
+
+The maintainer-only `/qwf screenshot` command reveals or hides the **Screenshot tools** section in **Settings → AddOns → Quest With Friends**. `/qwf screenshot on` and `/qwf screenshot off` explicitly show or hide the section; they do not start or stop a sample view, open settings, or change normal settings. The tools start hidden on each reload, and the command is intentionally absent from player-facing help.
+
+While solo, choose **Show scenario** beside:
+
+- **Quest differences:** missing quests, grouped multiple objectives, and remaining progress alongside ready/completed friends.
+- **Collapsed headings:** the same differences with compact affected-player summaries.
+- **Party in sync:** a genuinely synchronized sample party with no differences under any filter.
+
+Choosing a scenario closes settings and uses the live panel appearance: normal synchronization status, no sample-data notice or **End preview** button, and normal-looking **Share** buttons. Compose it with the usual filters and layout tools, then lock the panel before capturing. Scenario selection resets only the temporary sample collapse choices, not saved layout or filters.
+
+**End screenshot view** in the tools section or `/qwf preview off` ends the sample view. `/qwf preview on` returns to the labeled appearance preview. Sharing remains inert, samples never enter synchronization or saved collapse choices, and the sample view ends on joining a party or raid or reloading.
 
 ## Simulator screenshots
 

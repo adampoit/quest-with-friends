@@ -2,8 +2,16 @@ describe("Quest With Friends party sync", function()
 	local eventHandler, timers, messages, view, objectives, entries, party, currentMap, questMaps, pushed, pushable
 	local originalBuildInfo, originalConstants, originalTradeSkillUI, originalClassMale, originalClassFemale
 	local tags, questTypes
-	local originalSettings
+	local originalSettings, originalSettingsPanel, originalSettingsInbound, originalHeaderInitializer, originalButtonInitializer
+	local captureSettings
 	before_each(function()
+		originalSettingsPanel = _G.SettingsPanel
+		originalSettingsInbound = _G.SettingsInbound
+		_G.SettingsInbound = nil
+		originalHeaderInitializer = _G.CreateSettingsListSectionHeaderInitializer
+		originalButtonInitializer = _G.CreateSettingsButtonInitializer
+		_G.SettingsPanel, _G.CreateSettingsListSectionHeaderInitializer, _G.CreateSettingsButtonInitializer =
+			nil, nil, nil
 		originalSettings = _G.Settings
 		_G.Settings = nil
 		originalBuildInfo = _G.GetBuildInfo
@@ -169,6 +177,10 @@ describe("Quest With Friends party sync", function()
 
 	after_each(function()
 		_G.Settings = originalSettings
+		_G.SettingsPanel = originalSettingsPanel
+		_G.SettingsInbound = originalSettingsInbound
+		_G.CreateSettingsListSectionHeaderInitializer = originalHeaderInitializer
+		_G.CreateSettingsButtonInitializer = originalButtonInitializer
 		_G.GetBuildInfo = originalBuildInfo
 		_G.Constants = originalConstants
 		_G.C_TradeSkillUI = originalTradeSkillUI
@@ -511,7 +523,7 @@ describe("Quest With Friends party sync", function()
 					reasons[difference.reason] = true
 				end
 			end
-			assert.same({ missing = true, objective = true, active = true, ready = true, completed = true }, reasons)
+			assert.same({ missing = true, objective = true, ready = true, completed = true }, reasons)
 			view.toggle()
 			assert.are.equal(5, #view.groups)
 			view.filters.toggleProfessions()
@@ -535,6 +547,117 @@ describe("Quest With Friends party sync", function()
 			assert.is_true(view.hidden)
 		end)
 	end
+
+	for _, game in ipairs({ "retail", "forever" }) do
+		it("renders screenshot scenarios safely on " .. game, function()
+			QuestWithFriends.QuestEquivalencesGame = game
+			party = false
+			local settings = captureSettings()
+			assert(loadfile("QuestWithFriends.lua"))()
+			fire("PLAYER_ENTERING_WORLD")
+			SlashCmdList.QUESTWITHFRIENDS(" SCREENSHOT ON ")
+			assert.is_true(view.hidden)
+			settings.shown = true
+			settings.buttons["Quest differences"].click()
+			assert.is_false(settings.shown)
+			assert.is_true(view.presentation.preview)
+			assert.is_true(view.presentation.screenshot)
+			assert.is_nil(view.presentation.onStop)
+			assert.is_falsy(view.share)
+			assert.are.equal(4, #view.groups)
+			view.toggle()
+			view.filters.toggleProfessions()
+			view.filters.toggleClasses()
+			assert.are.equal(7, #view.groups)
+			settings.buttons["Collapsed headings"].click()
+			assert.are.equal("collapsed", view.presentation.scenario)
+			for _, group in ipairs(view.groups) do
+				assert.is_true(view.presentation.collapsedQuests[group.questID])
+			end
+			settings.buttons["Party in sync"].click()
+			assert.are.equal("synced", view.presentation.scenario)
+			assert.same({}, view.groups)
+			assert.is_true(view.complete)
+			view.toggle()
+			fire("QUEST_LOG_UPDATE")
+			SlashCmdList.QUESTWITHFRIENDS("")
+			assert.same({}, view.groups)
+			flush()
+			assert.same({}, messages)
+			assert.same({}, pushed)
+			settings.buttons["Quest differences"].click()
+			assert.same({}, view.presentation.collapsedQuests)
+			settings.buttons["Screenshot view"].click()
+			assert.is_true(view.hidden)
+			assert.is_false(settings.buttons["Screenshot view"]:EvaluateModifyPredicates())
+		end)
+	end
+
+	it("ends screenshot mode on joining a party and never sends samples", function()
+		party = false
+		local settings = captureSettings()
+		assert(loadfile("QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		settings.buttons["Quest differences"].click()
+		entries = { { questID = 42, title = "Actual errand" } }
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_false(view.presentation.preview)
+		assert.is_false(view.presentation.screenshot)
+		flush()
+		local snapshots = 0
+		for _, message in ipairs(messages) do
+			local payload = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$")
+			if payload then
+				snapshots = snapshots + 1
+				assert.same(
+					{ [42] = { title = "Actual errand", state = "active", objectives = {} } },
+					QuestWithFriends.Core.decode(payload)
+				)
+			end
+		end
+		assert.is_true(snapshots > 0)
+		settings.shown = true
+		for _, name in ipairs({ "Quest differences", "Collapsed headings", "Party in sync" }) do
+			assert.is_false(settings.buttons[name]:EvaluateModifyPredicates())
+			settings.buttons[name].click()
+			assert.is_false(view.presentation.screenshot)
+			assert.is_true(settings.shown)
+		end
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_true(view.hidden)
+	end)
+
+	it("ends screenshot mode on joining a raid or reloading", function()
+		party = false
+		local settings = captureSettings()
+		assert(loadfile("QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		settings.buttons["Quest differences"].click()
+		party = true
+		_G.IsInRaid = function()
+			return true
+		end
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_true(view.hidden)
+		settings.buttons["Party in sync"].click()
+		assert.is_true(view.hidden)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.is_true(view.hidden)
+		settings.buttons["Collapsed headings"].click()
+		assert.is_true(view.presentation.collapsedQuests[-1])
+		assert(loadfile("QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		assert.is_true(view.hidden)
+		assert.is_nil(QuestWithFriendsDB.screenshotMode)
+		assert.is_false(settings.header:ShouldShow())
+		settings.buttons["Quest differences"].click()
+		assert.same({}, view.presentation.collapsedQuests)
+		flush()
+		assert.same({}, messages)
+	end)
 
 	it("ends preview on joining a party and sends only the real quest log", function()
 		party = false
@@ -837,13 +960,75 @@ describe("Quest With Friends party sync", function()
 		assert.same({ visible = 0, hiddenOrInternal = 1 }, findLog(records, "Quest log scanned").data)
 	end)
 
-	local function captureSettings()
-		local captured = { settings = {} }
+	captureSettings = function()
+		local captured = { settings = {}, buttons = {}, initializers = {}, repairs = 0, hides = 0 }
+		captured.layout = {
+			AddInitializer = function(_, initializer)
+				captured.initializers[#captured.initializers + 1] = initializer
+			end,
+		}
+		local function initializer(name, tooltip)
+			local result = { name = name, tooltip = tooltip, shownPredicates = {}, modifyPredicates = {} }
+			function result:AddShownPredicate(predicate)
+				self.shownPredicates[#self.shownPredicates + 1] = predicate
+			end
+			function result:AddModifyPredicate(predicate)
+				self.modifyPredicates[#self.modifyPredicates + 1] = predicate
+			end
+			function result:ShouldShow()
+				for _, predicate in ipairs(self.shownPredicates) do
+					if not predicate() then
+						return false
+					end
+				end
+				return true
+			end
+			function result:EvaluateModifyPredicates()
+				for _, predicate in ipairs(self.modifyPredicates) do
+					if not predicate() then
+						return false
+					end
+				end
+				return true
+			end
+			return result
+		end
+		_G.CreateSettingsListSectionHeaderInitializer = function(name, tooltip)
+			captured.header = initializer(name, tooltip)
+			return captured.header
+		end
+		_G.CreateSettingsButtonInitializer = function(name, text, click, tooltip, searchTags)
+			assert.is_false(searchTags)
+			local button = initializer(name, tooltip)
+			button.text, button.click = text, click
+			captured.buttons[name] = button
+			return button
+		end
+		_G.SettingsPanel = {
+			IsShown = function()
+				return captured.shown == true
+			end,
+			Hide = function()
+				captured.shown = false
+				captured.hides = captured.hides + 1
+			end,
+			GetCurrentLayout = function()
+				return captured.currentLayout or captured.layout
+			end,
+			GetSettingsList = function()
+				return {
+					RepairDisplay = function(_, layout)
+						assert.are.equal(captured.layout, layout)
+						captured.repairs = captured.repairs + 1
+					end,
+				}
+			end,
+		}
 		_G.Settings = {
 			VarType = { Boolean = "boolean" },
 			RegisterVerticalLayoutCategory = function(name)
 				captured.category = { name = name }
-				return captured.category
+				return captured.category, captured.layout
 			end,
 			RegisterProxySetting = function(category, variable, varType, name, default, getter, setter)
 				assert.are.equal(captured.category, category)
@@ -1019,6 +1204,82 @@ describe("Quest With Friends party sync", function()
 		assert.is_false(view.presentation.preview)
 		preview.setting:SetValue(true)
 		assert.is_false(preview.setting:GetValue())
+	end)
+
+	it("reveals only the screenshot tools section without starting or stopping a sample view", function()
+		party = false
+		local settings = captureSettings()
+		assert(loadfile("QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		assert.are.equal(5, #settings.initializers)
+		for _, initializer in ipairs(settings.initializers) do
+			assert.is_false(initializer:ShouldShow())
+		end
+		local inboundRepairs = 0
+		_G.SettingsInbound = {
+			RepairDisplay = function()
+				inboundRepairs = inboundRepairs + 1
+				settings.repairs = settings.repairs + 1
+			end,
+		}
+		settings.shown = true
+		SlashCmdList.QUESTWITHFRIENDS("screenshot")
+		assert.are.equal(1, inboundRepairs)
+		assert.is_true(view.hidden)
+		assert.are.equal(1, settings.repairs)
+		for _, initializer in ipairs(settings.initializers) do
+			assert.is_true(initializer:ShouldShow())
+		end
+		settings.buttons["Quest differences"].click()
+		SlashCmdList.QUESTWITHFRIENDS("screenshot off")
+		assert.is_false(settings.header:ShouldShow())
+		assert.is_true(view.presentation.screenshot)
+		SlashCmdList.QUESTWITHFRIENDS("screenshot on")
+		assert.is_true(settings.header:ShouldShow())
+		assert.are.equal(1, settings.repairs)
+		settings.currentLayout = {}
+		settings.shown = true
+		SlashCmdList.QUESTWITHFRIENDS("screenshot")
+		assert.are.equal(1, settings.repairs)
+		assert.is_true(settings.shown)
+		_G.SettingsInbound = nil
+		settings.currentLayout = nil
+		SlashCmdList.QUESTWITHFRIENDS("screenshot on")
+		assert.are.equal(2, settings.repairs)
+	end)
+
+	it("keeps the normal appearance preview usable alongside screenshot scenarios", function()
+		party = false
+		local settings = captureSettings()
+		assert(loadfile("QuestWithFriends.lua"))()
+		local preview = settings.settings.QuestWithFriendsPreviewMode.setting
+		settings.buttons["Quest differences"].click()
+		assert.is_true(preview:GetValue())
+		assert.is_true(view.presentation.screenshot)
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.is_false(view.presentation.screenshot)
+		assert.is_function(view.presentation.onStop)
+		settings.buttons["Party in sync"].click()
+		preview:SetValue(false)
+		assert.is_true(view.hidden)
+		preview:SetValue(true)
+		assert.are.equal(4, #view.groups)
+		assert.is_false(view.presentation.screenshot)
+		assert.is_function(view.presentation.onStop)
+	end)
+
+	it("leaves normal preview intact when screenshot settings APIs are unavailable", function()
+		party = false
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		SlashCmdList.QUESTWITHFRIENDS("screenshot")
+		assert.is_false(view.presentation.screenshot)
+		assert.is_function(view.presentation.onStop)
+		local settings = captureSettings()
+		_G.CreateSettingsButtonInitializer = nil
+		assert(loadfile("QuestWithFriends.lua"))()
+		assert.same({}, settings.initializers)
+		SlashCmdList.QUESTWITHFRIENDS("screenshot on")
+		assert.is_true(settings.registered)
 	end)
 
 	it("saves settings without AddonKit and applies them when it becomes available after reload", function()
