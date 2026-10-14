@@ -5,7 +5,14 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from tools.bundle_addon import ADDON_ROOT, RUNTIME_ASSETS, bundle
+from tools.bundle_addon import (
+	ADDON_ROOT,
+	DEV_FILES,
+	RUNTIME_ASSETS,
+	bundle,
+	development_toc,
+	write_development_toc,
+)
 from tools.generate_panel_lock import generate
 
 
@@ -60,6 +67,84 @@ class BundleTests(unittest.TestCase):
 			self.assertEqual(b"-- runtime\n", archive.read("QuestWithFriends/Core.lua"))
 			self.assertEqual(b"MIT License\n", archive.read("QuestWithFriends/LICENSE"))
 		_ = bundle(self.root)
+
+	def test_release_excludes_development_files_and_generated_toc(self):
+		for name in (*DEV_FILES, "QuestWithFriendsDev.toc"):
+			_ = (self.root / name).write_text("-- dev only\n")
+		with ZipFile(bundle(self.root)) as archive:
+			for name in (*DEV_FILES, "QuestWithFriendsDev.toc"):
+				self.assertNotIn(f"QuestWithFriends/{name}", archive.namelist())
+
+	def test_release_rejects_development_files_in_toc(self):
+		for name in DEV_FILES:
+			with self.subTest(name=name):
+				_ = (self.root / "QuestWithFriends.toc").write_text(
+					f"## Version: 0.1.0\nCore.lua\n{name}\n"
+				)
+				with self.assertRaisesRegex(ValueError, "Development-only"):
+					_ = bundle(self.root)
+
+	def test_development_manifest_tracks_release_metadata_and_load_order(self):
+		toc = (ADDON_ROOT / "QuestWithFriends.toc").read_text()
+		dev = development_toc(toc)
+		self.assertEqual(toc.splitlines()[0], dev.splitlines()[0])
+		self.assertIn("## Title: Quest With Friends (Dev)", dev)
+		self.assertIn("## SavedVariables: QuestWithFriendsDevDB", dev)
+		self.assertIn("## OptionalDeps: AddonKit, QuestWithFriends", dev)
+		self.assertNotIn("X-Wago-ID", dev)
+		files = [line for line in dev.splitlines() if line.endswith(".lua")]
+		self.assertEqual("Bootstrap.lua", files[0])
+		self.assertLess(
+			files.index("Development.lua"), files.index("QuestWithFriends.lua")
+		)
+		self.assertEqual("InGameTests.lua", files[-1])
+
+	def test_development_bundle_uses_a_separate_installation(self):
+		with tempfile.TemporaryDirectory() as temp:
+			output = bundle(ADDON_ROOT, Path(temp) / "dev.zip", development=True)
+			with ZipFile(output) as archive:
+				self.assertIsNone(archive.testzip())
+				self.assertTrue(
+					all(
+						name.startswith("QuestWithFriendsDev/")
+						for name in archive.namelist()
+					)
+				)
+				for name in DEV_FILES:
+					self.assertIn(f"QuestWithFriendsDev/{name}", archive.namelist())
+				toc = archive.read(
+					"QuestWithFriendsDev/QuestWithFriendsDev.toc"
+				).decode()
+				self.assertEqual(
+					development_toc((ADDON_ROOT / "QuestWithFriends.toc").read_text()),
+					toc,
+				)
+				self.assertNotIn(
+					"QuestWithFriendsDev/QuestWithFriends.toc", archive.namelist()
+				)
+
+	def test_development_bundle_rejects_release_tags(self):
+		with self.assertRaisesRegex(ValueError, "Release tags"):
+			_ = bundle(self.root, development=True, tag="v0.1.0")
+
+	def test_live_development_manifest_matches_packaged_manifest(self):
+		output = write_development_toc(self.root)
+		self.assertEqual("QuestWithFriendsDev.toc", output.name)
+		self.assertEqual(
+			development_toc((self.root / "QuestWithFriends.toc").read_text()),
+			output.read_text(),
+		)
+
+	def test_cannot_overwrite_source_toc(self):
+		for development in (False, True):
+			for name in DEV_FILES:
+				_ = (self.root / name).write_text("-- dev only\n")
+			with self.assertRaisesRegex(ValueError, "overwrite"):
+				_ = bundle(
+					self.root,
+					self.root / "QuestWithFriends.toc",
+					development=development,
+				)
 
 	def test_missing_file_preserves_previous_bundle(self):
 		output = bundle(self.root)

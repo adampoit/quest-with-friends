@@ -238,7 +238,11 @@ def validate_reviews(catalog: Catalog, reviews: object) -> list[GroupReview]:
 
 def render_lua(catalog: Catalog, groups: list[GroupReview]) -> str:
 	lines = [
-		"local QWF = QuestWithFriends or {}",
+		"local _, QWF = ...",
+		"QWF = QWF or QuestWithFriends or {}",
+		"if QWF.disabled then",
+		"\treturn",
+		"end",
 		"QuestWithFriends = QWF",
 		"",
 		"-- Generated from local source and explicit reviews; do not edit groups by hand.",
@@ -306,7 +310,11 @@ def reviewed_categories(catalog: Catalog, review: object) -> list[int]:
 def render_categories(catalog: Catalog, ids: list[int]) -> str:
 	return "\n".join(
 		[
-			"local QWF = QuestWithFriends",
+			"local _, QWF = ...",
+			"QWF = QWF or QuestWithFriends",
+			"if QWF.disabled then",
+			"\treturn",
+			"end",
 			"",
 			f"-- Reviewed Forever QuestieDB Camping category; revision {catalog.revision}",
 			f"-- Snapshot SHA256: {catalog.sha256}",

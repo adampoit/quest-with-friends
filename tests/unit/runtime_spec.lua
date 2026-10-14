@@ -40,7 +40,8 @@ describe("Quest With Friends party sync", function()
 		rawset(_G, "GetBuildInfo", function()
 			return "12.1.0", "69933", "", 120100
 		end)
-		QuestWithFriends = nil
+		_G.QuestWithFriends = nil
+		assert(loadfile("Bootstrap.lua"))()
 		assert(loadfile("QuestEquivalences.lua"))()
 		assert(loadfile("tests/fixtures/quest_equivalences.lua"))()
 		assert(loadfile("Client.lua"))()
@@ -485,7 +486,7 @@ describe("Quest With Friends party sync", function()
 				sender = "Florace Bastille"
 			end
 			local mockPanel = QuestWithFriends.Panel
-			QuestWithFriends = nil
+			_G.QuestWithFriends = nil
 			for line in io.lines("QuestWithFriends.toc") do
 				if line:match("%.lua$") then
 					assert(loadfile(line))()
@@ -617,6 +618,8 @@ describe("Quest With Friends party sync", function()
 		it("renders screenshot scenarios safely on " .. game, function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			party = false
+			QuestWithFriends.isDevelopment = true
+			assert(loadfile("Development.lua"))()
 			local settings = captureSettings()
 			assert(loadfile("QuestWithFriends.lua"))()
 			fire("PLAYER_ENTERING_WORLD")
@@ -660,6 +663,8 @@ describe("Quest With Friends party sync", function()
 
 	it("ends screenshot mode on joining a party and never sends samples", function()
 		party = false
+		QuestWithFriends.isDevelopment = true
+		assert(loadfile("Development.lua"))()
 		local settings = captureSettings()
 		assert(loadfile("QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
@@ -696,6 +701,8 @@ describe("Quest With Friends party sync", function()
 
 	it("ends screenshot mode on joining a raid or reloading", function()
 		party = false
+		QuestWithFriends.isDevelopment = true
+		assert(loadfile("Development.lua"))()
 		local settings = captureSettings()
 		assert(loadfile("QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
@@ -1134,6 +1141,93 @@ describe("Quest With Friends party sync", function()
 		return captured
 	end
 
+	it("keeps development settings, diagnostics and metadata separate while using the release protocol", function()
+		local releaseDB, mockPanel = QuestWithFriendsDB, QuestWithFriends.Panel
+		local settings = captureSettings()
+		local logs, metadata = {}, {}
+		_G.AddonKit = {
+			Test = { tests = {}, assert = {} },
+			RegisterAddon = function(name)
+				assert.are.equal("QuestWithFriendsDev", name)
+			end,
+			SetLogLevel = function(name, level)
+				assert.are.equal("QuestWithFriendsDev", name)
+				logs.level = level
+			end,
+			Log = function(name, _, _, message, data)
+				assert.are.equal("QuestWithFriendsDev", name)
+				logs[message] = data
+			end,
+		}
+		_G.C_AddOns = {
+			GetAddOnMetadata = function(name, field)
+				metadata = { name, field }
+				return "0.1.7-dev"
+			end,
+		}
+		_G.QuestWithFriends, _G.QuestWithFriendsDevDB = nil, nil
+		local namespace = {}
+		for _, file in ipairs({
+			"Bootstrap.lua",
+			"QuestEquivalences.lua",
+			"Client.lua",
+			"QuestCategories.lua",
+			"Core.lua",
+			"Preview.lua",
+			"Development.lua",
+			"QuestWithFriends.lua",
+		}) do
+			assert(loadfile(file))("QuestWithFriendsDev", namespace)
+		end
+		namespace.Panel = mockPanel
+		assert(loadfile("InGameTests.lua"))("QuestWithFriendsDev", namespace)
+		assert.is_function(AddonKit.Test.tests.QuestWithFriends_ProtocolRoundTrip)
+		assert.are.equal("Quest With Friends (Dev)", settings.category.name)
+		assert.is_not_nil(settings.buttons["Quest differences"])
+		local saved = { debugMode = true, sortMode = "title", zoneFilter = false }
+		_G.QuestWithFriendsDevDB = saved
+		fire("ADDON_LOADED", "QuestWithFriends")
+		assert.are_not.equal(saved, namespace.db)
+		fire("ADDON_LOADED", "QuestWithFriendsDev")
+		assert.are.equal(saved, namespace.db)
+		assert.are.equal("DEBUG", logs.level)
+		assert.is_true(settings.settings.QuestWithFriendsDevDebugMode.setting:GetValue())
+		assert.is_nil(settings.settings.QuestWithFriendsDebugMode)
+		SlashCmdList.QUESTWITHFRIENDS("debug off")
+		assert.is_false(saved.debugMode)
+		assert.are.equal(releaseDB, QuestWithFriendsDB)
+		assert.are.equal("smart", releaseDB.sortMode)
+		entries = { { questID = 42, title = "Errand" } }
+		pushable[42] = true
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.are.equal("1.0:H", messages[1])
+		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
+		assert.is_true(view.complete)
+		view.share(42)
+		assert.same({ "QuestWithFriendsDev", "Version" }, metadata)
+		assert.same({ 1 }, pushed)
+		fire("ADDON_ACTION_BLOCKED", "QuestWithFriendsDev", "QuestLogPushQuest")
+		assert.is_not_nil(logs["Quest sharing blocked"])
+		_G.QuestWithFriendsDevDB = nil
+	end)
+
+	it("has no screenshot controls or in-game test registrations in the release", function()
+		local settings = captureSettings()
+		_G.AddonKit = { Test = { tests = {}, assert = {} } }
+		assert(loadfile("Development.lua"))()
+		assert(loadfile("InGameTests.lua"))()
+		assert(loadfile("QuestWithFriends.lua"))()
+		assert.is_nil(QuestWithFriends.Development)
+		assert.same({}, AddonKit.Test.tests)
+		assert.same({}, settings.initializers)
+		assert.same({}, settings.buttons)
+		party = false
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.is_true(view.presentation.preview)
+		assert.is_false(view.presentation.screenshot)
+	end)
+
 	it("registers an account-wide lock setting and routes the panel lock action through it", function()
 		local settings = captureSettings()
 		local locks = {}
@@ -1273,6 +1367,8 @@ describe("Quest With Friends party sync", function()
 
 	it("reveals only the screenshot tools section without starting or stopping a sample view", function()
 		party = false
+		QuestWithFriends.isDevelopment = true
+		assert(loadfile("Development.lua"))()
 		local settings = captureSettings()
 		assert(loadfile("QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
@@ -1315,6 +1411,8 @@ describe("Quest With Friends party sync", function()
 
 	it("keeps the normal appearance preview usable alongside screenshot scenarios", function()
 		party = false
+		QuestWithFriends.isDevelopment = true
+		assert(loadfile("Development.lua"))()
 		local settings = captureSettings()
 		assert(loadfile("QuestWithFriends.lua"))()
 		local preview = settings.settings.QuestWithFriendsPreviewMode.setting
@@ -1335,6 +1433,8 @@ describe("Quest With Friends party sync", function()
 
 	it("leaves normal preview intact when screenshot settings APIs are unavailable", function()
 		party = false
+		QuestWithFriends.isDevelopment = true
+		assert(loadfile("Development.lua"))()
 		SlashCmdList.QUESTWITHFRIENDS("preview on")
 		SlashCmdList.QUESTWITHFRIENDS("screenshot")
 		assert.is_false(view.presentation.screenshot)

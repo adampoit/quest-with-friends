@@ -1,3 +1,5 @@
+local QuestWithFriendsDB = QuestWithFriends.db
+
 test("TOC loads the addon and registers its slash command", function()
 	assertType("table", QuestWithFriends.Core)
 	assertType("function", QuestWithFriends.Panel.show)
@@ -10,7 +12,7 @@ test("TOC loads the addon and registers its slash command", function()
 end)
 
 test("native debug setting shares the persistent slash-command preference", function()
-	local setting = Settings.GetSetting("QuestWithFriendsDebugMode")
+	local setting = Settings.GetSetting(QuestWithFriends.name .. "DebugMode")
 	assertNotNil(setting)
 	assertEquals("Debug mode", setting:GetName())
 	assertFalse(setting:GetValue())
@@ -18,7 +20,7 @@ test("native debug setting shares the persistent slash-command preference", func
 	local levels = {}
 	AddonKit = {
 		SetLogLevel = function(name, level)
-			assertEquals("QuestWithFriends", name)
+			assertEquals(QuestWithFriends.name, name)
 			levels[#levels + 1] = level
 		end,
 	}
@@ -229,14 +231,14 @@ test("solo preview uses the real panel and filters without sending or sharing sa
 		local panel = QuestWithFriendsPanel
 		assertTrue(panel:IsShown())
 		assertEquals("Preview · Sample party data", panel.status:GetText())
-		assertContains(panelTexts(), "Quest With Friends")
+		assertContains(panelTexts(), QuestWithFriends.title)
 		assertEquals("GameFontHighlightSmall", panel.status:GetFontObject():GetName())
 		assertEquals("LEFT", panel.status:GetJustifyH())
 		assertContains(panelTexts(), "The Lost Supplies")
 		assertContains(panelTexts(), "Alex: Gnolls slain 5/8")
 		assertContains(panelTexts(), "Alex: Ready to turn in")
 		assertContains(panelTexts(), "You: Completed")
-		local setting = Settings.GetSetting("QuestWithFriendsPreviewMode")
+		local setting = Settings.GetSetting(QuestWithFriends.name .. "PreviewMode")
 		assertTrue(setting:GetValue())
 		local foundShare = false
 		for _, child in ipairs({ panel.content:GetChildren() }) do
@@ -280,7 +282,7 @@ end)
 
 local function screenshotSettings()
 	for _, category in ipairs(SettingsPanel:GetAllCategories()) do
-		if category:GetName() == "Quest With Friends" then
+		if category:GetName() == QuestWithFriends.title then
 			return category, SettingsPanel:GetLayout(category)
 		end
 	end
@@ -311,100 +313,110 @@ local function chooseScreenshotScenario(name)
 	control.Button:Click()
 end
 
-test("screenshot slash command reveals only its settings section", function()
-	A_Admin.SetPartySize(0)
-	local category = screenshotSettings()
-	SettingsPanel:OpenToCategory(category:GetID())
-	local header = screenshotControl("Screenshot tools")
-	assertFalse(header:ShouldShow())
-	local provider = SettingsPanel:GetSettingsList().ScrollBox:GetDataProvider()
-	assertEquals(3, provider:GetSize())
-	SlashCmdList.QUESTWITHFRIENDS("screenshot")
-	assertTrue(header:ShouldShow())
-	assertEquals(8, provider:GetSize())
-	assertFalse(QuestWithFriendsPanel:IsShown())
-	SlashCmdList.QUESTWITHFRIENDS("screenshot")
-	assertFalse(header:ShouldShow())
-	assertEquals(3, provider:GetSize())
-	assertTrue(SettingsPanel:IsShown())
-	SettingsPanel:Hide()
-end)
-
-test("screenshot scenarios look live while sample sharing stays inert", function()
-	A_Admin.SetPartySize(0)
-	QuestWithFriendsDB.zoneFilter = true
-	QuestWithFriendsDB.showProfessionQuests = false
-	QuestWithFriendsDB.showClassQuests = false
-	local originalSend, originalPush = C_ChatInfo.SendAddonMessage, QuestLogPushQuest
-	local sends, shares = 0, 0
-	C_ChatInfo.SendAddonMessage = function()
-		sends = sends + 1
-	end
-	QuestLogPushQuest = function()
-		shares = shares + 1
-	end
-	local ok, err = pcall(function()
-		SlashCmdList.QUESTWITHFRIENDS("screenshot on")
-		chooseScreenshotScenario("Quest differences")
-		assertFalse(SettingsPanel:IsShown())
-		local panel = QuestWithFriendsPanel
-		assertTrue(panel:IsShown())
-		assertEquals("Party out of sync", panel.status:GetText())
-		assertEquals("GameFontHighlight", panel.status:GetFontObject():GetName())
-		assertFalse(panel.stopPreview:IsShown())
-		assertContains(panelTexts(), "Alex: Gnolls slain 5/8")
-		assertContains(panelTexts(), "Alex: Gnoll battle plans 1/3")
-		assertContains(panelTexts(), "You: Scouts rescued 0/1")
-		assertContains(panelTexts(), "Alex: Bridge timbers collected 4/6")
-		local foundShare = false
-		for _, child in ipairs({ panel.content:GetChildren() }) do
-			if child:GetObjectType() == "Button" and child:GetText() == "Share" and child:IsShown() then
-				foundShare = true
-				assertTrue(child:IsEnabled())
-				child:Click()
-			end
-		end
-		assertTrue(foundShare)
-		chooseFilter("Current zone only")
-		assertContains(panelTexts(), "Delivery to the Next Town")
-		assertEquals(0, sends)
-		assertEquals(0, shares)
-		SlashCmdList.QUESTWITHFRIENDS("preview on")
-		assertEquals("Preview · Sample party data", panel.status:GetText())
-		assertTrue(panel.stopPreview:IsShown())
-		chooseScreenshotScenario("Collapsed headings")
-		assertFalse(panel.stopPreview:IsShown())
-		local summaries = {}
-		for _, child in ipairs({ panel.content:GetChildren() }) do
-			if child.summary and child.summary:IsShown() then
-				summaries[#summaries + 1] = child.summary:GetText()
-			end
-		end
-		assertContains(summaries, "2 missing")
-		assertContains(summaries, "1 needs progress")
-		chooseScreenshotScenario("Party in sync")
-		assertEquals("Party in sync", panel.status:GetText())
-		chooseFilter("Current zone only")
-		assertEquals("Party in sync", panel.status:GetText())
-		chooseScreenshotScenario("Screenshot view")
-		assertFalse(panel:IsShown())
-		chooseScreenshotScenario("Quest differences")
-		assertTrue(panel:IsShown())
-		A_Admin.SetPartySize(1)
-		A_Admin.SetPartyMember(1, "Julia", 8, 80)
-		assertEquals("Party status incomplete", panel.status:GetText())
-		assertFalse(Settings.GetSetting("QuestWithFriendsPreviewMode"):GetValue())
+if QuestWithFriends.isDevelopment then
+	test("screenshot slash command reveals only its settings section", function()
+		A_Admin.SetPartySize(0)
+		local category = screenshotSettings()
+		SettingsPanel:OpenToCategory(category:GetID())
+		local header = screenshotControl("Screenshot tools")
+		assertFalse(header:ShouldShow())
+		local provider = SettingsPanel:GetSettingsList().ScrollBox:GetDataProvider()
+		assertEquals(3, provider:GetSize())
+		SlashCmdList.QUESTWITHFRIENDS("screenshot")
+		assertTrue(header:ShouldShow())
+		assertEquals(8, provider:GetSize())
+		assertFalse(QuestWithFriendsPanel:IsShown())
+		SlashCmdList.QUESTWITHFRIENDS("screenshot")
+		assertFalse(header:ShouldShow())
+		assertEquals(3, provider:GetSize())
+		assertTrue(SettingsPanel:IsShown())
+		SettingsPanel:Hide()
 	end)
-	SlashCmdList.QUESTWITHFRIENDS("preview off")
-	SlashCmdList.QUESTWITHFRIENDS("screenshot off")
-	SettingsPanel:Hide()
-	A_Admin.SetPartySize(0)
-	QuestWithFriendsDB.zoneFilter = true
-	C_ChatInfo.SendAddonMessage, QuestLogPushQuest = originalSend, originalPush
-	if not ok then
-		error(err)
-	end
-end)
+
+	test("screenshot scenarios look live while sample sharing stays inert", function()
+		A_Admin.SetPartySize(0)
+		QuestWithFriendsDB.zoneFilter = true
+		QuestWithFriendsDB.showProfessionQuests = false
+		QuestWithFriendsDB.showClassQuests = false
+		local originalSend, originalPush = C_ChatInfo.SendAddonMessage, QuestLogPushQuest
+		local sends, shares = 0, 0
+		C_ChatInfo.SendAddonMessage = function()
+			sends = sends + 1
+		end
+		QuestLogPushQuest = function()
+			shares = shares + 1
+		end
+		local ok, err = pcall(function()
+			SlashCmdList.QUESTWITHFRIENDS("screenshot on")
+			chooseScreenshotScenario("Quest differences")
+			assertFalse(SettingsPanel:IsShown())
+			local panel = QuestWithFriendsPanel
+			assertTrue(panel:IsShown())
+			assertEquals("Party out of sync", panel.status:GetText())
+			assertEquals("Quest With Friends", panel.heading:GetText())
+			assertEquals("GameFontHighlight", panel.status:GetFontObject():GetName())
+			assertFalse(panel.stopPreview:IsShown())
+			assertContains(panelTexts(), "Alex: Gnolls slain 5/8")
+			assertContains(panelTexts(), "Alex: Gnoll battle plans 1/3")
+			assertContains(panelTexts(), "You: Scouts rescued 0/1")
+			assertContains(panelTexts(), "Alex: Bridge timbers collected 4/6")
+			local foundShare = false
+			for _, child in ipairs({ panel.content:GetChildren() }) do
+				if child:GetObjectType() == "Button" and child:GetText() == "Share" and child:IsShown() then
+					foundShare = true
+					assertTrue(child:IsEnabled())
+					child:Click()
+				end
+			end
+			assertTrue(foundShare)
+			chooseFilter("Current zone only")
+			assertContains(panelTexts(), "Delivery to the Next Town")
+			assertEquals(0, sends)
+			assertEquals(0, shares)
+			SlashCmdList.QUESTWITHFRIENDS("preview on")
+			assertEquals("Preview · Sample party data", panel.status:GetText())
+			assertEquals(QuestWithFriends.title, panel.heading:GetText())
+			assertTrue(panel.stopPreview:IsShown())
+			chooseScreenshotScenario("Collapsed headings")
+			assertFalse(panel.stopPreview:IsShown())
+			local summaries = {}
+			for _, child in ipairs({ panel.content:GetChildren() }) do
+				if child.summary and child.summary:IsShown() then
+					summaries[#summaries + 1] = child.summary:GetText()
+				end
+			end
+			assertContains(summaries, "2 missing")
+			assertContains(summaries, "1 needs progress")
+			chooseScreenshotScenario("Party in sync")
+			assertEquals("Party in sync", panel.status:GetText())
+			chooseFilter("Current zone only")
+			assertEquals("Party in sync", panel.status:GetText())
+			chooseScreenshotScenario("Screenshot view")
+			assertFalse(panel:IsShown())
+			chooseScreenshotScenario("Quest differences")
+			assertTrue(panel:IsShown())
+			A_Admin.SetPartySize(1)
+			A_Admin.SetPartyMember(1, "Julia", 8, 80)
+			assertEquals("Party status incomplete", panel.status:GetText())
+			assertFalse(Settings.GetSetting(QuestWithFriends.name .. "PreviewMode"):GetValue())
+		end)
+		SlashCmdList.QUESTWITHFRIENDS("preview off")
+		SlashCmdList.QUESTWITHFRIENDS("screenshot off")
+		SettingsPanel:Hide()
+		A_Admin.SetPartySize(0)
+		QuestWithFriendsDB.zoneFilter = true
+		C_ChatInfo.SendAddonMessage, QuestLogPushQuest = originalSend, originalPush
+		if not ok then
+			error(err)
+		end
+	end)
+else
+	test("release settings omit screenshot tools", function()
+		local _, layout = screenshotSettings()
+		assertEquals(3, #layout:GetInitializers())
+		assertEquals(nil, QuestWithFriends.Development)
+	end)
+end
 
 test("preview footer stays left while scroll controls align right at different sizes", function()
 	A_Admin.SetPartySize(0)
@@ -881,7 +893,7 @@ end)
 partyTest("header lock toggle and native settings stay in sync in both directions", function(quests)
 	sendSnapshot(quests)
 	local panel = QuestWithFriendsPanel
-	local setting = Settings.GetSetting("QuestWithFriendsPanelLocked")
+	local setting = Settings.GetSetting(QuestWithFriends.name .. "PanelLocked")
 	assertTrue(setting:GetValue())
 	assertFalse(panel.resize:IsShown())
 	assertTrue(panel.lock:IsShown())

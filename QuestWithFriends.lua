@@ -1,4 +1,9 @@
-local QWF = QuestWithFriends
+local _, QWF = ...
+QWF = QWF or QuestWithFriends
+if QWF.disabled then
+	return
+end
+local addonName = QWF.name or "QuestWithFriends"
 local Core = QWF.Core
 local isForever = QWF.QuestEquivalencesGame == "forever"
 local surnameSeparator = Constants
@@ -47,8 +52,6 @@ local prefixRegistered
 local previewMode = false
 local screenshotMode = false
 local screenshotScenario = "differences"
-local screenshotToolsShown = false
-local screenshotLayout
 local previewCollapsed = {}
 local previewSetting
 local panelLockSetting
@@ -56,18 +59,20 @@ local render
 local setPreviewMode
 local frame = CreateFrame("Frame")
 local function initializeSettings()
-	QuestWithFriendsDB = type(QuestWithFriendsDB) == "table" and QuestWithFriendsDB or {}
-	QuestWithFriendsDB.debugMode = QuestWithFriendsDB.debugMode == true
-	QuestWithFriendsDB.panelLocked = QuestWithFriendsDB.panelLocked ~= false
-	if QuestWithFriendsDB.sortMode ~= "title" then
-		QuestWithFriendsDB.sortMode = "smart"
+	local savedVariables = QWF.savedVariables or "QuestWithFriendsDB"
+	QWF.db = type(_G[savedVariables]) == "table" and _G[savedVariables] or {}
+	_G[savedVariables] = QWF.db
+	QWF.db.debugMode = QWF.db.debugMode == true
+	QWF.db.panelLocked = QWF.db.panelLocked ~= false
+	if QWF.db.sortMode ~= "title" then
+		QWF.db.sortMode = "smart"
 	end
-	if QuestWithFriendsDB.zoneFilter == nil then
-		QuestWithFriendsDB.zoneFilter = true
+	if QWF.db.zoneFilter == nil then
+		QWF.db.zoneFilter = true
 	end
 	for _, setting in ipairs({ "showProfessionQuests", "showClassQuests" }) do
-		if QuestWithFriendsDB[setting] == nil then
-			QuestWithFriendsDB[setting] = QuestWithFriendsDB.showPersonalQuests == true
+		if QWF.db[setting] == nil then
+			QWF.db[setting] = QWF.db.showPersonalQuests == true
 		end
 	end
 end
@@ -75,13 +80,13 @@ initializeSettings()
 
 local function applyDebugMode()
 	if AddonKit and AddonKit.SetLogLevel then
-		AddonKit.SetLogLevel("QuestWithFriends", QuestWithFriendsDB.debugMode and "DEBUG" or "INFO")
+		AddonKit.SetLogLevel(addonName, QWF.db.debugMode and "DEBUG" or "INFO")
 	end
 end
 
 local function log(level, category, message, data)
 	if AddonKit and AddonKit.Log then
-		AddonKit.Log("QuestWithFriends", level, category, message, data)
+		AddonKit.Log(addonName, level, category, message, data)
 	end
 end
 
@@ -256,7 +261,7 @@ local function shareContext()
 		context.clientVersion, context.clientBuild, context.buildDate, context.interfaceVersion = GetBuildInfo()
 	end
 	if C_AddOns and C_AddOns.GetAddOnMetadata then
-		context.addonVersion = C_AddOns.GetAddOnMetadata("QuestWithFriends", "Version")
+		context.addonVersion = C_AddOns.GetAddOnMetadata(addonName, "Version")
 	end
 	if issecurevariable then
 		context.apiSecure, context.apiTaintSource = issecurevariable("QuestLogPushQuest")
@@ -275,15 +280,12 @@ local function recordShareAttempt(id, index)
 	log("INFO", "share", "Quest sharing attempted", attempt)
 end
 
-local function recordShareBlocked(event, addonName, functionName)
-	if
-		addonName ~= "QuestWithFriends"
-		or (functionName ~= "QuestLogPushQuest" and functionName ~= "QuestLogPushQuest()")
-	then
+local function recordShareBlocked(event, blockedAddon, functionName)
+	if blockedAddon ~= addonName or (functionName ~= "QuestLogPushQuest" and functionName ~= "QuestLogPushQuest()") then
 		return
 	end
 	local context = shareContext()
-	local data = { event = event, addon = addonName, protectedFunction = functionName, context = context }
+	local data = { event = event, addon = blockedAddon, protectedFunction = functionName, context = context }
 	-- Security events may arrive after OnClick returns; never attach an old quest to a later block.
 	local elapsed = lastShareAttempt
 		and lastShareAttempt.uptime
@@ -296,13 +298,13 @@ local function recordShareBlocked(event, addonName, functionName)
 end
 
 local function showPanel(groups, complete, notices)
-	Core.sortGroups(groups, QuestWithFriendsDB.sortMode, previewMode and QWF.Preview.activity or activity)
+	Core.sortGroups(groups, QWF.db.sortMode, previewMode and QWF.Preview.activity or activity)
 	QWF.Panel.show(
 		groups,
 		complete,
-		QuestWithFriendsDB.zoneFilter,
+		QWF.db.zoneFilter,
 		function()
-			QuestWithFriendsDB.zoneFilter = not QuestWithFriendsDB.zoneFilter
+			QWF.db.zoneFilter = not QWF.db.zoneFilter
 			render()
 		end,
 		not previewMode
@@ -320,14 +322,14 @@ local function showPanel(groups, complete, notices)
 			or nil,
 		notices,
 		{
-			professions = QuestWithFriendsDB.showProfessionQuests,
-			classes = QuestWithFriendsDB.showClassQuests,
+			professions = QWF.db.showProfessionQuests,
+			classes = QWF.db.showClassQuests,
 			toggleProfessions = function()
-				QuestWithFriendsDB.showProfessionQuests = not QuestWithFriendsDB.showProfessionQuests
+				QWF.db.showProfessionQuests = not QWF.db.showProfessionQuests
 				render()
 			end,
 			toggleClasses = function()
-				QuestWithFriendsDB.showClassQuests = not QuestWithFriendsDB.showClassQuests
+				QWF.db.showClassQuests = not QWF.db.showClassQuests
 				render()
 			end,
 		},
@@ -339,9 +341,9 @@ local function showPanel(groups, complete, notices)
 					QWF.Panel.setLocked(locked)
 				end
 			end,
-			sortMode = QuestWithFriendsDB.sortMode,
+			sortMode = QWF.db.sortMode,
 			onSort = function(mode)
-				QuestWithFriendsDB.sortMode = mode == "title" and "title" or "smart"
+				QWF.db.sortMode = mode == "title" and "title" or "smart"
 				render()
 			end,
 			preview = previewMode,
@@ -375,9 +377,9 @@ render = function()
 	if previewMode then
 		showPanel(
 			QWF.Preview.compare(
-				QuestWithFriendsDB.zoneFilter,
-				QuestWithFriendsDB.showProfessionQuests,
-				QuestWithFriendsDB.showClassQuests,
+				QWF.db.zoneFilter,
+				QWF.db.showProfessionQuests,
+				QWF.db.showClassQuests,
 				screenshotMode and screenshotScenario or nil
 			)
 		)
@@ -414,17 +416,17 @@ render = function()
 			end
 		end
 	end
-	local zoneID = QuestWithFriendsDB.zoneFilter
+	local zoneID = QWF.db.zoneFilter
 			and C_Map
 			and C_Map.GetBestMapForUnit
 			and zoneMapID(C_Map.GetBestMapForUnit("player"))
 		or nil
 	local groups, complete, notices = Core.compare(localView, roster, zoneID)
-	if not QuestWithFriendsDB.showProfessionQuests or not QuestWithFriendsDB.showClassQuests then
+	if not QWF.db.showProfessionQuests or not QWF.db.showClassQuests then
 		local visible = {}
 		local function hidden(category)
-			return (category == "profession" and not QuestWithFriendsDB.showProfessionQuests)
-				or (category == "class" and not QuestWithFriendsDB.showClassQuests)
+			return (category == "profession" and not QWF.db.showProfessionQuests)
+				or (category == "class" and not QWF.db.showClassQuests)
 		end
 		for _, group in ipairs(groups) do
 			local excluded = false
@@ -462,7 +464,7 @@ setPreviewMode = function(enabled, screenshot, scenario)
 	end
 	local wasScreenshot = screenshotMode
 	previewMode = enabled == true
-	screenshotMode = previewMode and screenshot == true
+	screenshotMode = previewMode and QWF.Development ~= nil and screenshot == true
 	screenshotScenario = screenshotMode and (scenario or screenshotScenario) or "differences"
 	if not previewMode or wasScreenshot ~= screenshotMode or scenario then
 		previewCollapsed = {}
@@ -474,12 +476,6 @@ setPreviewMode = function(enabled, screenshot, scenario)
 	end
 	render()
 	return true
-end
-
-local function showScreenshotScenario(scenario)
-	if setPreviewMode(true, true, scenario) and SettingsPanel then
-		SettingsPanel:Hide()
-	end
 end
 
 local function send(message)
@@ -964,7 +960,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 	if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
 		recordShareBlocked(event, ...)
 	elseif event == "ADDON_LOADED" then
-		if ... == "QuestWithFriends" then
+		if ... == addonName then
 			-- SavedVariables are restored after the TOC's Lua files execute.
 			initializeSettings()
 			applyDebugMode()
@@ -1023,14 +1019,18 @@ frame:SetScript("OnEvent", function(_, event, ...)
 end)
 
 local function setDebugMode(enabled)
-	QuestWithFriendsDB.debugMode = enabled == true
+	QWF.db.debugMode = enabled == true
 	applyDebugMode()
 end
 
 if AddonKit and AddonKit.RegisterAddon then
-	AddonKit.RegisterAddon("QuestWithFriends", { persistDiagnostics = true })
+	AddonKit.RegisterAddon(addonName, { persistDiagnostics = true })
 end
 applyDebugMode()
+
+local development = QWF.Development and QWF.Development.new(setPreviewMode, function()
+	return screenshotMode
+end)
 
 local debugSetting
 if
@@ -1039,15 +1039,15 @@ if
 	and Settings.RegisterProxySetting
 	and Settings.CreateCheckbox
 then
-	local category, layout = Settings.RegisterVerticalLayoutCategory("Quest With Friends")
+	local category, layout = Settings.RegisterVerticalLayoutCategory(QWF.title or "Quest With Friends")
 	debugSetting = Settings.RegisterProxySetting(
 		category,
-		"QuestWithFriendsDebugMode",
+		addonName .. "DebugMode",
 		Settings.VarType.Boolean,
 		"Debug mode",
 		false,
 		function()
-			return QuestWithFriendsDB.debugMode
+			return QWF.db.debugMode
 		end,
 		setDebugMode
 	)
@@ -1059,12 +1059,12 @@ then
 	)
 	panelLockSetting = Settings.RegisterProxySetting(
 		category,
-		"QuestWithFriendsPanelLocked",
+		addonName .. "PanelLocked",
 		Settings.VarType.Boolean,
 		"Lock panel",
 		true,
 		function()
-			return QuestWithFriendsDB.panelLocked
+			return QWF.db.panelLocked
 		end,
 		function(locked)
 			QWF.Panel.setLocked(locked)
@@ -1078,7 +1078,7 @@ then
 	)
 	previewSetting = Settings.RegisterProxySetting(
 		category,
-		"QuestWithFriendsPreviewMode",
+		addonName .. "PreviewMode",
 		Settings.VarType.Boolean,
 		"Preview appearance",
 		false,
@@ -1095,48 +1095,8 @@ then
 		"Show sample party quest data while solo. Try filters, collapse quest headings, or unlock the panel to move and resize it. "
 			.. "Sample quests cannot be shared. Preview ends when you join a group or reload."
 	)
-	if layout and CreateSettingsListSectionHeaderInitializer and CreateSettingsButtonInitializer then
-		screenshotLayout = layout
-		local function addScreenshotControl(initializer)
-			initializer:AddShownPredicate(function()
-				return screenshotToolsShown
-			end)
-			layout:AddInitializer(initializer)
-		end
-		addScreenshotControl(
-			CreateSettingsListSectionHeaderInitializer(
-				"Screenshot tools",
-				"Solo-only sample scenes for promotional screenshots, without preview labels. "
-					.. "Sharing is inert; samples are never synchronized. Scenes end when you join a group or reload."
-			)
-		)
-		for _, option in ipairs({
-			{ "differences", "Quest differences", "Missing quests, multiple objectives, readiness and completion." },
-			{
-				"collapsed",
-				"Collapsed headings",
-				"Compact affected-player summaries with all sample headings collapsed.",
-			},
-			{ "synced", "Party in sync", "A caught-up party with no quest differences." },
-		}) do
-			local scenario, name, tooltip = unpack(option)
-			local initializer = CreateSettingsButtonInitializer(name, "Show scenario", function()
-				showScreenshotScenario(scenario)
-			end, tooltip .. " Shows sample data and closes settings. Solo only.", false)
-			initializer:AddModifyPredicate(function()
-				return not IsInGroup()
-			end)
-			addScreenshotControl(initializer)
-		end
-		local stop = CreateSettingsButtonInitializer("Screenshot view", "End screenshot view", function()
-			if screenshotMode then
-				setPreviewMode(false)
-			end
-		end, "Return to real party data, or hide the panel while solo.", false)
-		stop:AddModifyPredicate(function()
-			return screenshotMode
-		end)
-		addScreenshotControl(stop)
+	if development then
+		development.addSettings(layout)
 	end
 	Settings.RegisterAddOnCategory(category)
 end
@@ -1149,24 +1109,7 @@ end
 SLASH_QUESTWITHFRIENDS1 = "/qwf"
 SlashCmdList.QUESTWITHFRIENDS = function(command)
 	command = (command or ""):lower():match("^%s*(.-)%s*$")
-	if command == "screenshot" or command == "screenshot on" or command == "screenshot off" then
-		if not screenshotLayout then
-			print("Quest With Friends: Screenshot tools require the addon settings panel.")
-			return
-		end
-		screenshotToolsShown = command == "screenshot on" or (command == "screenshot" and not screenshotToolsShown)
-		if SettingsPanel and SettingsPanel:IsShown() and SettingsPanel:GetCurrentLayout() == screenshotLayout then
-			if SettingsInbound and SettingsInbound.RepairDisplay then
-				SettingsInbound.RepairDisplay()
-			else
-				SettingsPanel:GetSettingsList():RepairDisplay(screenshotLayout)
-			end
-		end
-		print(
-			"Quest With Friends: Screenshot tools "
-				.. (screenshotToolsShown and "shown" or "hidden")
-				.. " in addon settings."
-		)
+	if development and development.command(command) then
 		return
 	end
 	if command == "preview" or command == "preview on" or command == "preview off" then

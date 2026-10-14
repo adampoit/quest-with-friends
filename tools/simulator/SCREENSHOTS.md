@@ -2,6 +2,8 @@
 
 Use `bash tools/capture_preview.sh` from the repository root for the normal `/qwf preview` scene, centered at 1.5× scale on an 800×600 canvas. Build prerequisites, asset discovery and faithful/debug color modes are described in [DEVELOPING.md](../../DEVELOPING.md#simulator-screenshots).
 
+Use `--dev` when a scene needs the promotional screenshot controls. This loads **Quest With Friends (Dev)** with its separate settings category; locate it by `QuestWithFriends.title` rather than a hardcoded release title. Read or change the active settings through `QuestWithFriends.db`, not `QuestWithFriendsDB`. Normal appearance-preview captures do not need `--dev`.
+
 The runner handles capture mechanics; the scene script chooses what to show. It does not automatically open menus or generate a fixed set of screenshots. Keep experimental scenes and captures in ignored `.cache/simulator-previews/`, not in shipped addon files.
 
 ## Supply a scene

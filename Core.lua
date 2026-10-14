@@ -1,4 +1,8 @@
-local QWF = QuestWithFriends or {}
+local _, QWF = ...
+QWF = QWF or QuestWithFriends or {}
+if QWF.disabled then
+	return
+end
 QuestWithFriends = QWF
 QWF.Core = {}
 local Core = QWF.Core

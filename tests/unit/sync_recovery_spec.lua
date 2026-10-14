@@ -146,6 +146,7 @@ local function network(game, size, minorVersions)
 			end,
 		}
 		for _, path in ipairs({
+			"Bootstrap.lua",
 			"QuestEquivalences.lua",
 			"Client.lua",
 			"QuestCategories.lua",

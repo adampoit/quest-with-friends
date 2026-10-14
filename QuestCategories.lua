@@ -1,4 +1,8 @@
-local QWF = QuestWithFriends
+local _, QWF = ...
+QWF = QWF or QuestWithFriends
+if QWF.disabled then
+	return
+end
 
 -- Reviewed Forever QuestieDB Camping category; revision e0a6eaa86f181ac99262e34126bcd2ed1a1712d6
 -- Snapshot SHA256: 14717b77f49e0f5b99eb0c1596a8af72c5493d913da7fffb963c7567779babfa

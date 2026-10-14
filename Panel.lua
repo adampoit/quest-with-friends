@@ -1,4 +1,8 @@
-local QWF = QuestWithFriends
+local _, QWF = ...
+QWF = QWF or QuestWithFriends
+if QWF.disabled then
+	return
+end
 QWF.Panel = {}
 local panel
 local rows = {}
@@ -55,14 +59,14 @@ local function savePosition()
 	y = clamp(y, math.min(0, panel:GetHeight() - height), 0)
 	panel:ClearAllPoints()
 	panel:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
-	QuestWithFriendsDB.panelPosition = { x = x, y = y }
+	QWF.db.panelPosition = { x = x, y = y }
 end
 
 local function finishLayout()
 	if moving or resizing then
 		panel:StopMovingOrSizing()
 		if resizing then
-			QuestWithFriendsDB.panelSize = { width = panel:GetWidth(), height = panel:GetHeight() }
+			QWF.db.panelSize = { width = panel:GetWidth(), height = panel:GetHeight() }
 		end
 		moving, resizing = false, false
 		savePosition()
@@ -70,7 +74,7 @@ local function finishLayout()
 end
 
 function QWF.Panel.setLocked(locked)
-	QuestWithFriendsDB.panelLocked = locked ~= false
+	QWF.db.panelLocked = locked ~= false
 	if panel then
 		finishLayout()
 		if redraw and panel:IsShown() then
@@ -136,17 +140,15 @@ end
 
 local function lockTooltip(self)
 	GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-	GameTooltip:SetText(QuestWithFriendsDB.panelLocked == false and "Lock panel" or "Unlock to move and resize")
+	GameTooltip:SetText(QWF.db.panelLocked == false and "Lock panel" or "Unlock to move and resize")
 	GameTooltip:Show()
 end
 
 local function createPanel()
-	QuestWithFriendsDB.collapsedQuests = type(QuestWithFriendsDB.collapsedQuests) == "table"
-			and QuestWithFriendsDB.collapsedQuests
-		or {}
+	QWF.db.collapsedQuests = type(QWF.db.collapsedQuests) == "table" and QWF.db.collapsedQuests or {}
 	panel = CreateFrame("Frame", "QuestWithFriendsPanel", UIParent, "BackdropTemplate")
 	panel:SetSize(DEFAULT_WIDTH, 78)
-	local position = QuestWithFriendsDB.panelPosition
+	local position = QWF.db.panelPosition
 	if type(position) == "table" and finite(position.x) and finite(position.y) then
 		panel:SetPoint("TOPLEFT", UIParent, "TOPLEFT", position.x, position.y)
 	else
@@ -173,7 +175,7 @@ local function createPanel()
 	panel.header:EnableMouse(true)
 	panel.header:RegisterForDrag("LeftButton")
 	panel.header:SetScript("OnDragStart", function()
-		if QuestWithFriendsDB.panelLocked == false then
+		if QWF.db.panelLocked == false then
 			panel.filter:CloseMenu()
 			savePosition()
 			moving = true
@@ -201,8 +203,9 @@ local function createPanel()
 
 	local heading = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	heading:SetPoint("LEFT", panel, "TOPLEFT", PANEL_INSET, -CONTROL_INSET - 12)
-	heading:SetText("Quest With Friends")
+	heading:SetText(QWF.title or "Quest With Friends")
 	heading:SetTextColor(0.94, 0.95, 0.97)
+	panel.heading = heading
 
 	panel.filter = CreateFrame("DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
 	panel.filter:SetSize(92, 24)
@@ -231,7 +234,7 @@ local function createPanel()
 	panel.lock.icon = panel.lock:CreateTexture(nil, "ARTWORK")
 	panel.lock.icon:SetSize(20, 20)
 	panel.lock.icon:SetPoint("CENTER")
-	panel.lock.icon:SetTexture("Interface\\AddOns\\QuestWithFriends\\Media\\PanelLock")
+	panel.lock.icon:SetTexture((QWF.assetPath or "Interface\\AddOns\\QuestWithFriends\\Media\\") .. "PanelLock")
 	local lockHighlight = panel.lock:CreateTexture(nil, "HIGHLIGHT")
 	lockHighlight:SetAllPoints()
 	lockHighlight:SetColorTexture(1, 1, 1, 0.08)
@@ -241,7 +244,7 @@ local function createPanel()
 	panel.lock:RegisterForClicks("LeftButtonUp")
 	panel.lock:SetScript("OnClick", function()
 		panel.filter:CloseMenu()
-		local locked = QuestWithFriendsDB.panelLocked == false
+		local locked = QWF.db.panelLocked == false
 		if onLock then
 			onLock(locked)
 		else
@@ -276,7 +279,7 @@ local function createPanel()
 	panel.resize:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
 	panel.resize:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
 	panel.resize:SetScript("OnMouseDown", function(_, button)
-		if button == "LeftButton" and QuestWithFriendsDB.panelLocked == false then
+		if button == "LeftButton" and QWF.db.panelLocked == false then
 			panel.filter:CloseMenu()
 			savePosition()
 			resizing = true
@@ -345,7 +348,7 @@ local function setQuestHeading(row, group, collapsed, y, width)
 		button.indicator = button:CreateTexture(nil, "OVERLAY")
 		button.indicator:SetPoint("LEFT", button, "LEFT", 0, 2)
 		button.indicator:SetSize(12, 12)
-		button.indicator:SetTexture("Interface\\AddOns\\QuestWithFriends\\Media\\QuestToggle")
+		button.indicator:SetTexture((QWF.assetPath or "Interface\\AddOns\\QuestWithFriends\\Media\\") .. "QuestToggle")
 		button.indicator:SetVertexColor(0.72, 0.79, 0.88)
 		button.summary = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		button.summary:SetPoint("RIGHT", 0, 0)
@@ -538,11 +541,12 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	if not panel then
 		createPanel()
 	end
+	panel.heading:SetText(isScreenshot and "Quest With Friends" or QWF.title or "Quest With Friends")
 	if previewChanged then
 		panel.scroll:SetVerticalScroll(0)
 		groupOffsets = {}
 	end
-	collapsedQuests = presentation.collapsedQuests or QuestWithFriendsDB.collapsedQuests
+	collapsedQuests = presentation.collapsedQuests or QWF.db.collapsedQuests
 	panel.scope:SetText(scopeText())
 	panel.filter:GenerateMenu()
 	panel.status:SetFontObject(showPreviewNotice and "GameFontHighlightSmall" or "GameFontHighlight")
@@ -589,9 +593,9 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 				end
 			end
 		end
-		local unlocked = QuestWithFriendsDB.panelLocked == false
+		local unlocked = QWF.db.panelLocked == false
 		local screenWidth, screenHeight = screenSize()
-		local saved = type(QuestWithFriendsDB.panelSize) == "table" and QuestWithFriendsDB.panelSize or {}
+		local saved = type(QWF.db.panelSize) == "table" and QWF.db.panelSize or {}
 		local width = resizing and panel:GetWidth() or (finite(saved.width) and saved.width or DEFAULT_WIDTH)
 		width = clamp(width, math.min(MIN_WIDTH, screenWidth), screenWidth)
 		local ceiling = resizing and panel:GetHeight() or (finite(saved.height) and saved.height or DEFAULT_HEIGHT)

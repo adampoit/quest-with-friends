@@ -2,6 +2,28 @@
 
 The runtime is Lua; build-time quest-data tools and packaging use Python 3.10+ with only the standard library. Work from the repository root unless noted otherwise. The addon has been validated in game; automated tests complement, rather than replace, live checks after changes to game APIs, synchronization, or visuals.
 
+## Release and development installations
+
+Keep the release in `Interface/AddOns/QuestWithFriends/` and the development copy in `Interface/AddOns/QuestWithFriendsDev/`. Enable only one in WoW's AddOns menu, then reload. Both use `/qwf` and the same party protocol, so a dev build can exchange compatible data with friends using the release.
+
+For a live checkout, place or link the repository at `QuestWithFriendsDev` and generate its manifest:
+
+```sh
+python3 tools/bundle_addon.py --dev-toc
+```
+
+The ignored `QuestWithFriendsDev.toc` is derived from the release TOC; regenerate it after changing the release's interface, version, dependencies or file list. A checkout loaded from a folder named `QuestWithFriends` intentionally behaves as the release, without development tools. Keep addon managers pointed only at the release folder, never the checkout. Moving an existing checkout or creating a filesystem link is a separate local setup step; packaging does not change installed folders.
+
+Alternatively, build an installable development ZIP:
+
+```sh
+python3 tools/bundle_addon.py --dev
+```
+
+This creates `dist/QuestWithFriendsDev-<version>-dev.zip`, containing only the development installation identity. Its AddOns/settings title is **Quest With Friends (Dev)** and its SavedVariables are `QuestWithFriendsDevDB`, separate from `QuestWithFriendsDB`. Settings are not copied automatically. AddonKit diagnostics are registered under `QuestWithFriendsDev` for this copy. Appearance preview and troubleshooting diagnostics remain available in both versions; screenshot tools and AddonKit in-game tests are dev-only files and are omitted from release packages.
+
+If both installations are enabled, the dev manifest's optional dependency loads the enabled release first. The dev copy reports that it did not start, before registering UI, settings, commands, tests or synchronization. The runtime guard also protects against reversed load order between new builds. An older release without the guard must load first; the optional dependency provides that order. Disable the unwanted copy and reload to switch.
+
 ## Unit tests
 
 Install Lua 5.1 (or LuaJIT), [Busted](https://lunarmodules.github.io/busted/), and Python 3.10+, then run:
@@ -19,7 +41,7 @@ Keep Busted specs in `tests/unit/` with the `_spec.lua` suffix. Simulator tests 
 
 One-click sharing remains a direct call from the Share button. With AddonKit installed, each eligible click records an INFO `share` entry, **Quest sharing attempted**, even with Debug mode off. It includes the quest ID/title and current log index, client/addon versions, combat and group state, secure execution state, any taint reported for `QuestLogPushQuest`, and a bounded click stack. An attempt is not confirmation that anyone received or accepted the quest.
 
-`ADDON_ACTION_BLOCKED` and `ADDON_ACTION_FORBIDDEN` events attributed to QuestWithFriends calling `QuestLogPushQuest` record a WARN **Quest sharing blocked** entry. It includes the event-time context and the latest eligible click only if it occurred within five seconds; other security events are ignored. The API's taint source is evidence about that global, not proof of the underlying cause.
+`ADDON_ACTION_BLOCKED` and `ADDON_ACTION_FORBIDDEN` events attributed to the active installation (`QuestWithFriends` or `QuestWithFriendsDev`) calling `QuestLogPushQuest` record a WARN **Quest sharing blocked** entry. It includes the event-time context and the latest eligible click only if it occurred within five seconds; other security events are ignored. The API's taint source is evidence about that global, not proof of the underlying cause.
 
 After reproducing, log out or `/reload` to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Compare the `share` entries with BugGrabber's original stack, especially combat versus non-combat attempts and minimal-addon versus normal setups. Keep full SavedVariables private; share only redacted relevant entries. No API hooks, automatic retries, or security-error suppression are added.
 
@@ -42,11 +64,21 @@ The first build downloads dependencies and compiles Rust, requiring several minu
 
 When upgrading the simulator, update the source revision, runtime image digest, and versioned image tags in the build script, workflows, and these instructions together. The interface override loads our TOC in the simulator.
 
+To run the same simulator suite against the dev identity (including screenshot tools):
+
+```sh
+python3 tools/bundle_addon.py --dev-toc
+docker run --rm \
+  -e WOW_SIM_LOAD_OUT_OF_DATE_ADDONS=1 \
+  -v "$PWD:/app/Interface/AddOns/QuestWithFriendsDev:ro" \
+  wow-ui-sim:0.1.32-portable run-tests QuestWithFriendsDev
+```
+
 `tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), hidden screenshot-tool visibility and native scenario buttons, party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, scrolling and row reuse, persistent quest-heading toggles, collapsed summaries, sharing, locked/unlocked layout controls, saved panel dimensions and position, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
 
 ## In-game promotional screenshots
 
-The maintainer-only `/qwf screenshot` command reveals or hides the **Screenshot tools** section in **Settings → AddOns → Quest With Friends**. `/qwf screenshot on` and `/qwf screenshot off` explicitly show or hide the section; they do not start or stop a sample view, open settings, or change normal settings. The tools start hidden on each reload, and the command is intentionally absent from player-facing help.
+With **Quest With Friends (Dev)** enabled, the maintainer-only `/qwf screenshot` command reveals or hides the **Screenshot tools** section in **Settings → AddOns → Quest With Friends (Dev)**. `/qwf screenshot on` and `/qwf screenshot off` explicitly show or hide the section; they do not start or stop a sample view, open settings, or change normal settings. The tools start hidden on each reload, and the command is intentionally absent from player-facing help.
 
 While solo, choose **Show scenario** beside:
 
@@ -99,6 +131,8 @@ Both installation and addon mounts are **read-only**. Extracted assets are cache
 
 The default scene in `tools/simulator/preview_demo.lua` uses the addon's real `/qwf preview` at 1.5× scale, fitting the default 800×600 canvas. Sharing is disabled, as in the normal solo preview. Output goes to `.cache/simulator-previews/preview.webp` and `preview.log`; `--visibility-boost` appends `-visibility-boost` to both names, preserving the faithful capture. An optional output-directory argument selects another directory. Failed captures preserve the previous screenshot and retain the log; interrupts clean up the container.
 
+For scenes using development-only screenshot controls, add `--dev`. It generates the dev TOC and mounts the checkout as `QuestWithFriendsDev`; normal captures continue to load the release identity. Screenshot scenes hide the Dev suffix in the panel heading, while ordinary dev preview and live play retain it.
+
 For arbitrary scenes, pass a Lua setup script and choose the canvas and output name:
 
 ```sh
@@ -122,7 +156,7 @@ CI exercises synthetic source imports and review policies. Shipped tables are re
 python3 tools/bundle_addon.py
 ```
 
-The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files, assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
+The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files, assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Release manifests cannot list `Development.lua` or `InGameTests.lua`; the bundler rejects them. `--dev` derives a separate manifest and adds those files, without distribution-site project IDs. `--tag` is reserved for release packages. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
 
 To validate a proposed release tag, pass it to the bundler with `--tag`. The tag must equal `v` followed by the TOC version; a mismatch fails before writing a ZIP.
 
@@ -152,7 +186,7 @@ python3 tools/check_game_versions.py /path/to/curseforge-versions.json
 
 ## GitHub CI and releases
 
-`.github/workflows/test.yml` runs on branch pushes, pull requests, manual dispatch, and calls from the release workflow. It runs all Lua unit tests, the Python tooling suite on Python 3.10 and 3.13, a packaging smoke check, and simulator integration tests. Docker layers are cached. Only read permissions are granted to test jobs.
+`.github/workflows/test.yml` runs on branch pushes, pull requests, manual dispatch, and calls from the release workflow. It runs all Lua unit tests, the Python tooling suite on Python 3.10 and 3.13, release/dev packaging smoke checks, and simulator integration tests for both identities. Docker layers are cached. Only read permissions are granted to test jobs.
 
 Add player-facing changes to the **Unreleased** section of `CHANGELOG.md`. Before a release, update `## Version` in `QuestWithFriends.toc`, finalize the changelog, run the suites, and repeat relevant live-client checks.
 

@@ -1,4 +1,8 @@
-local QWF = QuestWithFriends
+local _, QWF = ...
+QWF = QWF or QuestWithFriends
+if QWF.disabled then
+	return
+end
 local interfaceVersion = GetBuildInfo and select(4, GetBuildInfo())
 local isForever = type(interfaceVersion) == "number" and interfaceVersion >= 16000 and interfaceVersion < 20000
 local game = isForever and "forever" or "retail"

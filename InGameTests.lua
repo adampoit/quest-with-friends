@@ -1,8 +1,14 @@
+local _, QWF = ...
+QWF = QWF or QuestWithFriends
+if QWF.disabled or not QWF.isDevelopment then
+	return
+end
+
 if not AddonKit or not AddonKit.Test or not AddonKit.Test.tests then
 	return
 end
 
-local Core = QuestWithFriends.Core
+local Core = QWF.Core
 local tests = AddonKit.Test.tests
 local check = AddonKit.Test.assert
 

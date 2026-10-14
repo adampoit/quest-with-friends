@@ -90,6 +90,8 @@ Open a GitHub issue with your client (Retail or Forever), addon version, reprodu
 
 ## Development and releases
 
+Developers can install **Quest With Friends (Dev)** alongside the release, with separate settings and dev-only screenshot/test tools. Enable only one copy at a time and reload; normal appearance preview and troubleshooting diagnostics remain available in both. See [development installations](DEVELOPING.md#release-and-development-installations) for setup.
+
 See [DEVELOPING.md](DEVELOPING.md) for tests, packaging, simulator screenshots, and releases; [CHANGELOG.md](CHANGELOG.md) for changes; and [PROTOCOL.md](PROTOCOL.md) for the wire format. Quest-data tooling is documented in [tools/README.md](tools/README.md).
 
 ## License and credits

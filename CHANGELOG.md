@@ -4,7 +4,8 @@
 
 - Keep one-click quest sharing and add AddonKit diagnostics for sharing attempts and blocked actions, including the quest, client build, combat state and API taint information. Sharing diagnostics are recorded even with Debug mode off.
 - Fix duplicated objective counts when quest text starts with progress such as `0/1`; display progress once using the structured quest data.
-- Add hidden screenshot tools in addon settings with buttons for quest differences, collapsed headings and a synchronized party. Scenario views use the live panel appearance for promotional captures; normal preview remains labeled, and samples are never shared or synchronized.
+- Support a separate **Quest With Friends (Dev)** installation with independent settings and diagnostics. Enable only one copy at a time; a duplicate copy reports that it did not start. Both keep the normal solo preview and can exchange compatible party data.
+- Keep promotional screenshot tools and AddonKit in-game test helpers exclusive to development installations, excluding their files from release packages. Dev screenshot settings offer quest differences, collapsed headings and a synchronized party; samples are never shared or synchronized.
 - Improve sample quests with multiple grouped objectives and remaining progress alongside ready-to-turn-in and completed party members.
 
 ## 0.1.7

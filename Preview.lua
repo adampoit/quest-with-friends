@@ -1,4 +1,8 @@
-local QWF = QuestWithFriends
+local _, QWF = ...
+QWF = QWF or QuestWithFriends
+if QWF.disabled then
+	return
+end
 QWF.Preview = {}
 QWF.Preview.activity = { [-1] = 3, [-2] = 2, [-3] = 1 }
 

@@ -1,4 +1,8 @@
-local QWF = QuestWithFriends or {}
+local _, QWF = ...
+QWF = QWF or QuestWithFriends or {}
+if QWF.disabled then
+	return
+end
 QuestWithFriends = QWF
 
 -- Generated from local source and explicit reviews; do not edit groups by hand.

@@ -5,6 +5,7 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 repo_root=$(cd -- "$script_dir/.." && pwd -P)
 usage() {
 	printf 'Usage: %s [options] [output-directory]\n' "${0##*/}"
+	printf '  --dev               Load the development addon, including screenshot tools.\n'
 	printf '  --lua FILE          Lua scene setup, replacing the default appearance preview.\n'
 	printf '  --filter FRAME      Capture one frame hierarchy; "none" captures all visible UI.\n'
 	printf '                      Default: QuestWithFriendsPanel, or none with --lua.\n'
@@ -17,6 +18,7 @@ usage() {
 	printf '  WOW_INSTALL_PATH overrides discovery of an installation above the addon directory.\n'
 }
 
+addon_name=QuestWithFriends
 visibility_boost=0
 stock_text_position=0
 no_game_assets=0
@@ -30,6 +32,9 @@ preview_name=preview
 directories=()
 while [[ $# -gt 0 ]]; do
 	case "$1" in
+	--dev)
+		addon_name=QuestWithFriendsDev
+		;;
 	--visibility-boost)
 		visibility_boost=1
 		;;
@@ -163,6 +168,9 @@ cache_dir=${QWF_SIMULATOR_CACHE_DIR:-"${XDG_CACHE_HOME:-"$HOME/.cache"}/quest-wi
 mkdir -p -- "$output_dir" "$cache_dir"
 output_dir=$(cd -- "$output_dir" && pwd -P)
 cache_dir=$(cd -- "$cache_dir" && pwd -P)
+if [[ "$addon_name" == QuestWithFriendsDev ]]; then
+	python3 "$script_dir/bundle_addon.py" --dev-toc
+fi
 args=(
 	--rm
 	--init
@@ -171,7 +179,7 @@ args=(
 	-e WOW_SIM_LOAD_OUT_OF_DATE_ADDONS=1
 	-e "WOW_SIM_VISIBILITY_BOOST=$visibility_boost"
 	-e "WOW_SIM_STOCK_TEXT_POSITION=$stock_text_position"
-	-v "$repo_root:/app/Interface/AddOns/QuestWithFriends:ro"
+	-v "$repo_root:/app/Interface/AddOns/$addon_name:ro"
 	-v "$scene:/demo.lua:ro"
 	-v "$output_dir:/output"
 	-v "$cache_dir:/tmp/wow-ui-sim-cache"
@@ -199,6 +207,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 {
+	printf 'Addon: %s\n' "$addon_name"
 	printf 'Preview mode: %s\n' "$preview_mode"
 	printf 'Text position: %s\n' "$text_position"
 	printf 'Scene: %s\nFilter: %s\nCanvas: %sx%s\n' "$scene" "$filter" "$width" "$height"
