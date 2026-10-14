@@ -2,6 +2,10 @@
 
 **Know when everyone is ready to move on.**
 
+<p align="center">
+  <img src="screenshots/main.png" alt="Quest With Friends panel showing missing quests, objective progress, and party members ready to turn in." width="440" />
+</p>
+
 Quest With Friends shows the differences that matter while questing together: who missed a quest, who still needs an objective, and who is ready to turn in. When your party is caught up, it says **Party in sync**.
 
 Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-contained and works alongside Blizzard's quest tracker.
@@ -14,20 +18,6 @@ Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-co
 - **Keep the view relevant.** Focus on the current zone and optionally include profession or class quests. On Forever, Camping quests count as profession quests too.
 - **Compare Retail quest variants.** Six reviewed Northshire families share completion status; four also compare objective progress, while two compare readiness. Other quests and Forever compare by exact quest ID.
 - **See connection health at a glance.** Clear notices distinguish offline members from waiting, refreshing, stale, or incompatible data.
-
-An illustrative party view:
-
-```text
-The Lost Supplies                         [Share]
-  ! Alex: Missing
-
-Gnoll Hunt
-  • Sam: Gnolls slain 5/8
-
-The Missing Scout
-  • You: Still in progress
-  ✓ Alex: Ready to turn in
-```
 
 The compact panel remembers its layout across characters and hides when you leave the party. Click a quest heading to collapse or expand its details; choices persist across reloads and logins. Collapsed headings retain a short summary and the **Share** button when available.
 
