@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show finished members' identifiable tradeable item objectives while someone still needs them, with capped progress and positive surplus such as **10/10 · 2 spare**. Count only unbound, unlocked carried stacks after reserving logged quest requirements, including filtered quests; uncertain matches retain the normal display. Protocol 1.1 shares optional item stock while preserving baseline comparisons with 1.0 peers. Preview includes spare-item examples.
 - Keep one-click quest sharing and add AddonKit diagnostics for sharing attempts and blocked actions, including the quest, client build, combat state and API taint information. Sharing diagnostics are recorded even with Debug mode off.
 - Fix duplicated objective counts when quest text starts with progress such as `0/1`; display progress once using the structured quest data.
 - Support a separate **Quest With Friends (Dev)** installation with independent settings and diagnostics. Enable only one copy at a time; a duplicate copy reports that it did not start. Both keep the normal solo preview and can exchange compatible party data.

@@ -528,6 +528,29 @@ describe("Quest With Friends panel", function()
 		assert.are.equal("Party status incomplete", panel.status.text)
 	end)
 
+	it("caps tradeable progress and appends only positive confirmed spare counts", function()
+		loadPanel()
+		for _, case in ipairs({
+			{ have = 10, spare = 2, expected = "10/10 · 2 spare" },
+			{ have = 12, spare = 2, expected = "10/10 · 2 spare" },
+			{ have = 10, spare = 0, expected = "10/10" },
+			{ have = 12, expected = "12/10" },
+		}) do
+			QuestWithFriends.Panel.show({
+				group(nil, {
+					{
+						player = "You",
+						kind = "ahead",
+						reason = "objective",
+						objective = { text = "Linen Cloth", have = case.have, need = 10, spare = case.spare },
+					},
+				}),
+			}, true, true)
+			assert.are.equal("You: Linen Cloth " .. case.expected, fontStrings[5].text)
+			assert.same({ 0.52, 0.87, 0.62 }, fontStrings[5].color)
+		end
+	end)
+
 	it("distinguishes offline members and sync health without claiming the party is in sync", function()
 		loadPanel()
 		local cases = {
@@ -736,6 +759,28 @@ describe("Quest With Friends panel", function()
 			}),
 		}, true, true)
 		assert.are.equal("2 affected", row.toggleButton.summary.text)
+	end)
+
+	it("does not count finished item holders as needing progress in collapsed summaries", function()
+		loadPanel()
+		QuestWithFriendsDB.collapsedQuests[42] = true
+		QuestWithFriends.Panel.show({
+			group(42, {
+				{
+					player = "You",
+					kind = "ahead",
+					reason = "objective",
+					objective = { text = "Linen Cloth", have = 10, need = 10, spare = 2 },
+				},
+				{
+					player = "Julia",
+					kind = "needs",
+					reason = "objective",
+					objective = { text = "Linen Cloth", have = 3, need = 10 },
+				},
+			}),
+		}, true, true)
+		assert.are.equal("2 affected", fontStrings[4].toggleButton.summary.text)
 	end)
 
 	it("uses one row per collapsed quest and expands the scroll range with its details", function()

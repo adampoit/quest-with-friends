@@ -43,11 +43,13 @@ The compact panel remembers its layout across characters and hides when you leav
 3. Enable **Quest With Friends** in the character-selection AddOns menu, then log in or `/reload`.
 4. Have your friends install the same release so everyone can exchange compatible quest data.
 
-Install a separate copy in each client if you play both Retail and Forever. The current TOC targets Retail 12.1 (`120100`) and WoW Forever beta 1.60.1 (`16001`); Forever beta interface numbers may change. The addon uses protocol 1.0. Peers using older development builds or a different protocol major receive an update notice.
+Install a separate copy in each client if you play both Retail and Forever. The current TOC targets Retail 12.1 (`120100`) and WoW Forever beta 1.60.1 (`16001`); Forever beta interface numbers may change. The addon uses protocol 1.1, retaining baseline compatibility with 1.0 peers. Peers using older development builds or a different protocol major receive an update notice.
 
 ## Use it
 
 Join a party and the panel appears automatically. Quest changes update it as you play. Comparisons cover the whole party, including differences between friends even when you are missing or still working on a quest. Each player's remaining objective appears once when any comparable party member has finished it; ready-to-turn-in and completed quests also reveal unfinished players' remaining progress.
+
+For identifiable tradeable item objectives, finished members also show counts while someone still needs the items. **`10/10 · 2 spare`** means the player has reserved their own logged quest requirements and carries two extra unbound, unlocked items. Bank stock is excluded. Ambiguous item matches or unavailable inventory data retain the normal display; older compatible addon versions do not show spare counts.
 
 **Try it solo:** use **`/qwf preview`**, or enable **Preview appearance** in the addon's settings, to show sample party data. Try the filters, collapse quest headings, and unlock the panel to arrange it. Share buttons are shown but disabled. Click **End preview**, use `/qwf preview` again, or `/qwf preview off` to stop. Preview also ends when you join a group or reload; it never sends sample data. Position and filter changes are saved normally, but sample collapse choices are not.
 

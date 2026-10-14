@@ -13,6 +13,10 @@ describe("Quest With Friends party sync", function()
 		"issecurevariable",
 		"debugstack",
 		"C_AddOns",
+		"C_Container",
+		"C_Item",
+		"NUM_TOTAL_EQUIPPED_BAG_SLOTS",
+		"NUM_BAG_SLOTS",
 	}
 	before_each(function()
 		registeredEvents, originalDiagnostics = {}, {}
@@ -47,6 +51,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("Client.lua"))()
 		assert(loadfile("QuestCategories.lua"))()
 		assert(loadfile("Core.lua"))()
+		assert(loadfile("ItemStock.lua"))()
 		assert(loadfile("Preview.lua"))()
 		timers, messages, objectives, entries = {}, {}, {}, {}
 		view = {}
@@ -233,7 +238,7 @@ describe("Quest With Friends party sync", function()
 			fire(
 				"CHAT_MSG_ADDON",
 				"QWF",
-				"1.0:D:"
+				"1.1:D:"
 					.. serial
 					.. ":"
 					.. part
@@ -265,7 +270,7 @@ describe("Quest With Friends party sync", function()
 
 			local parts = {}
 			for _, message in ipairs(messages) do
-				local payload = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$")
+				local payload = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$")
 				if payload then
 					parts[#parts + 1] = payload
 				end
@@ -278,6 +283,116 @@ describe("Quest With Friends party sync", function()
 			assert.same(expected, view.groups[1].differences[1].objective)
 		end)
 	end
+
+	local function carriedCloth(count)
+		_G.NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5
+		_G.C_Container = {
+			GetContainerNumSlots = function(bag)
+				return bag == 0 and 1 or 0
+			end,
+			GetContainerItemInfo = function()
+				return {
+					itemID = 2589,
+					itemName = "Linen Cloth",
+					stackCount = count,
+					isBound = false,
+					isLocked = false,
+				}
+			end,
+		}
+		_G.C_Item = {
+			GetItemInfo = function()
+				return "Linen Cloth", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
+			end,
+		}
+	end
+
+	local function latestSnapshot()
+		local parts, serial = {}, nil
+		for _, message in ipairs(messages) do
+			local revision, part, data = message:match("^1%.1:D:(%d+):(%d+):%d+:(.+)$")
+			if revision then
+				if revision ~= serial then
+					parts, serial = {}, revision
+				end
+				parts[tonumber(part)] = data
+			end
+		end
+		return assert(QuestWithFriends.Core.decode(table.concat(parts)))
+	end
+
+	it("collects item stock and syncs surplus changes even when quest progress stays capped", function()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
+		carriedCloth(12)
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.same(
+			{ text = "Linen Cloth", have = 10, need = 10, itemID = 2589, spare = 2 },
+			latestSnapshot()[42].objectives[1]
+		)
+		receiveSnapshot({
+			[42] = {
+				title = "Cloth Delivery",
+				state = "active",
+				objectives = {
+					{ text = "Linen Cloth", have = 3, need = 10 },
+				},
+			},
+		}, 1)
+		assert.are.equal(2, view.groups[1].differences[1].objective.spare)
+		carriedCloth(15)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.are.equal(5, latestSnapshot()[42].objectives[1].spare)
+		assert.are.equal(5, view.groups[1].differences[1].objective.spare)
+		_G.C_Container.GetContainerItemInfo = function()
+			return { itemID = 2589, itemName = "Linen Cloth", stackCount = 15, isBound = false, isLocked = true }
+		end
+		fire("ITEM_LOCK_CHANGED", 0, 1)
+		flush()
+		assert.is_nil(latestSnapshot()[42].objectives[1].spare)
+		assert.are.equal("Julia", view.groups[1].differences[1].player)
+	end)
+
+	it("ignores inventory lookalikes for non-item objectives and reserves filtered quests too", function()
+		entries = { { questID = 42, title = "Cloth Delivery" }, { questID = 43, title = "Tailoring" } }
+		questTypes[43] = 21
+		objectives[42] = {
+			{ text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 },
+			{ text = "Linen Cloth: 1/1", type = "monster", numFulfilled = 1, numRequired = 1 },
+		}
+		objectives[43] = { { text = "Linen Cloth: 5/5", type = "item", numFulfilled = 5, numRequired = 5 } }
+		carriedCloth(17)
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local snapshot = latestSnapshot()
+		assert.are.equal(2, snapshot[42].objectives[1].spare)
+		assert.is_nil(snapshot[42].objectives[2].spare)
+		assert.are.equal(2, snapshot[43].objectives[1].spare)
+	end)
+
+	it("retries stock identification when item data arrives and clears it on turn-in", function()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
+		carriedCloth(12)
+		local loaded = _G.C_Item.GetItemInfo
+		_G.C_Item.GetItemInfo = function()
+			return "Linen Cloth"
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.is_nil(latestSnapshot()[42].objectives[1].spare)
+		_G.C_Item.GetItemInfo = loaded
+		fire("GET_ITEM_INFO_RECEIVED", 2589, true)
+		flush()
+		assert.are.equal(2, latestSnapshot()[42].objectives[1].spare)
+		entries, objectives = {}, {}
+		fire("QUEST_TURNED_IN", 42)
+		flush()
+		assert.are.equal("completed", latestSnapshot()[42].state)
+		assert.same({}, latestSnapshot()[42].objectives)
+	end)
 
 	it("renders remote-to-remote progress and missing players from received snapshots", function()
 		_G.UnitExists = function(unit)
@@ -300,7 +415,7 @@ describe("Quest With Friends party sync", function()
 				objectives = { { text = "Gnolls slain", have = 5, need = 8 } },
 			},
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Bob-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Bob-Realm")
 		assert.is_true(view.complete)
 		assert.same({
 			{ player = "You", kind = "missing", reason = "missing" },
@@ -500,12 +615,12 @@ describe("Quest With Friends party sync", function()
 			pushable[42] = true
 			fire("PLAYER_ENTERING_WORLD")
 			flush()
-			assert.are.equal("1.0:H", messages[1])
+			assert.are.equal("1.1:H", messages[1])
 			local function receiveQuests(quests, serial)
 				fire(
 					"CHAT_MSG_ADDON",
 					"QWF",
-					"1.0:D:" .. serial .. ":1:1:" .. QuestWithFriends.Core.encode(quests),
+					"1.1:D:" .. serial .. ":1:1:" .. QuestWithFriends.Core.encode(quests),
 					"PARTY",
 					sender
 				)
@@ -677,7 +792,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local snapshots = 0
 		for _, message in ipairs(messages) do
-			local payload = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$")
+			local payload = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$")
 			if payload then
 				snapshots = snapshots + 1
 				assert.same(
@@ -743,7 +858,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local payload
 		for _, message in ipairs(messages) do
-			payload = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$") or payload
+			payload = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or payload
 		end
 		local snapshot = QuestWithFriends.Core.decode(payload)
 		assert.are.equal("Actual errand", snapshot[42].title)
@@ -792,7 +907,7 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		assert.is_false(view.complete)
 		flush()
-		assert.are.equal("1.0:H", messages[1])
+		assert.are.equal("1.1:H", messages[1])
 		local payload = QuestWithFriends.Core.encode({
 			[7] = {
 				title = "Remote",
@@ -800,15 +915,15 @@ describe("Quest With Friends party sync", function()
 				objectives = {},
 			},
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:2:2:" .. payload:sub(7), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:2:2:" .. payload:sub(7), "PARTY", "Julia-Realm")
 		assert.is_false(view.complete)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:2:" .. payload:sub(1, 6), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:2:" .. payload:sub(1, 6), "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		assert.are.equal("Remote", view.groups[1].title)
 		assert.same({ { player = "You", kind = "missing", reason = "missing" } }, view.groups[1].differences)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:bad", "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:bad", "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Julia-Realm")
 		assert.is_false(view.complete)
 	end)
 
@@ -821,7 +936,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local data
 		for _, message in ipairs(messages) do
-			data = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$") or data
+			data = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or data
 		end
 		local quests = QuestWithFriends.Core.decode(data)
 		assert.is_not_nil(quests[71002])
@@ -829,7 +944,7 @@ describe("Quest With Friends party sync", function()
 		local payload = QuestWithFriends.Core.encode({
 			[71001] = { title = "Branch quest", state = "active", objectives = {} },
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		assert.same({}, view.groups)
 	end)
@@ -843,7 +958,7 @@ describe("Quest With Friends party sync", function()
 		local payload = QuestWithFriends.Core.encode({
 			[71003] = { title = "Branch quest", state = "active", objectives = {} },
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.same({
 			{ player = "You", kind = "ahead", reason = "completed" },
 			{ player = "Julia", kind = "needs", reason = "active" },
@@ -863,7 +978,7 @@ describe("Quest With Friends party sync", function()
 			[28757] = { title = "Beating Them Back!", state = "active", objectives = {} },
 			[28780] = { title = "Join the Battle!", state = "active", objectives = {} },
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.are.equal(2, #view.groups)
 		assert.is_true(checked[28762])
 		assert.is_true(checked[28784])
@@ -887,7 +1002,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local data
 		for _, message in ipairs(messages) do
-			data = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$") or data
+			data = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or data
 		end
 		local quests = QuestWithFriends.Core.decode(data)
 		assert.is_nil(quests[77734])
@@ -938,15 +1053,15 @@ describe("Quest With Friends party sync", function()
 		assert.same({ { key = "Florace Bastille", name = "Florace Bastille" } }, status.members)
 		assert.same({ { player = "Florace Bastille", reason = "unknown" } }, view.notices)
 		local sent = #messages
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Carola Goodspeed")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Carola Goodspeed")
 		assert.are.equal("self message", findLog(records, "Ignored addon message").data.reason)
 		assert.are.equal(0, #timers)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Florace Bastille")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Florace Bastille")
 		assert.are.equal("Florace Bastille", findLog(records, "Received snapshot request").data.sender)
 		flush()
 		assert.are.equal(sent + 1, #messages)
 		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
 		assert.is_true(view.complete)
 		assert.are.equal("Florace Bastille", findLog(records, "Received quest snapshot").data.sender)
 		assert.are.equal("Errand", view.groups[1].title)
@@ -966,13 +1081,13 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
 		for _, sender in ipairs({ "Florace", "Florace Stranger", "Stranger Bastille" }) do
-			fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", sender)
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", sender)
 		end
 		assert.are.equal("sender not in roster", findLog(records, "Ignored addon message").data.reason)
 		assert.are.equal(2, #view.notices)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
 		assert.same({ { player = "Florace Other", reason = "unknown" } }, view.notices)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Florace Other")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Florace Other")
 		assert.is_true(view.complete)
 	end)
 
@@ -989,7 +1104,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
 		for _, sender in ipairs({ "Florace Bastille", "Zachori", "Marva Less-Wand" }) do
-			fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", sender)
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", sender)
 		end
 		assert.is_true(view.complete)
 	end)
@@ -1001,7 +1116,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Florace·Bastille")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Florace·Bastille")
 		assert.is_true(view.complete)
 	end)
 
@@ -1015,11 +1130,11 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia")
 		assert.is_true(view.complete)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Julia-TestRealm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Julia-TestRealm")
 		assert.is_false(view.complete)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-TestRealm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-TestRealm")
 		assert.is_true(view.complete)
 	end)
 
@@ -1173,6 +1288,7 @@ describe("Quest With Friends party sync", function()
 			"Client.lua",
 			"QuestCategories.lua",
 			"Core.lua",
+			"ItemStock.lua",
 			"Preview.lua",
 			"Development.lua",
 			"QuestWithFriends.lua",
@@ -1201,8 +1317,8 @@ describe("Quest With Friends party sync", function()
 		pushable[42] = true
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		assert.are.equal("1.0:H", messages[1])
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
+		assert.are.equal("1.1:H", messages[1])
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		view.share(42)
 		assert.same({ "QuestWithFriendsDev", "Version" }, metadata)
@@ -1476,21 +1592,21 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("QuestWithFriends.lua"))()
 		SlashCmdList.QUESTWITHFRIENDS("debug")
 		flush(1)
-		assert.same({ "1.0:H" }, messages)
+		assert.same({ "1.1:H" }, messages)
 		local status = findLog(records, "Party sync status").data
 		assert.are.equal("Adam-Realm", status.player)
 		assert.same({ { name = "Julia", key = "Julia-Realm" } }, status.members)
 		assert.is_true(status.prefixRegistered)
 		flush()
 		local first = #messages
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Julia-Realm")
 		flush()
 		assert.are.equal(first + 1, #messages)
 		assert.is_not_nil(findLog(records, "Received snapshot request"))
 		local beforeRefresh = #messages
 		SlashCmdList.QUESTWITHFRIENDS("")
 		flush()
-		assert.are.equal("1.0:H", messages[beforeRefresh + 1])
+		assert.are.equal("1.1:H", messages[beforeRefresh + 1])
 		local snapshot = findLog(records, "Submitted quest snapshot").data
 		assert.are.equal(0, snapshot.quests)
 		assert.are.equal(#QuestWithFriends.Core.encode({}), snapshot.bytes)
@@ -1502,7 +1618,7 @@ describe("Quest With Friends party sync", function()
 		local records = captureLogs()
 		Enum.SendAddonMessageResult = { Success = 0, Throttle = 7 }
 		rawset(C_ChatInfo, "SendAddonMessage", function(_, message)
-			return message == "1.0:H" and Enum.SendAddonMessageResult.Success or Enum.SendAddonMessageResult.Throttle
+			return message == "1.1:H" and Enum.SendAddonMessageResult.Success or Enum.SendAddonMessageResult.Throttle
 		end)
 		SlashCmdList.QUESTWITHFRIENDS("")
 		flush(2)
@@ -1537,11 +1653,11 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local records = captureLogs()
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Stranger-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Stranger-Realm")
 		assert.are.equal("sender not in roster", findLog(records, "Ignored addon message").data.reason)
 		assert.are.equal("Stranger-Realm", findLog(records, "Incoming addon message").data.sender)
 		records = captureLogs()
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "INSTANCE_CHAT", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "INSTANCE_CHAT", "Julia-Realm")
 		assert.are.equal("INSTANCE_CHAT", findLog(records, "Incoming addon message").data.channel)
 		assert.are.equal("not PARTY channel", findLog(records, "Ignored addon message").data.reason)
 		assert.are.equal(0, #timers)
@@ -1552,13 +1668,13 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local records = captureLogs()
 		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:2:2:" .. payload:sub(7), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:2:2:" .. payload:sub(7), "PARTY", "Julia-Realm")
 		local chunk = findLog(records, "Received snapshot chunk").data
 		assert.same({ sender = "Julia-Realm", revision = 1, part = 2, parts = 2, received = 1 }, chunk)
 		assert.is_nil(findLog(records, "Received quest snapshot"))
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:2:" .. payload:sub(1, 6), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:2:" .. payload:sub(1, 6), "PARTY", "Julia-Realm")
 		assert.is_not_nil(findLog(records, "Received quest snapshot"))
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:bad", "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:bad", "PARTY", "Julia-Realm")
 		assert.are.equal("invalid chunk header", findLog(records, "Ignored addon message").data.reason)
 	end)
 
@@ -1570,7 +1686,7 @@ describe("Quest With Friends party sync", function()
 		local payload = QuestWithFriends.Core.encode({
 			[7] = { title = "Also distant", state = "active", objectives = {}, mapID = 202 },
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.is_true(view.zoneFilter)
 		assert.is_true(view.complete)
 		assert.same({}, view.groups)
@@ -1630,7 +1746,7 @@ describe("Quest With Friends party sync", function()
 			flush()
 			local parts = {}
 			for _, message in ipairs(messages) do
-				local part, data = message:match("^1%.0:D:%d+:(%d+):%d+:(.+)$")
+				local part, data = message:match("^1%.1:D:%d+:(%d+):%d+:(.+)$")
 				if part then
 					parts[tonumber(part)] = data
 				end
@@ -1646,7 +1762,7 @@ describe("Quest With Friends party sync", function()
 				assert.are.equal("class", quests[id].category)
 			end
 			assert.is_nil(quests[43].category)
-			fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", sender)
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", sender)
 			assert.is_false(view.filters.professions)
 			assert.is_false(view.filters.classes)
 			assert.is_false(QuestWithFriendsDB.showProfessionQuests)
@@ -1703,7 +1819,7 @@ describe("Quest With Friends party sync", function()
 			flush()
 			local parts = {}
 			for _, message in ipairs(messages) do
-				local part, data = message:match("^1%.0:D:%d+:(%d+):%d+:(.+)$")
+				local part, data = message:match("^1%.1:D:%d+:(%d+):%d+:(.+)$")
 				if part then
 					parts[tonumber(part)] = data
 				end
@@ -1713,7 +1829,7 @@ describe("Quest With Friends party sync", function()
 				assert.is_not_nil(snapshot[id])
 				assert.are.equal(game == "forever" and "profession" or nil, snapshot[id].category)
 			end
-			fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", sender)
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", sender)
 			assert.are.equal(game == "forever" and 1 or 95, #view.groups)
 			if game == "forever" then
 				assert.are.equal(42, view.groups[1].questID)
@@ -1736,7 +1852,7 @@ describe("Quest With Friends party sync", function()
 			[96031] = { title = "Camping 101: Leatherworking", state = "active", objectives = {} },
 			[96629] = { title = "Camping 101: Cooking", state = "active", objectives = {} },
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
 		assert.is_true(view.complete)
 		assert.same({}, view.groups)
 		view.filters.toggleClasses()
@@ -1756,7 +1872,7 @@ describe("Quest With Friends party sync", function()
 			[41] = { title = "Remote fishing", state = "active", objectives = {}, category = "profession" },
 			[42] = { title = "Remote class", state = "ready", objectives = {}, category = "class" },
 		}
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode(quests), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode(quests), "PARTY", "Julia-Realm")
 		assert.same({}, view.groups)
 		assert.is_true(view.complete)
 		view.filters.toggleProfessions()
@@ -1768,7 +1884,7 @@ describe("Quest With Friends party sync", function()
 		view.filters.toggleClasses()
 		quests[41].category = nil
 		quests[42] = nil
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:2:1:1:" .. QuestWithFriends.Core.encode(quests), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:2:1:1:" .. QuestWithFriends.Core.encode(quests), "PARTY", "Julia-Realm")
 		assert.are.equal(1, #view.groups)
 		assert.are.equal(41, view.groups[1].questID)
 	end)
@@ -1778,7 +1894,7 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		for _, message in ipairs({
 			"H",
 			"X",
@@ -1791,14 +1907,14 @@ describe("Quest With Friends party sync", function()
 			"2.0:D:1:1:1:" .. payload,
 			"",
 			"broken",
-			"1.0:",
+			"1.1:",
 			"1.-1:H",
 			"1.00:H",
-			"01.0:H",
+			"01.1:H",
 			"1.1000:H",
 			"1.0.0:H",
 		}) do
-			fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 			assert.is_true(view.complete)
 			fire("CHAT_MSG_ADDON", "QWF", message, "PARTY", "Julia-Realm")
 			assert.is_false(view.complete)
@@ -1808,7 +1924,7 @@ describe("Quest With Friends party sync", function()
 		SlashCmdList.QUESTWITHFRIENDS("")
 		assert.are.equal("incompatible", view.notices[1].reason)
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		assert.same({}, view.notices)
 	end)
@@ -1817,21 +1933,21 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		for _, message in ipairs({
-			"1.0:H:extra",
-			"1.0:X:extra",
-			"1.0:P:p:42",
-			"1.0:D:0:1:1:" .. payload,
-			"1.0:D:100000001:1:1:" .. payload,
-			"1.0:D:2:0:1:" .. payload,
-			"1.0:D:2:2:1:" .. payload,
-			"1.0:D:2:1:101:" .. payload,
-			"1.0:D:2:1:1:",
-			"1.0:D:2:1:1:" .. string.rep("x", 221),
-			"1.0:D:0000000002:1:1:" .. payload,
-			"1.0:D:2:0001:1:" .. payload,
-			"1.0:D:2:1:1:" .. string.rep("x", 256),
+			"1.1:H:extra",
+			"1.1:X:extra",
+			"1.1:P:p:42",
+			"1.1:D:0:1:1:" .. payload,
+			"1.1:D:100000001:1:1:" .. payload,
+			"1.1:D:2:0:1:" .. payload,
+			"1.1:D:2:2:1:" .. payload,
+			"1.1:D:2:1:101:" .. payload,
+			"1.1:D:2:1:1:",
+			"1.1:D:2:1:1:" .. string.rep("x", 221),
+			"1.1:D:0000000002:1:1:" .. payload,
+			"1.1:D:2:0001:1:" .. payload,
+			"1.1:D:2:1:1:" .. string.rep("x", 256),
 		}) do
 			fire("CHAT_MSG_ADDON", "QWF", message, "PARTY", "Julia-Realm")
 			assert.is_true(view.complete)
@@ -1861,7 +1977,7 @@ describe("Quest With Friends party sync", function()
 		end
 		local attempts = 0
 		rawset(C_ChatInfo, "SendAddonMessage", function(_, message)
-			if message:sub(1, 6) == "1.0:D:" then
+			if message:sub(1, 6) == "1.1:D:" then
 				attempts = attempts + 1
 				if attempts == 1 then
 					return false
@@ -1874,7 +1990,7 @@ describe("Quest With Friends party sync", function()
 		assert.is_true(attempts > 1)
 		local parts = {}
 		for _, message in ipairs(messages) do
-			local part, data = message:match("^1%.0:D:%d+:(%d+):%d+:(.+)$")
+			local part, data = message:match("^1%.1:D:%d+:(%d+):%d+:(.+)$")
 			if part then
 				parts[tonumber(part)] = data
 				assert.is_true(#data <= 220)
@@ -1899,7 +2015,7 @@ describe("Quest With Friends party sync", function()
 			[42] = { title = "Class quest", state = "active", objectives = {} },
 			[71001] = { title = "Branch quest", state = "active", objectives = {} },
 		})
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.are.equal(1, #view.groups)
 		assert.are.equal(71001, view.groups[1].questID)
 		view.filters.toggleProfessions()
@@ -1919,12 +2035,12 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local data
 		for _, message in ipairs(messages) do
-			data = message:match("^1%.0:D:%d+:%d+:%d+:(.+)$") or data
+			data = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or data
 		end
 		local quests = QuestWithFriends.Core.decode(data)
 		assert.are.equal(101, quests[11].mapID)
 		assert.is_nil(quests[12].mapID)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.are.equal("Here", view.groups[1].title)
 		assert.are.equal("Unknown", view.groups[2].title)
 	end)
@@ -1932,9 +2048,9 @@ describe("Quest With Friends party sync", function()
 	it("marks a peer unknown when its snapshot cannot be shared", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:X", "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:X", "PARTY", "Julia-Realm")
 		assert.is_false(view.complete)
 	end)
 
@@ -1948,7 +2064,7 @@ describe("Quest With Friends party sync", function()
 		assert.same({ player = "You", reason = "oversized" }, view.notices[1])
 		assert.same({ player = "Julia", reason = "unknown" }, view.notices[2])
 		assert.same({}, view.groups)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.is_false(view.complete)
 		assert.same({ { player = "You", reason = "oversized" } }, view.notices)
 		assert.are.equal(100, #view.groups)
@@ -1965,7 +2081,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		assert.same({}, view.groups)
 		assert.same({ { player = "Julia", reason = "unknown" } }, view.notices)
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.are.equal(71002, view.groups[1].shareQuestID)
 		assert.is_nil(view.groups[2].shareQuestID)
 		assert.same({}, pushed)
@@ -1983,7 +2099,7 @@ describe("Quest With Friends party sync", function()
 		pushable[42] = true
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
 		local share = view.share
 		entries = {}
 		share(42)
@@ -2159,7 +2275,7 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.same({}, view.groups)
 		local sent = #messages
 		entries = {}
@@ -2176,10 +2292,10 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local sent = #messages
 		fire("QUEST_LOG_UPDATE")
-		fire("CHAT_MSG_ADDON", "QWF", "1.0:H", "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Julia-Realm")
 		flush()
 		assert.are.equal(sent + 1, #messages)
-		assert.is_not_nil(messages[#messages]:match("^1%.0:D:"))
+		assert.is_not_nil(messages[#messages]:match("^1%.1:D:"))
 	end)
 
 	it("debounces log updates and clears old party data when leaving", function()

@@ -142,11 +142,12 @@ describe("Quest With Friends core", function()
 		return table.concat(encoded)
 	end
 
-	it("pins the 1.0 payload header and empty extensions, and round trips classifications", function()
+	it("pins the 1.1 payload header and accepts legacy empty snapshots", function()
 		assert.are.equal(1, Core.PROTOCOL_MAJOR)
-		assert.are.equal(0, Core.PROTOCOL_MINOR)
-		assert.are.equal("1.0", Core.PROTOCOL_VERSION)
-		assert.are.equal("1:11:01:00:", Core.encode({}))
+		assert.are.equal(1, Core.PROTOCOL_MINOR)
+		assert.are.equal("1.1", Core.PROTOCOL_VERSION)
+		assert.are.equal("1:11:11:00:", Core.encode({}))
+		assert.same({}, Core.decode("1:11:01:00:"))
 		local input = {
 			[41] = { title = "Fishing", state = "active", category = "profession", objectives = {} },
 			[42] = { title = "Mage", state = "completed", category = "class", objectives = {} },

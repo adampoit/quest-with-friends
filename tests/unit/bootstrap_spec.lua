@@ -56,6 +56,7 @@ describe("Quest With Friends installation identity", function()
 				"Client.lua",
 				"QuestCategories.lua",
 				"Core.lua",
+				"ItemStock.lua",
 				"Preview.lua",
 				"Development.lua",
 				"QuestWithFriends.lua",

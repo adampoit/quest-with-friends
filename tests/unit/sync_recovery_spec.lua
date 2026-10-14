@@ -151,6 +151,7 @@ local function network(game, size, minorVersions)
 			"Client.lua",
 			"QuestCategories.lua",
 			"Core.lua",
+			"ItemStock.lua",
 			"QuestWithFriends.lua",
 		}) do
 			setfenv(assert(loadfile(path)), env)()
@@ -242,6 +243,68 @@ end
 
 for _, game in ipairs({ "retail", "forever" }) do
 	describe("Quest With Friends reliable sync on " .. game, function()
+		for _, remoteMinor in ipairs({ 0, 1 }) do
+			it("syncs item stock with a protocol 1." .. remoteMinor .. " peer", function()
+				local n = network(game, 2, { 1, remoteMinor })
+				local a, b = unpack(n.clients)
+				local count = 12
+				a.env.NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5
+				a.env.C_Container = {
+					GetContainerNumSlots = function(bag)
+						return bag == 0 and 1 or 0
+					end,
+					GetContainerItemInfo = function()
+						return {
+							itemID = 2589,
+							itemName = "Linen Cloth",
+							stackCount = count,
+							isBound = false,
+							isLocked = false,
+						}
+					end,
+				}
+				a.env.C_Item = {
+					GetItemInfo = function()
+						return "Linen Cloth", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
+					end,
+				}
+				for index, c in ipairs(n.clients) do
+					c.quests[42] = {
+						title = "Cloth Delivery",
+						state = index == 1 and "ready" or "active",
+						objectives = {
+							{
+								text = "Linen Cloth: " .. (index == 1 and 10 or 3) .. "/10",
+								type = "item",
+								numFulfilled = index == 1 and 10 or 3,
+								numRequired = 10,
+							},
+						},
+					}
+				end
+				n:join()
+				n:advance(5)
+				assert.is_true(a.view.complete)
+				assert.is_true(b.view.complete)
+				assert.are.equal(2, a.view.groups[1].differences[1].objective.spare)
+				local function remoteSpare()
+					for _, difference in ipairs(b.view.groups[1].differences) do
+						if difference.kind == "ahead" and difference.objective then
+							return difference.objective.spare
+						end
+					end
+				end
+				local receivedSpare = remoteSpare()
+				assert.are.equal(remoteMinor == 1 and 2 or nil, receivedSpare)
+				count = 15
+				a:fire("BAG_UPDATE_DELAYED")
+				n:advance(5)
+				assert.are.equal(5, a:snapshots()[#a:snapshots()][42].objectives[1].spare)
+				receivedSpare = remoteSpare()
+				assert.are.equal(remoteMinor == 1 and 5 or nil, receivedSpare)
+			end)
+		end
+
 		it("exchanges baseline snapshots across mixed minor versions without negotiation", function()
 			local n = network(game, 2, { 0, 5 })
 			for _, c in ipairs(n.clients) do
@@ -334,7 +397,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			for _, c in ipairs(n.clients) do
 				assert.is_true(c.view.complete)
 				assert.same({}, c.view.groups)
-				assert.are.equal(1, c:count("1.0:H"))
+				assert.are.equal(1, c:count("1.1:H"))
 				assert.are.equal(1, #c:snapshots())
 				for i = 2, #c.attempts do
 					assert.is_true(c.attempts[i].time - c.attempts[i - 1].time >= 0.499)
@@ -358,7 +421,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			local messages = chunks(a, 100, { [42] = quest(), [43] = quest(string.rep("x", 250)) })
 			a:receive(b.sender, messages[1])
 			for _ = 1, 4 do
-				a:receive(b.sender, "1.0:H")
+				a:receive(b.sender, "1.1:H")
 			end
 			assert.is_false(a.view.complete)
 			assert.are.equal("refreshing", a.view.notices[1].reason)
@@ -369,7 +432,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.is_true(a.view.complete)
 			assert.are.equal(43, a.view.groups[1].questID)
 			n:advance(2)
-			assert.are.equal(1, a:count("1.0:H"))
+			assert.are.equal(1, a:count("1.1:H"))
 		end)
 
 		it("retries a throttled final chunk automatically after both players pick up a quest", function()
@@ -380,7 +443,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(5)
 			local failures, retryTimes, retryMessages = 0, {}, {}
 			a.sendResult = function(message)
-				local _, part, total = message:match("^1%.0:D:(%d+):(%d+):(%d+):")
+				local _, part, total = message:match("^1%.1:D:(%d+):(%d+):(%d+):")
 				if part and part == total then
 					retryTimes[#retryTimes + 1] = n.time
 					retryMessages[#retryMessages + 1] = message
@@ -414,12 +477,12 @@ for _, game in ipairs({ "retail", "forever" }) do
 			a.quests[42].tag = { tagID = 21 }
 			local requests, snapshots = 0, 0
 			a.sendResult = function(message)
-				if message == "1.0:H" then
+				if message == "1.1:H" then
 					requests = requests + 1
 					if requests == 1 then
 						return false
 					end
-				elseif message:sub(1, 6) == "1.0:D:" then
+				elseif message:sub(1, 6) == "1.1:D:" then
 					snapshots = snapshots + 1
 					if snapshots <= 2 then
 						return 5
@@ -456,7 +519,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.are.equal(2, #snapshots)
 			assert.is_nil(snapshots[1][99])
 			assert.are.equal("Version 4", snapshots[2][99].title)
-			assert.are.equal(1, a:count("1.0:H"))
+			assert.are.equal(1, a:count("1.1:H"))
 		end)
 
 		it("recovers a lost chunk after a timeout without another quest event", function()
@@ -467,7 +530,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(5)
 			local dropped = false
 			n.deliver = function(from, recipient, message)
-				local _, part, total = message:match("^1%.0:D:(%d+):(%d+):(%d+):")
+				local _, part, total = message:match("^1%.1:D:(%d+):(%d+):(%d+):")
 				if from == a and recipient == b and part == total and not dropped then
 					dropped = true
 					return false
@@ -483,7 +546,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(45)
 			assert.is_true(b.view.complete)
 			assert.are.equal(43, b.view.groups[1].questID)
-			assert.are.equal(2, b:count("1.0:H"))
+			assert.are.equal(2, b:count("1.1:H"))
 		end)
 
 		it("coalesces simultaneous timeout recovery requests from three peers", function()
@@ -498,7 +561,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 				a:receive(n.clients[i].sender, chunks(a, 100 + i, { [43] = quest(string.rep("x", 250)) })[1])
 			end
 			n:advance(16)
-			assert.are.equal(2, a:count("1.0:H"))
+			assert.are.equal(2, a:count("1.1:H"))
 			assert.are.equal(3, #a.view.notices)
 			for _, notice in ipairs(a.view.notices) do
 				assert.are.equal("stale", notice.reason)
@@ -524,14 +587,14 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.is_false(a.view.complete)
 			assert.are.equal(43, a.view.groups[1].questID)
 			n:advance(120)
-			assert.is_true(a:count("1.0:H") <= 5)
+			assert.is_true(a:count("1.1:H") <= 5)
 			for i = 2, #messages do
 				a:receive(b.sender, messages[i])
 			end
 			assert.is_true(a.view.complete)
-			local requests = a:count("1.0:H")
+			local requests = a:count("1.1:H")
 			n:advance(120)
-			assert.are.equal(requests, a:count("1.0:H"))
+			assert.are.equal(requests, a:count("1.1:H"))
 		end)
 
 		it("applies classifications only when the full revision assembles", function()
@@ -559,7 +622,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.are.equal(43, a.view.groups[1].questID)
 		end)
 
-		for _, message in ipairs({ "2.0:H", "broken", "1.00:H", "1.0:" }) do
+		for _, message in ipairs({ "2.0:H", "broken", "1.00:H", "1.1:" }) do
 			it("stops recovery after " .. message .. " and resumes on valid data", function()
 				local n = network(game)
 				local a, b = unpack(n.clients)
@@ -572,9 +635,9 @@ for _, game in ipairs({ "retail", "forever" }) do
 				a:receive(b.sender, message)
 				assert.are.equal("incompatible", a.view.notices[1].reason)
 				assert.is_false(a.view.complete)
-				local requests = a:count("1.0:H")
+				local requests = a:count("1.1:H")
 				n:advance(180)
-				assert.are.equal(requests, a:count("1.0:H"))
+				assert.are.equal(requests, a:count("1.1:H"))
 				a:receive(b.sender, chunks(a, 1, {})[1])
 				assert.is_true(a.view.complete)
 				assert.same({}, a.view.notices)
@@ -590,11 +653,11 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:join()
 			n:advance(5)
 			assert.are.equal("unknown", a.view.notices[1].reason)
-			a:receive(b.sender, "1.0:H")
+			a:receive(b.sender, "1.1:H")
 			assert.are.equal("waiting", a.view.notices[1].reason)
 			n:advance(16)
 			assert.are.equal("waiting", a.view.notices[1].reason)
-			assert.are.equal(2, a:count("1.0:H"))
+			assert.are.equal(2, a:count("1.1:H"))
 			a:receive(b.sender, chunks(a, 1, {})[1])
 			assert.is_true(a.view.complete)
 		end)
@@ -606,7 +669,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(5)
 			a:receive(b.sender, chunks(a, 100, { [43] = quest() })[1])
 			a:receive(b.sender, chunks(a, 101, { [43] = quest(string.rep("x", 250)) })[1])
-			a:receive(b.sender, "1.0:H")
+			a:receive(b.sender, "1.1:H")
 			assert.are.equal(43, a.view.groups[1].questID)
 			a:receive(b.sender, chunks(a, 1, {})[1])
 			assert.is_true(a.view.complete)
@@ -640,11 +703,11 @@ for _, game in ipairs({ "retail", "forever" }) do
 			a:fire("GROUP_ROSTER_UPDATE")
 			n:advance(5)
 			assert.is_true(a.view.complete)
-			local previous = a:count("1.0:H")
+			local previous = a:count("1.1:H")
 			a.env.SlashCmdList.QUESTWITHFRIENDS("")
 			assert.are.equal("refreshing", a.view.notices[1].reason)
 			n:advance(5)
-			assert.are.equal(previous + 1, a:count("1.0:H"))
+			assert.are.equal(previous + 1, a:count("1.1:H"))
 			assert.is_true(a.view.complete)
 		end)
 
@@ -666,9 +729,9 @@ for _, game in ipairs({ "retail", "forever" }) do
 			a.env.SlashCmdList.QUESTWITHFRIENDS("")
 			n:advance(5)
 			assert.are.equal("offline", a.view.notices[1].reason)
-			local requests = a:count("1.0:H")
+			local requests = a:count("1.1:H")
 			n:advance(120)
-			assert.are.equal(requests, a:count("1.0:H"))
+			assert.are.equal(requests, a:count("1.1:H"))
 			b.quests = { [43] = quest("Fresh errand") }
 			a.offline[2], n.deliver = nil, nil
 			a:fire("UNIT_CONNECTION", "party1", true)
@@ -691,11 +754,11 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(5)
 			assert.are.equal("offline", a.view.notices[1].reason)
 			assert.is_false(a.view.complete)
-			local requests = a:count("1.0:H")
+			local requests = a:count("1.1:H")
 			a:fire("UNIT_CONNECTION", "player", true)
 			a:fire("UNIT_CONNECTION", "target", true)
 			n:advance(120)
-			assert.are.equal(requests, a:count("1.0:H"))
+			assert.are.equal(requests, a:count("1.1:H"))
 			a.offline[2], n.deliver = nil, nil
 			a:fire("UNIT_CONNECTION", "party1", true)
 			n:advance(5)
@@ -714,7 +777,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			local n = network(game)
 			local a, b = unpack(n.clients)
 			n.deliver = function(from, _, message)
-				return from ~= b or message == "1.0:H"
+				return from ~= b or message == "1.1:H"
 			end
 			n:join()
 			n:advance(5)
@@ -722,9 +785,9 @@ for _, game in ipairs({ "retail", "forever" }) do
 			a.offline[2] = true
 			a:fire("UNIT_CONNECTION", "party1", false)
 			n:advance(5)
-			local requests = a:count("1.0:H")
+			local requests = a:count("1.1:H")
 			n:advance(120)
-			assert.are.equal(requests, a:count("1.0:H"))
+			assert.are.equal(requests, a:count("1.1:H"))
 			assert.are.equal("offline", a.view.notices[1].reason)
 			assert.is_false(a.view.complete)
 		end)

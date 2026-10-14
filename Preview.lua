@@ -21,7 +21,7 @@ local mine = {
 	[-1] = quest("The Lost Supplies", "active"),
 	[-2] = quest("Gnoll Hunt", "active", {
 		{ text = "Gnolls slain", have = 8, need = 8 },
-		{ text = "Gnoll battle plans", have = 3, need = 3 },
+		{ text = "Linen Cloth", have = 10, need = 10, itemID = 2589, spare = 2 },
 	}),
 	[-3] = quest("The Missing Scout", "active", {
 		{ text = "Scouts rescued", have = 0, need = 1 },
@@ -36,7 +36,7 @@ local members = {
 		quests = {
 			[-2] = quest("Gnoll Hunt", "active", {
 				{ text = "Gnolls slain", have = 5, need = 8 },
-				{ text = "Gnoll battle plans", have = 1, need = 3 },
+				{ text = "Linen Cloth", have = 3, need = 10 },
 			}),
 			[-3] = quest("The Missing Scout", "ready", {
 				{ text = "Scouts rescued", have = 1, need = 1 },

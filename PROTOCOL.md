@@ -1,21 +1,21 @@
-# Quest With Friends protocol 1.0
+# Quest With Friends protocol 1.1
 
-Protocol versions are independent of addon release versions. The addon sends protocol **1.0** using the `QWF` addon prefix and `PARTY` channel. Readers accept any supported **major** version regardless of its minor version, validating and skipping unknown optional extensions. There is no negotiation or fallback to unversioned or integer-version development formats.
+Protocol versions are independent of addon release versions. The addon sends protocol **1.1** using the `QWF` addon prefix and `PARTY` channel. Readers accept any supported **major** version regardless of its minor version, validating and skipping unknown optional extensions. There is no negotiation or fallback to unversioned or integer-version development formats.
 
 ## Compatibility rules
 
 - **Major:** selects the required schema and baseline semantics. Changing existing fields, meanings, states, categories, encoding, or limits requires a major bump.
 - **Minor:** introduces optional extension tags or optional message kinds. Missing or unknown additions must not prevent baseline synchronization or change its meaning. Added features fall back to baseline behavior when their data is absent.
 - Major and minor components are canonical decimal integers: major 1–999, minor 0–999. Leading zeroes, signs, fractions, and exponent forms are invalid.
-- Protocol 1.0 has no defined extension tags. Normal addon snapshots emit empty extension sections. The generic codec can serialize extension maps, but the 1.0 reader validates and discards every extension value.
+- Protocol 1.0 has no defined extension tags; its reader validates and discards every extension value. Protocol 1.1 adds the optional quest-level `item_stock` tag. Older peers retain baseline comparisons without spare-item rows.
 - Unknown message kinds within a supported major are ignored. Extensions do not replace required fields or relax their validation. Extension names retain their meaning within a major and must not be repurposed.
 
 ## Message envelopes
 
 ```text
-1.0:H
-1.0:X
-1.0:D:<revision>:<part>:<total>:<payload fragment>
+1.1:H
+1.1:X
+1.1:D:<revision>:<part>:<total>:<payload fragment>
 ```
 
 The `major.minor` marker prefixes every message. For example, a 1.0 reader accepts `1.7:H` and baseline snapshots from `1.7:D:...`, but rejects major 2.
@@ -43,7 +43,7 @@ Lengths count bytes, not Unicode characters. Empty values are `0:`. Colons, pipe
 Fields, in order:
 
 1. Protocol major: `1`.
-2. Protocol minor: `0` for this release; higher minors are accepted.
+2. Protocol minor: `1` for this release; older and higher minors are accepted.
 3. Quest count: 0–500.
 4. For each quest, sorted by actual quest ID:
    - Quest ID: 1–100,000,000; duplicates are invalid.
@@ -56,10 +56,10 @@ Fields, in order:
      - Text: up to 500 bytes.
      - Fulfilled count: 0–100,000,000.
      - Required count: 0–100,000,000.
-   - Quest extension block: one length-prefixed field, empty in 1.0.
-5. Snapshot extension block: one length-prefixed field, empty in 1.0.
+   - Quest extension block: one length-prefixed field; optionally contains `item_stock` in 1.1.
+5. Snapshot extension block: one length-prefixed field, empty in 1.0 and 1.1.
 
-Numeric values contain decimal digits only; signed, fractional, and exponent forms are invalid. Version components additionally require canonical spelling. The complete payload is limited to **22,000 bytes**. An empty 1.0 snapshot encodes as `1:11:01:00:`.
+Numeric values contain decimal digits only; signed, fractional, and exponent forms are invalid. Version components additionally require canonical spelling. The complete payload is limited to **22,000 bytes**. An empty 1.1 snapshot encodes as `1:11:11:00:`; the 1.0 encoding `1:11:01:00:` remains accepted.
 
 Categories belong to this snapshot revision. A later empty category removes the previous classification, and removing a quest also removes its remote classification. There are no separate category messages.
 
@@ -71,7 +71,7 @@ Both extension scopes use the same format. The outer field's byte length delimit
 <block byte length>:<tag byte length>:<tag><value byte length>:<value>...
 ```
 
-For example, the hypothetical tag `chain_id` with value `123` produces `15:8:chain_id3:123`. This is illustrative, not a defined 1.0 feature.
+For example, the hypothetical tag `chain_id` with value `123` produces `15:8:chain_id3:123`. This is illustrative, not a defined feature.
 
 - Each block is limited to 1,024 bytes and 32 entries.
 - Tags contain 1–32 ASCII bytes and match `[a-z][a-z0-9_]*`.
@@ -81,6 +81,22 @@ For example, the hypothetical tag `chain_id` with value `123` produces `15:8:cha
 - Empty blocks are `0:` and are required even when there are no extensions.
 
 An invalid extension invalidates the whole snapshot. A valid unknown extension does not alter baseline quest state, classifications, comparisons, or completeness. Dropping unknown extensions is intentional: older readers do not preserve or retransmit them.
+
+### Quest extension: `item_stock` (1.1)
+
+The value is a sequence of length-prefixed triples, without a header or count:
+
+```text
+<objective index><item ID><spare count>...
+```
+
+Indices are 1-based positions in the baseline objective array, strictly increasing and unique. Each index must exist and have a positive required count. Item IDs are 1–100,000,000; spare counts are 0–100,000,000. Positive spare counts require baseline fulfilled >= required. Malformed triples reject the entire snapshot. The tag is interpreted only when the snapshot and reader support minor 1 or later. Baseline objective counts and states remain unchanged.
+
+An entry identifies a conservatively matched, never-binding carried item. The spare count excludes bound/locked stacks and reserves the full quantities needed by all matching logged item objectives, including filtered quests. Inventory is scanned only in equipped bags, not banks. Senders match an item objective's normalized text exactly to a unique carried item name and require its capped objective progress to agree with carried stock. Uncached, ambiguous or mismatched data has no entry; this name-based association is not a quest-API-provided item identity. Missing inventory APIs also omit this feature.
+
+The 512-byte value limit applies. Senders include entries in objective order and omit later entries that do not fit, preserving the complete baseline objective array. No entry means unknown, not zero spare; an explicit zero identifies a matched item without any confirmed spare stock. On receipt, a complete snapshot replaces all prior stock metadata atomically.
+
+Show a finished holder's objective only while a comparable member still needs it. Targets must agree; cross-ID variants additionally require both item IDs to match, and state-only variants never gain item rows. Known conflicting item IDs are not compared for stock. Finished item progress is capped for presentation, with ` · N spare` appended only for positive spare counts. Ready/completed state labels remain distinct; completed history never supplies item stock. Stock alone does not create an out-of-sync quest group when everyone is caught up.
 
 ## Delivery and recovery
 

@@ -11,6 +11,7 @@ QuestEquivalences.lua
 Client.lua
 QuestCategories.lua
 Core.lua
+ItemStock.lua
 Preview.lua
 QuestWithFriends.lua
 Panel.lua

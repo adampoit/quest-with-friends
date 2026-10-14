@@ -7,7 +7,7 @@ QuestWithFriends = QWF
 QWF.Core = {}
 local Core = QWF.Core
 Core.PROTOCOL_MAJOR = 1
-Core.PROTOCOL_MINOR = 0
+Core.PROTOCOL_MINOR = 1
 Core.PROTOCOL_VERSION = Core.PROTOCOL_MAJOR .. "." .. Core.PROTOCOL_MINOR
 Core.MAX_SNAPSHOT_BYTES = 22000
 local MAX_EXTENSION_BYTES = 1024
@@ -81,7 +81,7 @@ local function encodeExtensions(extensions)
 	return data
 end
 
-local function validExtensions(data)
+local function decodeExtensions(data)
 	if not data then
 		return false
 	end
@@ -96,9 +96,53 @@ local function validExtensions(data)
 		if not value or not afterValue then
 			return false
 		end
-		seen[tag] = true
+		seen[tag] = value
 		count = count + 1
 		position = afterValue
+	end
+	return seen
+end
+
+local function encodeItemStock(objectives)
+	local parts, size = {}, 0
+	for index, objective in ipairs(objectives) do
+		if objective.itemID and objective.spare ~= nil then
+			local row = field(index) .. field(objective.itemID) .. field(objective.spare)
+			if size + #row > MAX_EXTENSION_VALUE_BYTES then
+				break
+			end
+			parts[#parts + 1] = row
+			size = size + #row
+		end
+	end
+	return #parts > 0 and table.concat(parts) or nil
+end
+
+local function decodeItemStock(data, objectives)
+	local position, previous = 1, 0
+	while position <= #data do
+		local indexText, afterIndex = readField(data, position, 2)
+		local index = integer(indexText, #objectives)
+		if not index or index <= previous or not afterIndex then
+			return false
+		end
+		local idText, afterID = readField(data, afterIndex, 9)
+		local id = integer(idText, 100000000)
+		if not id or id == 0 or not afterID then
+			return false
+		end
+		local spareText, afterSpare = readField(data, afterID, 9)
+		local spare = integer(spareText, 100000000)
+		if
+			not spare
+			or not afterSpare
+			or objectives[index].need == 0
+			or (spare > 0 and objectives[index].have < objectives[index].need)
+		then
+			return false
+		end
+		objectives[index].itemID, objectives[index].spare = id, spare
+		previous, position = index, afterSpare
 	end
 	return true
 end
@@ -121,7 +165,14 @@ function Core.encode(quests, extensions)
 		for _, objective in ipairs(quest.objectives) do
 			parts[#parts + 1] = field(objective.text) .. field(objective.have) .. field(objective.need)
 		end
-		parts[#parts + 1] = field(encodeExtensions(quest.extensions))
+		local questExtensions = {}
+		for tag, value in pairs(quest.extensions or {}) do
+			questExtensions[tag] = value
+		end
+		if Core.PROTOCOL_MINOR >= 1 then
+			questExtensions.item_stock = encodeItemStock(quest.objectives) or questExtensions.item_stock
+		end
+		parts[#parts + 1] = field(encodeExtensions(questExtensions))
 	end
 	parts[#parts + 1] = field(encodeExtensions(extensions))
 	return table.concat(parts)
@@ -186,8 +237,16 @@ function Core.decode(data, expectedVersion)
 			end
 			objectives[#objectives + 1] = { text = text, have = have, need = need }
 		end
-		-- Optional fields cannot change baseline quest semantics in this reader.
-		if not validExtensions(nextField(MAX_EXTENSION_BYTES)) then
+		local extensions = decodeExtensions(nextField(MAX_EXTENSION_BYTES))
+		if not extensions then
+			return nil
+		end
+		if
+			Core.PROTOCOL_MINOR >= 1
+			and tonumber(minorText) >= 1
+			and extensions.item_stock
+			and not decodeItemStock(extensions.item_stock, objectives)
+		then
 			return nil
 		end
 		quests[id] = {
@@ -198,7 +257,7 @@ function Core.decode(data, expectedVersion)
 			category = category ~= "" and category or nil,
 		}
 	end
-	if not validExtensions(nextField(MAX_EXTENSION_BYTES)) or position ~= #data + 1 then
+	if not decodeExtensions(nextField(MAX_EXTENSION_BYTES)) or position ~= #data + 1 then
 		return nil
 	end
 	return quests
@@ -352,7 +411,12 @@ function Core.compare(localQuests, members, zoneID)
 				reason = reason,
 			}
 			if objective then
-				difference.objective = { text = safeText(objective.text), have = objective.have, need = objective.need }
+				difference.objective = {
+					text = safeText(objective.text),
+					have = objective.have,
+					need = objective.need,
+					spare = objective.spare,
+				}
 			end
 			group.differences[#group.differences + 1] = difference
 			playerOrder[difference] = playerIndex
@@ -390,6 +454,27 @@ function Core.compare(localQuests, members, zoneID)
 				end
 			end
 		end
+		local function addItemStock(playerIndex, quest, other, sameID)
+			if quest.state == "completed" or other.state ~= "active" then
+				return
+			end
+			for index, objective in ipairs(quest.objectives) do
+				local remaining = other.objectives[index]
+				if
+					objective.itemID
+					and objective.spare ~= nil
+					and objective.need > 0
+					and objective.have >= objective.need
+					and remaining
+					and remaining.need == objective.need
+					and remaining.have < remaining.need
+					and (sameID or remaining.itemID == objective.itemID)
+					and (not remaining.itemID or remaining.itemID == objective.itemID)
+				then
+					addDifference(playerIndex, "ahead", "objective", index, objective)
+				end
+			end
+		end
 		local function comparePair(firstIndex, secondIndex)
 			local firstQuests, secondQuests = snapshots[firstIndex], snapshots[secondIndex]
 			local first, firstID = Core.matchQuest(firstQuests, id)
@@ -410,6 +495,10 @@ function Core.compare(localQuests, members, zoneID)
 				addDifference(firstIndex, "missing", "missing")
 			elseif first and second then
 				local comparable = firstID == secondID or Core.questIDs(id).progress ~= "state"
+				if comparable then
+					addItemStock(firstIndex, first, second, firstID == secondID)
+					addItemStock(secondIndex, second, first, firstID == secondID)
+				end
 				if first.state ~= second.state then
 					addQuestState(firstIndex, first, comparable)
 					addQuestState(secondIndex, second, comparable)

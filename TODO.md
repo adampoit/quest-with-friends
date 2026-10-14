@@ -17,4 +17,4 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Show remaining objective counts after turn-in.** Compare unfinished players with ready-to-turn-in or completed quests across the whole party.
 - [x] **Offline member handling.** Show a distinct Offline notice, retain cached comparisons, and resume syncing automatically on reconnection.
 - [x] **Redundant counts in the UI**
-- [ ] We should show x/y for members where x is greater than or equal to y. That way people can see show can trade items
+- [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.

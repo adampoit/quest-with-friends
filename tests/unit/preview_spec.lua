@@ -21,6 +21,12 @@ describe("Quest With Friends sample data", function()
 		assert.are.equal("Gnoll Hunt", group.title)
 		assert.same({
 			{
+				player = "You",
+				kind = "ahead",
+				reason = "objective",
+				objective = { text = "Linen Cloth", have = 10, need = 10, spare = 2 },
+			},
+			{
 				player = "Alex",
 				kind = "needs",
 				reason = "objective",
@@ -30,7 +36,13 @@ describe("Quest With Friends sample data", function()
 				player = "Alex",
 				kind = "needs",
 				reason = "objective",
-				objective = { text = "Gnoll battle plans", have = 1, need = 3 },
+				objective = { text = "Linen Cloth", have = 3, need = 10 },
+			},
+			{
+				player = "Sam",
+				kind = "ahead",
+				reason = "objective",
+				objective = { text = "Linen Cloth", have = 10, need = 10, spare = 2 },
 			},
 		}, group.differences)
 	end)

@@ -65,7 +65,7 @@ describe("Quest With Friends two Forever clients", function()
 					assert.are.equal("QWF", prefix)
 					assert.are.equal("PARTY", channel)
 					outgoing[#outgoing + 1] = { sender = first .. " " .. last, message = message }
-					if message:match("^1%.0:D:") then
+					if message:match("^1%.1:D:") then
 						c.snapshots = c.snapshots + 1
 					end
 					return 0
@@ -99,6 +99,7 @@ describe("Quest With Friends two Forever clients", function()
 				"Client.lua",
 				"QuestCategories.lua",
 				"Core.lua",
+				"ItemStock.lua",
 				"QuestWithFriends.lua",
 			}) do
 				setfenv(assert(loadfile(path)), env)()

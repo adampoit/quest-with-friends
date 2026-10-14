@@ -325,7 +325,7 @@ local function collapsedSummary(group)
 			players[difference.player] = true
 			count = count + 1
 		end
-		if difference.reason ~= reason then
+		if difference.reason ~= reason or difference.kind == "ahead" then
 			reason = false
 		end
 	end
@@ -513,9 +513,14 @@ local labels = {
 
 local function differenceText(difference)
 	local objective = difference.objective
-	local text = objective and (objective.text .. " " .. objective.have .. "/" .. objective.need)
-		or labels[difference.reason]
-		or "Status unknown"
+	local text = labels[difference.reason] or "Status unknown"
+	if objective then
+		local have = objective.spare ~= nil and math.min(objective.have, objective.need) or objective.have
+		text = objective.text .. " " .. have .. "/" .. objective.need
+		if objective.spare and objective.spare > 0 then
+			text = text .. " · " .. objective.spare .. " spare"
+		end
+	end
 	return difference.player .. ": " .. text
 end
 

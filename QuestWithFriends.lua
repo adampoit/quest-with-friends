@@ -171,7 +171,7 @@ local function categoryHeaders()
 end
 
 local function collectQuests()
-	local quests = {}
+	local quests, itemObjectives = {}, {}
 	local headers = categoryHeaders()
 	local headerCategory
 	local filtered = 0
@@ -191,7 +191,11 @@ local function collectQuests()
 				local need = tonumber(objective.numRequired) or 0
 				local have = tonumber(objective.numFulfilled) or (objective.finished and need or 0)
 				local text = (objective.text or ""):gsub("^%s*%d+/%d+%s+", ""):gsub(":%s*%d+/%d+%s*$", "")
-				objectives[#objectives + 1] = { text = text, have = have, need = need }
+				local progress = { text = text, have = have, need = need }
+				objectives[#objectives + 1] = progress
+				if objective.type == "item" then
+					itemObjectives[#itemObjectives + 1] = progress
+				end
 			end
 			quests[id] = {
 				title = info.title or ("Quest " .. id),
@@ -202,6 +206,7 @@ local function collectQuests()
 			}
 		end
 	end
+	QWF.ItemStock.annotate(itemObjectives)
 	local visible = 0
 	for _ in pairs(quests) do
 		visible = visible + 1
@@ -949,6 +954,9 @@ frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 frame:RegisterEvent("UNIT_CONNECTION")
 frame:RegisterEvent("QUEST_LOG_UPDATE")
+frame:RegisterEvent("BAG_UPDATE_DELAYED")
+frame:RegisterEvent("ITEM_LOCK_CHANGED")
+frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 frame:RegisterEvent("QUEST_ACCEPTED")
 frame:RegisterEvent("QUEST_REMOVED")
 frame:RegisterEvent("QUEST_TURNED_IN")
@@ -993,6 +1001,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" or event == "ZONE_CHANGED_NEW_AREA" then
 		render()
+	elseif event == "GET_ITEM_INFO_RECEIVED" and select(2, ...) ~= true then
+		return
 	else
 		if event == "QUEST_TURNED_IN" then
 			local id = ...
