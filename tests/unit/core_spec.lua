@@ -2,9 +2,9 @@ describe("Quest With Friends core", function()
 	local Core
 	before_each(function()
 		QuestWithFriends = nil
-		assert(loadfile("QuestEquivalences.lua"))()
+		assert(loadfile("src/QuestEquivalences.lua"))()
 		assert(loadfile("tests/fixtures/quest_equivalences.lua"))()
-		assert(loadfile("Core.lua"))()
+		assert(loadfile("src/Core.lua"))()
 		Core = QuestWithFriends.Core
 	end)
 

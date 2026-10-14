@@ -6,13 +6,14 @@ import re
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import cast
+from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile
 
 ADDON_NAME = "QuestWithFriends"
 ADDON_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_ASSETS = ("Media/QuestToggle.tga", "Media/PanelLock.tga")
 DEV_ADDON_NAME = "QuestWithFriendsDev"
-DEV_FILES = ("Development.lua", "InGameTests.lua")
+DEV_FILES = ("dev/Development.lua", "dev/InGameTests.lua")
 
 
 def development_toc(toc: str) -> str:
@@ -26,13 +27,9 @@ def development_toc(toc: str) -> str:
 	toc = re.sub(r"(?m)^(## OptionalDeps:.*)$", r"\1, QuestWithFriends", toc)
 	toc = re.sub(r"(?m)^## X-(?:Wago-ID|Curse-Project-ID):.*\n?", "", toc)
 	lines = toc.splitlines()
-	index = (
-		lines.index("QuestWithFriends.lua")
-		if "QuestWithFriends.lua" in lines
-		else len(lines)
-	)
-	lines.insert(index, "Development.lua")
-	lines.append("InGameTests.lua")
+	index = lines.index("src/Load.xml") if "src/Load.xml" in lines else len(lines)
+	lines.insert(index, DEV_FILES[0])
+	lines.append(DEV_FILES[1])
 	return "\n".join(lines) + "\n"
 
 
@@ -75,18 +72,49 @@ def bundle(
 			names.append(name)
 
 	files: dict[str, Path] = {}
-	for name in names:
-		relative = PurePosixPath(name)
-		if relative.is_absolute() or ".." in relative.parts or ":" in name:
-			raise ValueError(f"Unsafe TOC path: {name}")
-		if not development and relative.as_posix() in DEV_FILES:
-			raise ValueError(f"Development-only file in release TOC: {name}")
+	loading: set[str] = set()
+
+	def add_file(name: str, parent: PurePosixPath) -> None:
+		relative = PurePosixPath(name.replace("\\", "/"))
+		if (
+			not relative.parts
+			or relative.is_absolute()
+			or ".." in relative.parts
+			or ":" in name
+		):
+			raise ValueError(f"Unsafe manifest path: {name}")
+		relative = parent / relative
+		name = relative.as_posix()
+		if not development and (
+			relative.parts[0] == "dev"
+			or relative.name in ("Development.lua", "InGameTests.lua")
+		):
+			raise ValueError(f"Development-only file in release manifest: {name}")
 		source = (root / relative).resolve()
 		if not source.is_relative_to(root):
 			raise ValueError(f"File points outside the addon: {name}")
 		if not source.is_file():
 			raise ValueError(f"Required addon file is missing: {name}")
-		files[relative.as_posix()] = source
+		if name in loading:
+			raise ValueError(f"Circular XML include: {name}")
+		if name in files:
+			return
+		files[name] = source
+		if relative.suffix.lower() == ".xml":
+			loading.add(name)
+			try:
+				document = ElementTree.parse(source)
+			except ElementTree.ParseError as error:
+				raise ValueError(f"Invalid XML manifest {name}: {error}") from error
+			for element in document.iter():
+				if element.tag.rsplit("}", 1)[-1] in ("Script", "Include"):
+					dependency = element.get("file")
+					if dependency:
+						add_file(dependency, relative.parent)
+			loading.remove(name)
+
+	for name in names:
+		add_file(name, PurePosixPath())
 
 	output = (
 		output or root / "dist" / f"{addon_name}-{version_match[1]}.zip"

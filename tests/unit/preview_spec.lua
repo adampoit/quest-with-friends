@@ -2,9 +2,9 @@ describe("Quest With Friends sample data", function()
 	local Preview
 	before_each(function()
 		QuestWithFriends = nil
-		assert(loadfile("QuestEquivalences.lua"))()
-		assert(loadfile("Core.lua"))()
-		assert(loadfile("Preview.lua"))()
+		assert(loadfile("src/QuestEquivalences.lua"))()
+		assert(loadfile("src/Core.lua"))()
+		assert(loadfile("src/Preview.lua"))()
 		Preview = QuestWithFriends.Preview
 	end)
 

@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from xml.etree import ElementTree
 from zipfile import ZipFile
 
 from tools.bundle_addon import (
@@ -70,6 +71,7 @@ class BundleTests(unittest.TestCase):
 
 	def test_release_excludes_development_files_and_generated_toc(self):
 		for name in (*DEV_FILES, "QuestWithFriendsDev.toc"):
+			(self.root / name).parent.mkdir(parents=True, exist_ok=True)
 			_ = (self.root / name).write_text("-- dev only\n")
 		with ZipFile(bundle(self.root)) as archive:
 			for name in (*DEV_FILES, "QuestWithFriendsDev.toc"):
@@ -92,12 +94,23 @@ class BundleTests(unittest.TestCase):
 		self.assertIn("## SavedVariables: QuestWithFriendsDevDB", dev)
 		self.assertIn("## OptionalDeps: AddonKit, QuestWithFriends", dev)
 		self.assertNotIn("X-Wago-ID", dev)
-		files = [line for line in dev.splitlines() if line.endswith(".lua")]
-		self.assertEqual("Bootstrap.lua", files[0])
-		self.assertLess(
-			files.index("Development.lua"), files.index("QuestWithFriends.lua")
+		files = [line for line in dev.splitlines() if line.endswith((".lua", ".xml"))]
+		self.assertEqual(
+			["src/Bootstrap.lua", DEV_FILES[0], "src/Load.xml", DEV_FILES[1]], files
 		)
-		self.assertEqual("InGameTests.lua", files[-1])
+		root = ElementTree.parse(ADDON_ROOT / "src/Load.xml").getroot()
+		runtime = [element.attrib["file"] for element in root]
+		self.assertLess(
+			runtime.index("Core.lua"), runtime.index("QuestWithFriends.lua")
+		)
+		self.assertEqual("Panel.lua", runtime[-1])
+		listed = {"src/Bootstrap.lua", *(f"src/{name}" for name in runtime), *DEV_FILES}
+		actual = {
+			path.relative_to(ADDON_ROOT).as_posix()
+			for directory in ("src", "dev")
+			for path in (ADDON_ROOT / directory).rglob("*.lua")
+		}
+		self.assertEqual(actual, listed)
 
 	def test_development_bundle_uses_a_separate_installation(self):
 		with tempfile.TemporaryDirectory() as temp:
@@ -138,6 +151,7 @@ class BundleTests(unittest.TestCase):
 	def test_cannot_overwrite_source_toc(self):
 		for development in (False, True):
 			for name in DEV_FILES:
+				(self.root / name).parent.mkdir(parents=True, exist_ok=True)
 				_ = (self.root / name).write_text("-- dev only\n")
 			with self.assertRaisesRegex(ValueError, "overwrite"):
 				_ = bundle(
@@ -254,6 +268,80 @@ class BundleTests(unittest.TestCase):
 				)
 				with self.assertRaisesRegex(ValueError, "Unsafe"):
 					_ = bundle(self.root)
+
+	def test_shared_xml_additions_need_no_dev_toc_regeneration(self):
+		(self.root / "src").mkdir()
+		manifest = self.root / "src/Load.xml"
+		_ = manifest.write_text('<Ui><Script file="First.lua"/></Ui>')
+		_ = (self.root / "src/First.lua").write_text("-- first\n")
+		_ = (self.root / "QuestWithFriends.toc").write_text(
+			"## Version: 0.1.0\nsrc/Load.xml\n"
+		)
+		for name in DEV_FILES:
+			(self.root / name).parent.mkdir(parents=True, exist_ok=True)
+			_ = (self.root / name).write_text("-- dev\n")
+		dev_toc = write_development_toc(self.root)
+		original = dev_toc.read_bytes()
+		_ = manifest.write_text(
+			'<Ui xmlns="http://www.blizzard.com/wow/ui/">'
+			+ '<Script file="First.lua"/><Include file="nested/Load.xml"/></Ui>'
+		)
+		(self.root / "src/nested").mkdir()
+		_ = (self.root / "src/nested/Load.xml").write_text(
+			'<Ui><Script file="Extra.lua"/></Ui>'
+		)
+		_ = (self.root / "src/nested/Extra.lua").write_text("-- extra\n")
+		_ = (self.root / "src/Unlisted.lua").write_text("-- not shipped\n")
+		for development in (False, True):
+			prefix = "QuestWithFriendsDev" if development else "QuestWithFriends"
+			with ZipFile(bundle(self.root, development=development)) as archive:
+				for name in (
+					"src/Load.xml",
+					"src/First.lua",
+					"src/nested/Load.xml",
+					"src/nested/Extra.lua",
+				):
+					self.assertIn(f"{prefix}/{name}", archive.namelist())
+				self.assertNotIn(f"{prefix}/src/Unlisted.lua", archive.namelist())
+		self.assertEqual(original, dev_toc.read_bytes())
+		self.assertEqual(
+			original.decode(),
+			development_toc((self.root / "QuestWithFriends.toc").read_text()),
+		)
+
+	def test_invalid_xml_dependencies_preserve_previous_bundle(self):
+		output = bundle(self.root)
+		previous = output.read_bytes()
+		_ = (self.root / "QuestWithFriends.toc").write_text(
+			"## Version: 0.1.0\nLoad.xml\n"
+		)
+		for xml, error in (
+			('<Ui><Script file="Missing.lua"/></Ui>', "missing"),
+			('<Ui><Include file="Load.xml"/></Ui>', "Circular"),
+			('<Ui><Script file="../secret.lua"/></Ui>', "Unsafe"),
+			('<Ui><Script file="/tmp/secret.lua"/></Ui>', "Unsafe"),
+			('<Ui><Script file="C:\\secret.lua"/></Ui>', "Unsafe"),
+			('<Ui><Include file="dev/Load.xml"/></Ui>', "Development-only"),
+			('<Ui><Script file="Development.lua"/></Ui>', "Development-only"),
+			("<Ui>", "Invalid XML"),
+		):
+			with self.subTest(xml=xml):
+				_ = (self.root / "Load.xml").write_text(xml)
+				with self.assertRaisesRegex(ValueError, error):
+					_ = bundle(self.root)
+				self.assertEqual(previous, output.read_bytes())
+
+	def test_checkout_release_bundle_contains_all_shared_runtime_files(self):
+		with tempfile.TemporaryDirectory() as temp:
+			with ZipFile(bundle(ADDON_ROOT, Path(temp) / "release.zip")) as archive:
+				for source in (ADDON_ROOT / "src").rglob("*"):
+					if source.is_file():
+						name = source.relative_to(ADDON_ROOT).as_posix()
+						self.assertEqual(
+							source.read_bytes(),
+							archive.read(f"QuestWithFriends/{name}"),
+						)
+				self.assertFalse(any("/dev/" in name for name in archive.namelist()))
 
 	def test_cannot_overwrite_runtime_file(self):
 		with self.assertRaisesRegex(ValueError, "overwrite"):

@@ -235,7 +235,7 @@ describe("Quest With Friends panel", function()
 
 	local function loadPanel()
 		_G.QuestWithFriends = { db = QuestWithFriendsDB }
-		assert(loadfile("Panel.lua"))()
+		assert(loadfile("src/Panel.lua"))()
 		QuestWithFriends.Panel.show({}, true, true, function() end)
 	end
 

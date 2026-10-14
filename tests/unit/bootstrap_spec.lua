@@ -20,7 +20,7 @@ describe("Quest With Friends installation identity", function()
 		local release = { Core = {} }
 		env.QuestWithFriends = release
 		local dev = {}
-		load(env, "Bootstrap.lua", "QuestWithFriendsDev", dev)
+		load(env, "src/Bootstrap.lua", "QuestWithFriendsDev", dev)
 		assert.is_true(dev.disabled)
 		assert.are.equal(release, env.QuestWithFriends)
 		assert.are.equal(1, #notices)
@@ -30,7 +30,7 @@ describe("Quest With Friends installation identity", function()
 		it("sets explicit identity and asset paths for " .. name, function()
 			local env = environment()
 			local namespace = {}
-			load(env, "Bootstrap.lua", name, namespace)
+			load(env, "src/Bootstrap.lua", name, namespace)
 			assert.are.equal(namespace, env.QuestWithFriends)
 			assert.are.equal(name, namespace.name)
 			assert.are.equal(name .. "DB", namespace.savedVariables)
@@ -42,26 +42,26 @@ describe("Quest With Friends installation identity", function()
 			local env, notices = environment()
 			local firstName = name == "QuestWithFriends" and "QuestWithFriendsDev" or "QuestWithFriends"
 			local first, second = {}, {}
-			load(env, "Bootstrap.lua", firstName, first)
-			load(env, "QuestEquivalences.lua", firstName, first)
-			load(env, "Client.lua", firstName, first)
-			load(env, "QuestCategories.lua", firstName, first)
-			load(env, "Core.lua", firstName, first)
-			load(env, "Preview.lua", firstName, first)
+			load(env, "src/Bootstrap.lua", firstName, first)
+			load(env, "src/QuestEquivalences.lua", firstName, first)
+			load(env, "src/Client.lua", firstName, first)
+			load(env, "src/QuestCategories.lua", firstName, first)
+			load(env, "src/Core.lua", firstName, first)
+			load(env, "src/Preview.lua", firstName, first)
 			local core, preview, equivalences, categories =
 				first.Core, first.Preview, first.QuestEquivalences, first.QuestCategories
-			load(env, "Bootstrap.lua", name, second)
+			load(env, "src/Bootstrap.lua", name, second)
 			for _, file in ipairs({
-				"QuestEquivalences.lua",
-				"Client.lua",
-				"QuestCategories.lua",
-				"Core.lua",
-				"ItemStock.lua",
-				"Preview.lua",
-				"Development.lua",
-				"QuestWithFriends.lua",
-				"Panel.lua",
-				"InGameTests.lua",
+				"src/QuestEquivalences.lua",
+				"src/Client.lua",
+				"src/QuestCategories.lua",
+				"src/Core.lua",
+				"src/ItemStock.lua",
+				"src/Preview.lua",
+				"dev/Development.lua",
+				"src/QuestWithFriends.lua",
+				"src/Panel.lua",
+				"dev/InGameTests.lua",
 			}) do
 				load(env, file, name, second)
 			end

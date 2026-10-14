@@ -329,7 +329,7 @@ class ShippedReviewTests(unittest.TestCase):
 		self.assertEqual(54, sum(len(s.array(value["ids"])) for value in groups))
 		self.assertEqual(4, sum(value["progress"] == "objectives" for value in groups))
 		self.assertEqual(2, sum(value["progress"] == "state" for value in groups))
-		lua = (ROOT / "QuestEquivalences.lua").read_text()
+		lua = (ROOT / "src/QuestEquivalences.lua").read_text()
 		for value in groups:
 			self.assertEqual("att-reviewed-branches", value["basis"])
 			self.assertTrue(value["history"])

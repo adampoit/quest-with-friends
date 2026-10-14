@@ -233,9 +233,8 @@ class CandidateTests(unittest.TestCase):
 		original_toc = (monitor.ROOT / monitor.TOC).read_text(encoding="utf-8")
 		with tempfile.TemporaryDirectory() as directory:
 			root = Path(directory)
-			for source in monitor.ROOT.glob("*.lua"):
-				_ = shutil.copy2(source, root / source.name)
-			_ = shutil.copytree(monitor.ROOT / "tests", root / "tests")
+			for name in ("src", "dev", "tests"):
+				_ = shutil.copytree(monitor.ROOT / name, root / name)
 			for updates in (
 				{"retail": "12.1.5"},
 				{"retail": "12.1.7"},

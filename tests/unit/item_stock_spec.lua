@@ -8,7 +8,7 @@ describe("Quest item stock", function()
 			originals[key] = _G[key]
 		end
 		_G.QuestWithFriends = {}
-		assert(loadfile("ItemStock.lua"))()
+		assert(loadfile("src/ItemStock.lua"))()
 		annotate = QuestWithFriends.ItemStock.annotate
 		bags, names, bindings = { [0] = {} }, {}, {}
 		_G.NUM_TOTAL_EQUIPPED_BAG_SLOTS = 5

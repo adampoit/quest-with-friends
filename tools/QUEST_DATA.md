@@ -12,7 +12,7 @@ This page collects shipped coverage, source-field interpretation and approved va
 | Camping classifications   |            0 |                  94 |
 | Additional Camping leads  |            0 |                   7 |
 
-`QuestEquivalences.lua` defines the Retail families below. Other quests and Forever compare by exact ID. `QuestCategories.lua` classifies the 94 reviewed Forever Camping IDs; `tests/fixtures/forever_camping_quests.json` records revision/snapshot pins and hashes each ID/title/category tuple.
+`src/QuestEquivalences.lua` defines the Retail families below. Other quests and Forever compare by exact ID. `src/QuestCategories.lua` classifies the 94 reviewed Forever Camping IDs; `tests/fixtures/forever_camping_quests.json` records revision/snapshot pins and hashes each ID/title/category tuple.
 
 ## All The Things
 

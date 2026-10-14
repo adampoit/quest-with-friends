@@ -6,12 +6,5 @@
 ## OptionalDeps: AddonKit
 ## SavedVariables: QuestWithFriendsDB
 
-Bootstrap.lua
-QuestEquivalences.lua
-Client.lua
-QuestCategories.lua
-Core.lua
-ItemStock.lua
-Preview.lua
-QuestWithFriends.lua
-Panel.lua
+src/Bootstrap.lua
+src/Load.xml

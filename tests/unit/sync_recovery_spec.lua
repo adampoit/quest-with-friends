@@ -146,16 +146,16 @@ local function network(game, size, minorVersions)
 			end,
 		}
 		for _, path in ipairs({
-			"Bootstrap.lua",
-			"QuestEquivalences.lua",
-			"Client.lua",
-			"QuestCategories.lua",
-			"Core.lua",
-			"ItemStock.lua",
-			"QuestWithFriends.lua",
+			"src/Bootstrap.lua",
+			"src/QuestEquivalences.lua",
+			"src/Client.lua",
+			"src/QuestCategories.lua",
+			"src/Core.lua",
+			"src/ItemStock.lua",
+			"src/QuestWithFriends.lua",
 		}) do
 			setfenv(assert(loadfile(path)), env)()
-			if path == "Core.lua" and minorVersions then
+			if path == "src/Core.lua" and minorVersions then
 				local core = env.QuestWithFriends.Core
 				core.PROTOCOL_MINOR = minorVersions[index] or 0
 				core.PROTOCOL_VERSION = core.PROTOCOL_MAJOR .. "." .. core.PROTOCOL_MINOR

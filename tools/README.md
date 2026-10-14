@@ -114,7 +114,7 @@ Synthetic registry example:
 
 Add `--reviews tools/reviewed_quest_groups.json --output QuestEquivalences.generated.lua` to the Retail inventory command to emit a preview. Validation completes before replacing Lua. `--allow-empty` explicitly permits an empty preview; otherwise an empty registry preserves the existing output.
 
-Generation replaces the table, so review additions and removals together. Keep previews in ignored files, then promote approved output to `QuestEquivalences.lua`.
+Generation replaces the table, so review additions and removals together. Keep previews in ignored files, then promote approved output to `src/QuestEquivalences.lua`.
 
 To reproduce the shipped Retail table from the pinned contributor checkout:
 
@@ -123,7 +123,7 @@ python3 tools/generate_quest_equivalences.py \
   --game retail --att-source /path/to/AllTheThings \
   --revision c269971e856a1da16883cc94cba33d2ec5a90b02 \
   --reviews tools/reviewed_quest_groups.json \
-  --output QuestEquivalences.lua
+  --output src/QuestEquivalences.lua
 ```
 
 Retain the local checkouts and reports for reproduction. Local changes or extra Lua files alter source hashes.
@@ -137,7 +137,7 @@ python3 tools/generate_quest_equivalences.py \
   --game forever --questiedb-source /path/to/QuestieDB \
   --revision e0a6eaa86f181ac99262e34126bcd2ed1a1712d6 \
   --category-review tools/reviewed_quest_categories.forever.json \
-  --categories-output QuestCategories.lua \
+  --categories-output src/QuestCategories.lua \
   --categories-manifest tests/fixtures/forever_camping_quests.json
 ```
 

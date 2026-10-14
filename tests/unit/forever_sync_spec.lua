@@ -95,12 +95,12 @@ describe("Quest With Friends two Forever clients", function()
 				end,
 			}
 			for _, path in ipairs({
-				"QuestEquivalences.lua",
-				"Client.lua",
-				"QuestCategories.lua",
-				"Core.lua",
-				"ItemStock.lua",
-				"QuestWithFriends.lua",
+				"src/QuestEquivalences.lua",
+				"src/Client.lua",
+				"src/QuestCategories.lua",
+				"src/Core.lua",
+				"src/ItemStock.lua",
+				"src/QuestWithFriends.lua",
 			}) do
 				setfenv(assert(loadfile(path)), env)()
 			end

@@ -45,14 +45,14 @@ describe("Quest With Friends party sync", function()
 			return "12.1.0", "69933", "", 120100
 		end)
 		_G.QuestWithFriends = nil
-		assert(loadfile("Bootstrap.lua"))()
-		assert(loadfile("QuestEquivalences.lua"))()
+		assert(loadfile("src/Bootstrap.lua"))()
+		assert(loadfile("src/QuestEquivalences.lua"))()
 		assert(loadfile("tests/fixtures/quest_equivalences.lua"))()
-		assert(loadfile("Client.lua"))()
-		assert(loadfile("QuestCategories.lua"))()
-		assert(loadfile("Core.lua"))()
-		assert(loadfile("ItemStock.lua"))()
-		assert(loadfile("Preview.lua"))()
+		assert(loadfile("src/Client.lua"))()
+		assert(loadfile("src/QuestCategories.lua"))()
+		assert(loadfile("src/Core.lua"))()
+		assert(loadfile("src/ItemStock.lua"))()
+		assert(loadfile("src/Preview.lua"))()
 		timers, messages, objectives, entries = {}, {}, {}, {}
 		view = {}
 		party = true
@@ -195,7 +195,7 @@ describe("Quest With Friends party sync", function()
 		end
 		_G.SlashCmdList = {}
 		_G.AddonKit = nil
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 	end)
 
 	after_each(function()
@@ -537,7 +537,7 @@ describe("Quest With Friends party sync", function()
 		fire("QUEST_LOG_UPDATE")
 		flush()
 		assert.are.equal(2, view.groups[1].questID)
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		receiveSnapshot({}, 1)
@@ -553,12 +553,12 @@ describe("Quest With Friends party sync", function()
 		view.presentation.onSort("title")
 		assert.are.equal("A Bridge to Safety", view.groups[1].title)
 		assert.are.equal("title", QuestWithFriendsDB.sortMode)
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		SlashCmdList.QUESTWITHFRIENDS("preview")
 		assert.are.equal("title", view.presentation.sortMode)
 		assert.are.equal("A Bridge to Safety", view.groups[1].title)
 		QuestWithFriendsDB.sortMode = "invalid"
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		SlashCmdList.QUESTWITHFRIENDS("preview")
 		assert.are.equal("smart", view.presentation.sortMode)
 	end)
@@ -602,10 +602,8 @@ describe("Quest With Friends party sync", function()
 			end
 			local mockPanel = QuestWithFriends.Panel
 			_G.QuestWithFriends = nil
-			for line in io.lines("QuestWithFriends.toc") do
-				if line:match("%.lua$") then
-					assert(loadfile(line))()
-				end
+			for _, file in ipairs(dofile("tests/support/manifest.lua")("QuestWithFriends.toc")) do
+				assert(loadfile(file))()
 			end
 			QuestWithFriends.Panel = mockPanel
 			assert.are.equal(game, QuestWithFriends.QuestEquivalencesGame)
@@ -734,9 +732,9 @@ describe("Quest With Friends party sync", function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			party = false
 			QuestWithFriends.isDevelopment = true
-			assert(loadfile("Development.lua"))()
+			assert(loadfile("dev/Development.lua"))()
 			local settings = captureSettings()
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			fire("PLAYER_ENTERING_WORLD")
 			SlashCmdList.QUESTWITHFRIENDS(" SCREENSHOT ON ")
 			assert.is_true(view.hidden)
@@ -779,9 +777,9 @@ describe("Quest With Friends party sync", function()
 	it("ends screenshot mode on joining a party and never sends samples", function()
 		party = false
 		QuestWithFriends.isDevelopment = true
-		assert(loadfile("Development.lua"))()
+		assert(loadfile("dev/Development.lua"))()
 		local settings = captureSettings()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		settings.buttons["Quest differences"].click()
 		entries = { { questID = 42, title = "Actual errand" } }
@@ -817,9 +815,9 @@ describe("Quest With Friends party sync", function()
 	it("ends screenshot mode on joining a raid or reloading", function()
 		party = false
 		QuestWithFriends.isDevelopment = true
-		assert(loadfile("Development.lua"))()
+		assert(loadfile("dev/Development.lua"))()
 		local settings = captureSettings()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		settings.buttons["Quest differences"].click()
 		party = true
@@ -835,7 +833,7 @@ describe("Quest With Friends party sync", function()
 		assert.is_true(view.hidden)
 		settings.buttons["Collapsed headings"].click()
 		assert.is_true(view.presentation.collapsedQuests[-1])
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		assert.is_true(view.hidden)
 		assert.is_nil(QuestWithFriendsDB.screenshotMode)
@@ -897,7 +895,7 @@ describe("Quest With Friends party sync", function()
 		SlashCmdList.QUESTWITHFRIENDS("preview off")
 		SlashCmdList.QUESTWITHFRIENDS("preview on")
 		assert.same({}, view.presentation.collapsedQuests)
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		assert.is_true(view.hidden)
 		assert.is_nil(QuestWithFriendsDB.previewMode)
@@ -966,7 +964,7 @@ describe("Quest With Friends party sync", function()
 	end)
 
 	it("uses shipped counted and transition families for completion-history checks", function()
-		assert(loadfile("QuestEquivalences.lua"))()
+		assert(loadfile("src/QuestEquivalences.lua"))()
 		local checked = {}
 		_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
 			checked[id] = true
@@ -1045,7 +1043,7 @@ describe("Quest With Friends party sync", function()
 		QuestWithFriends.QuestEquivalencesGame = "forever"
 		foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
 		local records = captureLogs()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local status = findLog(records, "Party sync status").data
@@ -1076,7 +1074,7 @@ describe("Quest With Friends party sync", function()
 			party2 = { "Florace", "Other" },
 		})
 		local records = captureLogs()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
@@ -1099,7 +1097,7 @@ describe("Quest With Friends party sync", function()
 			party2 = { "Zachori", "" },
 			party3 = { "Marva", "Less-Wand" },
 		})
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({})
@@ -1113,7 +1111,7 @@ describe("Quest With Friends party sync", function()
 		QuestWithFriends.QuestEquivalencesGame = "forever"
 		_G.Constants = { CharacterNameSeparatorConsts = { CHARACTERNAME_SURNAME_SEPARATOR = "·" } }
 		foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Florace·Bastille")
@@ -1140,7 +1138,7 @@ describe("Quest With Friends party sync", function()
 
 	it("registers with AddonKit and logs hidden quest counts", function()
 		local records = captureLogs()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		entries = { { questID = 77734, title = "Level 17", isHidden = true } }
 		fire("PLAYER_ENTERING_WORLD")
 		assert.is_true(AddonKit.Registry.addons.QuestWithFriends.persistDiagnostics)
@@ -1283,20 +1281,20 @@ describe("Quest With Friends party sync", function()
 		_G.QuestWithFriends, _G.QuestWithFriendsDevDB = nil, nil
 		local namespace = {}
 		for _, file in ipairs({
-			"Bootstrap.lua",
-			"QuestEquivalences.lua",
-			"Client.lua",
-			"QuestCategories.lua",
-			"Core.lua",
-			"ItemStock.lua",
-			"Preview.lua",
-			"Development.lua",
-			"QuestWithFriends.lua",
+			"src/Bootstrap.lua",
+			"src/QuestEquivalences.lua",
+			"src/Client.lua",
+			"src/QuestCategories.lua",
+			"src/Core.lua",
+			"src/ItemStock.lua",
+			"src/Preview.lua",
+			"dev/Development.lua",
+			"src/QuestWithFriends.lua",
 		}) do
 			assert(loadfile(file))("QuestWithFriendsDev", namespace)
 		end
 		namespace.Panel = mockPanel
-		assert(loadfile("InGameTests.lua"))("QuestWithFriendsDev", namespace)
+		assert(loadfile("dev/InGameTests.lua"))("QuestWithFriendsDev", namespace)
 		assert.is_function(AddonKit.Test.tests.QuestWithFriends_ProtocolRoundTrip)
 		assert.are.equal("Quest With Friends (Dev)", settings.category.name)
 		assert.is_not_nil(settings.buttons["Quest differences"])
@@ -1331,9 +1329,9 @@ describe("Quest With Friends party sync", function()
 	it("has no screenshot controls or in-game test registrations in the release", function()
 		local settings = captureSettings()
 		_G.AddonKit = { Test = { tests = {}, assert = {} } }
-		assert(loadfile("Development.lua"))()
-		assert(loadfile("InGameTests.lua"))()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("dev/Development.lua"))()
+		assert(loadfile("dev/InGameTests.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.is_nil(QuestWithFriends.Development)
 		assert.same({}, AddonKit.Test.tests)
 		assert.same({}, settings.initializers)
@@ -1351,7 +1349,7 @@ describe("Quest With Friends party sync", function()
 			locks[#locks + 1] = locked
 			QuestWithFriendsDB.panelLocked = locked ~= false
 		end)
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		local record = settings.settings.QuestWithFriendsPanelLocked
 		assert.are.equal("Lock panel", record.name)
 		assert.is_true(record.default)
@@ -1377,7 +1375,7 @@ describe("Quest With Friends party sync", function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			local records = captureLogs(true)
 			local settings = captureSettings()
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 
 			-- WoW restores this table after executing the files listed in the TOC.
@@ -1407,7 +1405,7 @@ describe("Quest With Friends party sync", function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			QuestWithFriendsDB.debugMode = true
 			local records = captureLogs(true)
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			assert.are.equal("DEBUG", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 			_G.QuestWithFriendsDB = { debugMode = false }
 			fire("ADDON_LOADED", "QuestWithFriends")
@@ -1423,7 +1421,7 @@ describe("Quest With Friends party sync", function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			captureLogs()
 			local settings = captureSettings()
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			assert.is_true(settings.registered)
 			assert.are.equal("Quest With Friends", settings.category.name)
 			assert.are.equal("QuestWithFriendsDebugMode", settings.variable)
@@ -1439,7 +1437,7 @@ describe("Quest With Friends party sync", function()
 			assert.are.equal("DEBUG", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 			-- A new registry simulates AddonKit resetting its level on reload.
 			captureLogs()
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			assert.is_true(settings.setting:GetValue())
 			assert.are.equal("DEBUG", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 
@@ -1453,7 +1451,7 @@ describe("Quest With Friends party sync", function()
 			assert.is_false(QuestWithFriendsDB.debugMode)
 			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 			captureLogs()
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			assert.is_false(settings.setting:GetValue())
 			assert.are.equal("INFO", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 		end)
@@ -1462,7 +1460,7 @@ describe("Quest With Friends party sync", function()
 	it("exposes session-only preview in native settings and stays synchronized with slash commands", function()
 		party = false
 		local settings = captureSettings()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		local preview = settings.settings.QuestWithFriendsPreviewMode
 		assert.are.equal("Preview appearance", preview.name)
 		assert.is_false(preview.setting:GetValue())
@@ -1484,9 +1482,9 @@ describe("Quest With Friends party sync", function()
 	it("reveals only the screenshot tools section without starting or stopping a sample view", function()
 		party = false
 		QuestWithFriends.isDevelopment = true
-		assert(loadfile("Development.lua"))()
+		assert(loadfile("dev/Development.lua"))()
 		local settings = captureSettings()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		assert.are.equal(5, #settings.initializers)
 		for _, initializer in ipairs(settings.initializers) do
@@ -1528,9 +1526,9 @@ describe("Quest With Friends party sync", function()
 	it("keeps the normal appearance preview usable alongside screenshot scenarios", function()
 		party = false
 		QuestWithFriends.isDevelopment = true
-		assert(loadfile("Development.lua"))()
+		assert(loadfile("dev/Development.lua"))()
 		local settings = captureSettings()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		local preview = settings.settings.QuestWithFriendsPreviewMode.setting
 		settings.buttons["Quest differences"].click()
 		assert.is_true(preview:GetValue())
@@ -1550,14 +1548,14 @@ describe("Quest With Friends party sync", function()
 	it("leaves normal preview intact when screenshot settings APIs are unavailable", function()
 		party = false
 		QuestWithFriends.isDevelopment = true
-		assert(loadfile("Development.lua"))()
+		assert(loadfile("dev/Development.lua"))()
 		SlashCmdList.QUESTWITHFRIENDS("preview on")
 		SlashCmdList.QUESTWITHFRIENDS("screenshot")
 		assert.is_false(view.presentation.screenshot)
 		assert.is_function(view.presentation.onStop)
 		local settings = captureSettings()
 		_G.CreateSettingsButtonInitializer = nil
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.same({}, settings.initializers)
 		SlashCmdList.QUESTWITHFRIENDS("screenshot on")
 		assert.is_true(settings.registered)
@@ -1565,7 +1563,7 @@ describe("Quest With Friends party sync", function()
 
 	it("saves settings without AddonKit and applies them when it becomes available after reload", function()
 		local settings = captureSettings()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		settings.setting:SetValue(true)
 		assert.is_true(QuestWithFriendsDB.debugMode)
 		SlashCmdList.QUESTWITHFRIENDS("debug off")
@@ -1573,7 +1571,7 @@ describe("Quest With Friends party sync", function()
 		SlashCmdList.QUESTWITHFRIENDS("debug on")
 		assert.is_true(settings.setting:GetValue())
 		captureLogs()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.are.equal("DEBUG", AddonKit.Registry.addons.QuestWithFriends.logLevel)
 	end)
 
@@ -1581,7 +1579,7 @@ describe("Quest With Friends party sync", function()
 		assert.is_false(QuestWithFriendsDB.debugMode)
 		SlashCmdList.QUESTWITHFRIENDS("debug")
 		assert.is_true(QuestWithFriendsDB.debugMode)
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.is_true(QuestWithFriendsDB.debugMode)
 		SlashCmdList.QUESTWITHFRIENDS("debug off")
 		assert.is_false(QuestWithFriendsDB.debugMode)
@@ -1589,7 +1587,7 @@ describe("Quest With Friends party sync", function()
 
 	it("requests peer snapshots on manual refresh without echoing requests forever", function()
 		local records = captureLogs()
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		SlashCmdList.QUESTWITHFRIENDS("debug")
 		flush(1)
 		assert.same({ "1.1:H" }, messages)
@@ -1640,7 +1638,7 @@ describe("Quest With Friends party sync", function()
 		C_ChatInfo.RegisterAddonMessagePrefix = function()
 			return false
 		end
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		assert.is_not_nil(findLog(records, "Failed to register addon message prefix"))
@@ -1714,7 +1712,7 @@ describe("Quest With Friends party sync", function()
 	for _, game in ipairs({ "retail", "forever" }) do
 		it("hides profession/class quests by default without filtering snapshots on " .. game, function()
 			QuestWithFriends.QuestEquivalencesGame = game
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			local sender = "Julia-Realm"
 			if game == "forever" then
 				foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
@@ -1789,7 +1787,7 @@ describe("Quest With Friends party sync", function()
 			view.filters.toggleClasses()
 			checkIDs({ 41, 43, 45, 46 })
 			assert.are.equal(sent, #messages)
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			fire("PLAYER_ENTERING_WORLD")
 			assert.is_true(view.filters.professions)
 			assert.is_false(view.filters.classes)
@@ -1799,7 +1797,7 @@ describe("Quest With Friends party sync", function()
 	for _, game in ipairs({ "retail", "forever" }) do
 		it("applies reviewed Camping classifications only on " .. game, function()
 			QuestWithFriends.QuestEquivalencesGame = game
-			assert(loadfile("QuestWithFriends.lua"))()
+			assert(loadfile("src/QuestWithFriends.lua"))()
 			local sender = "Julia-Realm"
 			if game == "forever" then
 				foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
@@ -1844,7 +1842,7 @@ describe("Quest With Friends party sync", function()
 	it("filters remote-only and completed Camping quests using reviewed local classifications", function()
 		QuestWithFriends.QuestEquivalencesGame = "forever"
 		foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local payload = QuestWithFriends.Core.encode({
@@ -1956,15 +1954,15 @@ describe("Quest With Friends party sync", function()
 
 	it("migrates the combined preference without overwriting separate saved choices", function()
 		_G.QuestWithFriendsDB = { showPersonalQuests = true }
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.is_true(QuestWithFriendsDB.showProfessionQuests)
 		assert.is_true(QuestWithFriendsDB.showClassQuests)
 		QuestWithFriendsDB.showClassQuests = false
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.is_true(QuestWithFriendsDB.showProfessionQuests)
 		assert.is_false(QuestWithFriendsDB.showClassQuests)
 		_G.QuestWithFriendsDB = { showPersonalQuests = false }
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		assert.is_false(QuestWithFriendsDB.showProfessionQuests)
 		assert.is_false(QuestWithFriendsDB.showClassQuests)
 	end)
@@ -2139,7 +2137,7 @@ describe("Quest With Friends party sync", function()
 			end,
 		}
 		local records = captureLogs(true)
-		assert(loadfile("QuestWithFriends.lua"))()
+		assert(loadfile("src/QuestWithFriends.lua"))()
 		entries = { { questID = 42, title = "Errand" } }
 		pushable[42] = true
 		fire("PLAYER_ENTERING_WORLD")

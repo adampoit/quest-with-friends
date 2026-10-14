@@ -83,7 +83,7 @@ class QuestCategoryTests(unittest.TestCase):
 		ids = [record["id"] for record in manifest["quests"]]
 		self.assertEqual(94, len(ids))
 		self.assertEqual(sorted(set(ids)), ids)
-		source = (ROOT / "QuestCategories.lua").read_text()
+		source = (ROOT / "src/QuestCategories.lua").read_text()
 		self.assertIn(manifest["revision"], source)
 		self.assertIn(manifest["source_sha256"], source)
 		match = re.search(r"local campingQuestIDs = \{([^}]+)\}", source)

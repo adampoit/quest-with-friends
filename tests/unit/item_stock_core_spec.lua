@@ -2,7 +2,7 @@ describe("Quest item stock comparisons and protocol", function()
 	local Core
 	before_each(function()
 		QuestWithFriends = nil
-		assert(loadfile("Core.lua"))()
+		assert(loadfile("src/Core.lua"))()
 		Core = QuestWithFriends.Core
 	end)
 

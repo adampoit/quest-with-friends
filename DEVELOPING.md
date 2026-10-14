@@ -12,7 +12,7 @@ For a live checkout, place or link the repository at `QuestWithFriendsDev` and g
 python3 tools/bundle_addon.py --dev-toc
 ```
 
-The ignored `QuestWithFriendsDev.toc` is derived from the release TOC; regenerate it after changing the release's interface, version, dependencies or file list. A checkout loaded from a folder named `QuestWithFriends` intentionally behaves as the release, without development tools. Keep addon managers pointed only at the release folder, never the checkout. Moving an existing checkout or creating a filesystem link is a separate local setup step; packaging does not change installed folders.
+The ignored `QuestWithFriendsDev.toc` is derived from the release TOC; regenerate it after changing the release's interface, version, dependencies or TOC entries. Runtime Lua lives in `src/`, and dev-only tools live in `dev/`. Both manifests load `src/Load.xml`: add new runtime files there in dependency order, not to either TOC. Changes to that shared list take effect in both installations on reload, with no dev TOC regeneration. `src/Bootstrap.lua` stays first in both TOCs so the dev tools can load before the shared runtime. A checkout loaded from a folder named `QuestWithFriends` intentionally behaves as the release, without development tools. Keep addon managers pointed only at the release folder, never the checkout. Moving an existing checkout or creating a filesystem link is a separate local setup step; packaging does not change installed folders.
 
 Alternatively, build an installable development ZIP:
 
@@ -156,7 +156,7 @@ CI exercises synthetic source imports and review policies. Shipped tables are re
 python3 tools/bundle_addon.py
 ```
 
-The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files, assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Release manifests cannot list `Development.lua` or `InGameTests.lua`; the bundler rejects them. `--dev` derives a separate manifest and adds those files, without distribution-site project IDs. `--tag` is reserved for release packages. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
+The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files (including XML `Script` and `Include` dependencies), assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Unlisted files are not bundled, even under `src/`. Release manifests cannot reference `dev/`, `Development.lua` or `InGameTests.lua`, even through XML; the bundler rejects them. `--dev` derives a separate manifest and adds those files, without distribution-site project IDs. `--tag` is reserved for release packages. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
 
 To validate a proposed release tag, pass it to the bundler with `--tag`. The tag must equal `v` followed by the TOC version; a mismatch fails before writing a ZIP.
 

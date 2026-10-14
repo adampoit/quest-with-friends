@@ -1,0 +1,10 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+	<Script file="QuestEquivalences.lua"/>
+	<Script file="Client.lua"/>
+	<Script file="QuestCategories.lua"/>
+	<Script file="Core.lua"/>
+	<Script file="ItemStock.lua"/>
+	<Script file="Preview.lua"/>
+	<Script file="QuestWithFriends.lua"/>
+	<Script file="Panel.lua"/>
+</Ui>

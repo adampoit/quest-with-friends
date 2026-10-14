@@ -3,7 +3,7 @@ describe("Quest With Friends client quest data", function()
 	before_each(function()
 		originalBuildInfo = _G.GetBuildInfo
 		_G.QuestWithFriends = nil
-		assert(loadfile("QuestEquivalences.lua"))()
+		assert(loadfile("src/QuestEquivalences.lua"))()
 	end)
 
 	after_each(function()
@@ -14,8 +14,8 @@ describe("Quest With Friends client quest data", function()
 		rawset(_G, "GetBuildInfo", function()
 			return "", "", "", interfaceVersion
 		end)
-		assert(loadfile("Client.lua"))()
-		assert(loadfile("Core.lua"))()
+		assert(loadfile("src/Client.lua"))()
+		assert(loadfile("src/Core.lua"))()
 	end
 
 	it("ships explicitly reviewed Retail completion-sharing families", function()
@@ -83,7 +83,7 @@ describe("Quest With Friends client quest data", function()
 	it("recognizes subsequent Forever beta interfaces without treating Era as Forever", function()
 		loadClient(16002)
 		assert.are.equal("forever", QuestWithFriends.QuestEquivalencesGame)
-		assert(loadfile("QuestEquivalences.lua"))()
+		assert(loadfile("src/QuestEquivalences.lua"))()
 		loadClient(11508)
 		assert.are.equal("retail", QuestWithFriends.QuestEquivalencesGame)
 		assert.same({ 71002 }, QuestWithFriends.Core.questIDs(71002))
@@ -91,7 +91,7 @@ describe("Quest With Friends client quest data", function()
 
 	it("defaults to Retail in simulator environments without GetBuildInfo", function()
 		_G.GetBuildInfo = nil
-		assert(loadfile("Client.lua"))()
+		assert(loadfile("src/Client.lua"))()
 		assert.are.equal("retail", QuestWithFriends.QuestEquivalencesGame)
 		assert.is_not_nil(QuestWithFriends.QuestEquivalences[28762])
 	end)
