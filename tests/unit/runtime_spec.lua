@@ -4,7 +4,22 @@ describe("Quest With Friends party sync", function()
 	local tags, questTypes
 	local originalSettings, originalSettingsPanel, originalSettingsInbound, originalHeaderInitializer, originalButtonInitializer
 	local captureSettings
+	local registeredEvents, originalDiagnostics
+	local diagnosticGlobals = {
+		"GetTime",
+		"InCombatLockdown",
+		"UnitAffectingCombat",
+		"issecure",
+		"issecurevariable",
+		"debugstack",
+		"C_AddOns",
+	}
 	before_each(function()
+		registeredEvents, originalDiagnostics = {}, {}
+		for _, name in ipairs(diagnosticGlobals) do
+			originalDiagnostics[name] = _G[name]
+			rawset(_G, name, nil)
+		end
 		originalSettingsPanel = _G.SettingsPanel
 		originalSettingsInbound = _G.SettingsInbound
 		_G.SettingsInbound = nil
@@ -64,7 +79,9 @@ describe("Quest With Friends party sync", function()
 		_G.CreateFrame = function(...)
 			assert.is_true(select("#", ...) >= 1)
 			return {
-				RegisterEvent = function(_, _) end,
+				RegisterEvent = function(_, event)
+					registeredEvents[event] = true
+				end,
 				SetScript = function(_, name, fn)
 					if name == "OnEvent" then
 						eventHandler = fn
@@ -176,6 +193,9 @@ describe("Quest With Friends party sync", function()
 	end)
 
 	after_each(function()
+		for _, name in ipairs(diagnosticGlobals) do
+			rawset(_G, name, originalDiagnostics[name])
+		end
 		_G.Settings = originalSettings
 		_G.SettingsPanel = originalSettingsPanel
 		_G.SettingsInbound = originalSettingsInbound
@@ -1871,6 +1891,167 @@ describe("Quest With Friends party sync", function()
 		party = false
 		share(42)
 		assert.same({}, pushed)
+	end)
+
+	local function captureShareDiagnostics(game)
+		QuestWithFriends.QuestEquivalencesGame = game or "retail"
+		_G.GetTime = function()
+			return 100
+		end
+		_G.InCombatLockdown = function()
+			return true
+		end
+		_G.UnitAffectingCombat = function(unit)
+			assert.are.equal("player", unit)
+			return true
+		end
+		_G.issecure = function()
+			return false
+		end
+		_G.issecurevariable = function(name)
+			assert.are.equal("QuestLogPushQuest", name)
+			return false, "OtherAddon"
+		end
+		_G.debugstack = function(start, count, bottom)
+			assert.same({ 2, 8, 0 }, { start, count, bottom })
+			return "share click stack"
+		end
+		_G.C_AddOns = {
+			GetAddOnMetadata = function(addon, field)
+				assert.same({ "QuestWithFriends", "Version" }, { addon, field })
+				return "0.1.7"
+			end,
+		}
+		local records = captureLogs(true)
+		assert(loadfile("QuestWithFriends.lua"))()
+		entries = { { questID = 42, title = "Errand" } }
+		pushable[42] = true
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		return records
+	end
+
+	for _, game in ipairs({ "retail", "forever" }) do
+		for _, event in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+			it("records share context for " .. event .. " on " .. game .. " without debug mode", function()
+				local records = captureShareDiagnostics(game)
+				assert.is_true(registeredEvents[event])
+				assert.is_false(QuestWithFriendsDB.debugMode)
+				_G.QuestLogPushQuest = function(index)
+					pushed[#pushed + 1] = index
+					fire(event, "QuestWithFriends", "QuestLogPushQuest()")
+				end
+				view.share(42)
+				assert.same({ 1 }, pushed)
+				local attemptLog = findLog(records, "Quest sharing attempted")
+				assert.are.equal("INFO", attemptLog.level)
+				assert.are.equal("share", attemptLog.category)
+				local attempt = attemptLog.data
+				assert.are.equal(1, attempt.attemptID)
+				assert.are.equal(42, attempt.questID)
+				assert.are.equal(1, attempt.logIndex)
+				assert.are.equal("Errand", attempt.questTitle)
+				assert.are.equal(game, attempt.game)
+				assert.are.equal("12.1.0", attempt.clientVersion)
+				assert.are.equal("69933", attempt.clientBuild)
+				assert.are.equal(120100, attempt.interfaceVersion)
+				assert.are.equal("0.1.7", attempt.addonVersion)
+				assert.is_true(attempt.combatLockdown)
+				assert.is_true(attempt.playerInCombat)
+				assert.is_true(attempt.inParty)
+				assert.is_false(attempt.inRaid)
+				assert.is_false(attempt.secureContext)
+				assert.is_false(attempt.apiSecure)
+				assert.are.equal("OtherAddon", attempt.apiTaintSource)
+				assert.are.equal("share click stack", attempt.stack)
+				local blocked = findLog(records, "Quest sharing blocked")
+				assert.are.equal("WARN", blocked.level)
+				assert.are.equal("share", blocked.category)
+				assert.are.equal(event, blocked.data.event)
+				assert.are.equal("QuestWithFriends", blocked.data.addon)
+				assert.are.equal("QuestLogPushQuest()", blocked.data.protectedFunction)
+				assert.same(attempt, blocked.data.attempt)
+				assert.are.equal(0, blocked.data.elapsed)
+				assert.is_true(blocked.data.context.combatLockdown)
+				assert.same({}, timers)
+			end)
+		end
+	end
+
+	it("correlates delayed security events with the latest share attempt", function()
+		local records = captureShareDiagnostics()
+		view.share(42)
+		entries[2] = { questID = 43, title = "Another errand" }
+		pushable[43] = true
+		local now, inCombat = 101, false
+		_G.GetTime = function()
+			return now
+		end
+		_G.InCombatLockdown = function()
+			return inCombat
+		end
+		_G.UnitAffectingCombat = function()
+			return false
+		end
+		_G.issecurevariable = function()
+			return true
+		end
+		view.share(43)
+		now, inCombat = 102, true
+		fire("ADDON_ACTION_BLOCKED", "QuestWithFriends", "QuestLogPushQuest")
+		local data = findLog(records, "Quest sharing blocked").data
+		assert.are.equal(2, data.attempt.attemptID)
+		assert.are.equal(43, data.attempt.questID)
+		assert.are.equal(2, data.attempt.logIndex)
+		assert.are.equal(1, data.elapsed)
+		assert.is_false(data.attempt.combatLockdown)
+		assert.is_true(data.context.combatLockdown)
+		assert.is_false(data.attempt.playerInCombat)
+		assert.is_true(data.attempt.apiSecure)
+		assert.is_nil(data.attempt.apiTaintSource)
+		assert.same({ 1, 2 }, pushed)
+	end)
+
+	for _, case in ipairs({ "no attempt", "expired", "clock reset", "ineligible click" }) do
+		it("does not attach an unrelated quest to a share block: " .. case, function()
+			local records = captureShareDiagnostics()
+			if case ~= "no attempt" then
+				view.share(42)
+			end
+			if case == "ineligible click" then
+				pushable[42] = false
+				view.share(42)
+			end
+			_G.GetTime = function()
+				return case == "expired" and 106 or case == "clock reset" and 99 or 100
+			end
+			fire("ADDON_ACTION_BLOCKED", "QuestWithFriends", "QuestLogPushQuest()")
+			local data = findLog(records, "Quest sharing blocked").data
+			assert.is_nil(data.attempt)
+			assert.is_nil(data.elapsed)
+			assert.is_true(data.context.combatLockdown)
+		end)
+	end
+
+	it("ignores unrelated security events without refreshing or sending quests", function()
+		local records = captureShareDiagnostics()
+		view.share(42)
+		local count = #records
+		fire("ADDON_ACTION_BLOCKED", "OtherAddon", "QuestLogPushQuest()")
+		fire("ADDON_ACTION_FORBIDDEN", "QuestWithFriends", "OtherProtectedFunction()")
+		assert.are.equal(count, #records)
+		assert.same({}, timers)
+	end)
+
+	it("keeps one-click sharing working without AddonKit or optional diagnostic APIs", function()
+		entries = { { questID = 42, title = "Errand" } }
+		pushable[42] = true
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		view.share(42)
+		fire("ADDON_ACTION_BLOCKED", "QuestWithFriends", "QuestLogPushQuest()")
+		assert.same({ 1 }, pushed)
+		assert.same({}, timers)
 	end)
 
 	it("renders the stabilized second scan even when its snapshot is unchanged", function()

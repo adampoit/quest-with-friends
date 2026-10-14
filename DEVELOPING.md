@@ -15,6 +15,14 @@ The Python suite is network-free. Its emitted-Lua smoke test requires `lua` on P
 
 Keep Busted specs in `tests/unit/` with the `_spec.lua` suffix. Simulator tests live directly in `tests/` using filenames such as `simulator.lua`.
 
+## Quest-sharing diagnostics
+
+One-click sharing remains a direct call from the Share button. With AddonKit installed, each eligible click records an INFO `share` entry, **Quest sharing attempted**, even with Debug mode off. It includes the quest ID/title and current log index, client/addon versions, combat and group state, secure execution state, any taint reported for `QuestLogPushQuest`, and a bounded click stack. An attempt is not confirmation that anyone received or accepted the quest.
+
+`ADDON_ACTION_BLOCKED` and `ADDON_ACTION_FORBIDDEN` events attributed to QuestWithFriends calling `QuestLogPushQuest` record a WARN **Quest sharing blocked** entry. It includes the event-time context and the latest eligible click only if it occurred within five seconds; other security events are ignored. The API's taint source is evidence about that global, not proof of the underlying cause.
+
+After reproducing, log out or `/reload` to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Compare the `share` entries with BugGrabber's original stack, especially combat versus non-combat attempts and minimal-addon versus normal setups. Keep full SavedVariables private; share only redacted relevant entries. No API hooks, automatic retries, or security-error suppression are added.
+
 ## Simulator integration tests
 
 [**wow-ui-sim**](https://github.com/Osso/wow-ui-sim) loads the shipped TOC and exercises simulated frames, party APIs, event dispatch, and timer callbacks. With Docker running:

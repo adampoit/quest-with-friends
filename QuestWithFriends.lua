@@ -15,6 +15,9 @@ local MAX_PARTS = 100
 local SEND_INTERVAL = 0.5
 local SNAPSHOT_TIMEOUT = 15
 local MAX_RETRY_DELAY = 8
+local SHARE_DIAGNOSTIC_WINDOW = 5
+local lastShareAttempt
+local shareAttemptSequence = 0
 local peers = {}
 local members = {}
 local completed = {}
@@ -239,6 +242,59 @@ local function shareableQuestIndex(id)
 	end
 end
 
+local function shareContext()
+	local context = {
+		game = isForever and "forever" or "retail",
+		uptime = GetTime and GetTime(),
+		combatLockdown = InCombatLockdown and InCombatLockdown(),
+		playerInCombat = UnitAffectingCombat and UnitAffectingCombat("player"),
+		inParty = inParty(),
+		inRaid = IsInRaid(),
+		secureContext = issecure and issecure(),
+	}
+	if GetBuildInfo then
+		context.clientVersion, context.clientBuild, context.buildDate, context.interfaceVersion = GetBuildInfo()
+	end
+	if C_AddOns and C_AddOns.GetAddOnMetadata then
+		context.addonVersion = C_AddOns.GetAddOnMetadata("QuestWithFriends", "Version")
+	end
+	if issecurevariable then
+		context.apiSecure, context.apiTaintSource = issecurevariable("QuestLogPushQuest")
+	end
+	return context
+end
+
+local function recordShareAttempt(id, index)
+	shareAttemptSequence = shareAttemptSequence + 1
+	local attempt = shareContext()
+	attempt.attemptID, attempt.questID, attempt.logIndex = shareAttemptSequence, id, index
+	local info = C_QuestLog.GetInfo(index)
+	attempt.questTitle = info and info.title
+	attempt.stack = debugstack and debugstack(2, 8, 0)
+	lastShareAttempt = attempt
+	log("INFO", "share", "Quest sharing attempted", attempt)
+end
+
+local function recordShareBlocked(event, addonName, functionName)
+	if
+		addonName ~= "QuestWithFriends"
+		or (functionName ~= "QuestLogPushQuest" and functionName ~= "QuestLogPushQuest()")
+	then
+		return
+	end
+	local context = shareContext()
+	local data = { event = event, addon = addonName, protectedFunction = functionName, context = context }
+	-- Security events may arrive after OnClick returns; never attach an old quest to a later block.
+	local elapsed = lastShareAttempt
+		and lastShareAttempt.uptime
+		and context.uptime
+		and (context.uptime - lastShareAttempt.uptime)
+	if elapsed and elapsed >= 0 and elapsed <= SHARE_DIAGNOSTIC_WINDOW then
+		data.attempt, data.elapsed = lastShareAttempt, elapsed
+	end
+	log("WARN", "share", "Quest sharing blocked", data)
+end
+
 local function showPanel(groups, complete, notices)
 	Core.sortGroups(groups, QuestWithFriendsDB.sortMode, previewMode and QWF.Preview.activity or activity)
 	QWF.Panel.show(
@@ -253,7 +309,9 @@ local function showPanel(groups, complete, notices)
 				and function(id)
 					-- Resolve the index again: the quest log may have changed since rendering.
 					local index = shareableQuestIndex(id)
+					lastShareAttempt = nil
 					if index then
+						recordShareAttempt(id, index)
 						QuestLogPushQuest(index)
 					else
 						render()
@@ -889,6 +947,8 @@ local function receive(sender, message)
 end
 
 frame:RegisterEvent("ADDON_LOADED")
+frame:RegisterEvent("ADDON_ACTION_BLOCKED")
+frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 frame:RegisterEvent("UNIT_CONNECTION")
@@ -901,7 +961,9 @@ frame:RegisterEvent("ZONE_CHANGED")
 frame:RegisterEvent("ZONE_CHANGED_INDOORS")
 frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 frame:SetScript("OnEvent", function(_, event, ...)
-	if event == "ADDON_LOADED" then
+	if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
+		recordShareBlocked(event, ...)
+	elseif event == "ADDON_LOADED" then
 		if ... == "QuestWithFriends" then
 			-- SavedVariables are restored after the TOC's Lua files execute.
 			initializeSettings()
