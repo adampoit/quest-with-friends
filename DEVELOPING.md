@@ -122,7 +122,7 @@ To validate a proposed release tag, pass it to the bundler with `--tag`. The tag
 
 `.github/workflows/compatibility.yml` checks CurseForge's game-version catalog daily at 08:23 UTC (GitHub may delay scheduled runs), or on manual dispatch from the default branch. It considers only numeric `major.minor.patch` versions in the supported Retail and Forever version types. CurseForge listings are distribution metadata: they do not guarantee PTR availability or advance notice before a patch launches. Labeled beta/PTR entries are not converted into guessed interface numbers.
 
-`tools/compatibility_versions.json` records reviewed baselines and must stay aligned with the TOC. Each newer catalog version gets an independent `compatibility/<client>-<version>` branch and PR proposing the baseline and TOC update. Version comparisons are numeric, not based on catalog IDs. The PR mentions and requests review from `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner, and includes checkout instructions and a two-client smoke-test checklist. For organization-owned repositories, set the variable to a user login.
+`tools/compatibility_versions.json` records reviewed baselines and must stay aligned with the TOC. Only the newest numeric catalog version per client is selected. Each affected client gets an independent `compatibility/<client>-<version>` branch and PR proposing the baseline and TOC update; intermediate versions do not generate extra PRs. Version comparisons are numeric, not based on catalog IDs. The PR mentions and requests review from `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner, and includes checkout instructions and a two-client smoke-test checklist. For organization-owned repositories, set the variable to a user login.
 
 Before enabling the workflow:
 
@@ -140,7 +140,7 @@ For a read-only local plan using a downloaded catalog:
 python3 tools/check_game_versions.py /path/to/curseforge-versions.json
 ```
 
-`--create-prs --base <default-branch> --reviewer <login>` is reserved for the workflow's clean Git checkout, not a local Jujutsu working copy. The tooling tests use temporary local Git repositories when Git is available; no network or GitHub credentials are needed.
+`--create-prs --base <default-branch> --reviewer <login>` is reserved for the workflow's clean Git checkout, not a local Jujutsu working copy. The tooling tests use temporary local Git repositories when Git is available and run the Lua suite against generated Retail, Forever, and combined TOC updates when Busted is available; no network or GitHub credentials are needed.
 
 ## GitHub CI and releases
 

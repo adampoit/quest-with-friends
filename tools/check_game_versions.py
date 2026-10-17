@@ -116,6 +116,7 @@ def find_candidates(versions: object, baselines: dict[str, str]) -> list[Candida
 	candidates: list[Candidate] = []
 	for client, (_, type_id) in CLIENTS.items():
 		seen: set[str] = set()
+		latest: Candidate | None = None
 		for entry in catalog:
 			if entry.get("gameVersionTypeID") != type_id:
 				continue
@@ -129,12 +130,14 @@ def find_candidates(versions: object, baselines: dict[str, str]) -> list[Candida
 			if name in seen:
 				raise ValueError(f"Ambiguous CurseForge version for {client} {name}")
 			seen.add(name)
-			if version_tuple(name) > version_tuple(baselines[client]):
-				candidates.append(
-					Candidate(client, name, version_id, baselines[client])
-				)
+			if version_tuple(name) > version_tuple(baselines[client]) and (
+				latest is None or version_tuple(name) > version_tuple(latest.version)
+			):
+				latest = Candidate(client, name, version_id, baselines[client])
 		if not seen:
 			raise ValueError(f"CurseForge returned no numeric versions for {client}")
+		if latest is not None:
+			candidates.append(latest)
 	return sorted(candidates, key=lambda c: (c.client, version_tuple(c.version)))
 
 
