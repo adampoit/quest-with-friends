@@ -38,7 +38,7 @@ class CandidateTests(unittest.TestCase):
 			[], monitor.find_candidates(catalog() + [entry("12.0.7", 999)], BASELINES)
 		)
 
-	def test_clients_are_independent_and_versions_sort_numerically_not_by_id(self):
+	def test_only_latest_version_per_client_is_selected_numerically_not_by_id(self):
 		versions = catalog() + [
 			entry("12.1.10", 5),
 			entry("12.1.5", 999),
@@ -49,13 +49,25 @@ class CandidateTests(unittest.TestCase):
 		self.assertEqual(
 			[
 				("forever", "1.60.2"),
-				("retail", "12.1.5"),
-				("retail", "12.1.10"),
 				("retail", "13.0.0"),
 			],
 			[(c.client, c.version) for c in candidates],
 		)
 		self.assertEqual("12.1.0", candidates[-1].previous)
+
+	def test_catalog_with_both_reported_retail_updates_selects_only_12_1_7(self):
+		versions = catalog() + [entry("12.1.5", 999), entry("12.1.7", 5)]
+		for ordered in (versions, list(reversed(versions))):
+			self.assertEqual(
+				[monitor.Candidate("retail", "12.1.7", 5, "12.1.0")],
+				monitor.find_candidates(ordered, BASELINES),
+			)
+
+	def test_double_digit_patch_is_newer_than_single_digit_patch(self):
+		versions = catalog() + [entry("12.1.10", 5), entry("12.1.7", 999)]
+		self.assertEqual(
+			"12.1.10", monitor.find_candidates(versions, BASELINES)[0].version
+		)
 
 	def test_unrelated_client_types_and_nonnumeric_labels_are_ignored(self):
 		versions = catalog() + [
@@ -213,6 +225,44 @@ class CandidateTests(unittest.TestCase):
 				json.loads(result.stdout),
 			)
 
+	@unittest.skipUnless(
+		shutil.which("busted"), "Busted is required for generated-TOC regression tests"
+	)
+	def test_generated_candidate_tocs_pass_lua_suite(self):
+		baselines = monitor.read_baselines(monitor.ROOT)
+		original_toc = (monitor.ROOT / monitor.TOC).read_text(encoding="utf-8")
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			for source in monitor.ROOT.glob("*.lua"):
+				_ = shutil.copy2(source, root / source.name)
+			_ = shutil.copytree(monitor.ROOT / "tests", root / "tests")
+			for updates in (
+				{"retail": "12.1.5"},
+				{"retail": "12.1.7"},
+				{"forever": "1.60.2"},
+				{"retail": "13.0.0", "forever": "1.61.0"},
+			):
+				with self.subTest(updates=updates):
+					toc = original_toc
+					reviewed = baselines.copy()
+					for client, version in updates.items():
+						candidate = monitor.Candidate(
+							client, version, 1, reviewed[client]
+						)
+						toc = monitor.proposed_toc(toc, reviewed, candidate)
+						reviewed[client] = version
+					_ = (root / monitor.TOC).write_text(toc, encoding="utf-8")
+					result = subprocess.run(
+						["busted", "tests", "-v"],
+						cwd=root,
+						capture_output=True,
+						text=True,
+						check=False,
+					)
+					self.assertEqual(
+						0, result.returncode, result.stdout + result.stderr
+					)
+
 	def test_cli_requires_explicit_mutation_options(self):
 		result = subprocess.run(
 			[sys.executable, str(SCRIPT), "missing.json", "--create-prs"],
@@ -321,6 +371,18 @@ class PullRequestTests(unittest.TestCase):
 		self.existing = [{"number": 42}]
 		self.open_prs()
 		self.assertEqual(1, len(self.gh_calls))
+		self.assertEqual(
+			"", self.real_run(self.root, "git", "ls-remote", "--heads", "origin")
+		)
+
+	def test_existing_latest_pr_does_not_fall_back_to_an_older_candidate(self):
+		self.existing = [{"number": 2}]
+		candidates = monitor.find_candidates(
+			catalog() + [entry("12.1.5", 101), entry("12.1.7", 102)], BASELINES
+		)
+		self.open_prs(candidates)
+		self.assertEqual(1, len(self.gh_calls))
+		self.assertIn("compatibility/retail-12.1.7", self.gh_calls[0])
 		self.assertEqual(
 			"", self.real_run(self.root, "git", "ls-remote", "--heads", "origin")
 		)

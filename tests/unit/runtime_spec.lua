@@ -439,27 +439,40 @@ describe("Quest With Friends party sync", function()
 		end)
 	end
 
-	for _, target in ipairs({ { game = "retail", interface = 120100 }, { game = "forever", interface = 16001 } }) do
-		it("loads the shipped TOC and syncs, filters, shares and completes quests on " .. target.game, function()
+	for _, game in ipairs({ "retail", "forever" }) do
+		it("loads the shipped TOC and syncs, filters, shares and completes quests on " .. game, function()
+			local interface
+			for line in io.lines("QuestWithFriends.toc") do
+				local versions = line:match("^##%s*Interface:%s*(.+)")
+				if versions then
+					for value in versions:gmatch("%d+") do
+						local number = tonumber(value)
+						local isForever = number >= 16000 and number < 20000
+						if isForever == (game == "forever") then
+							assert.is_nil(interface)
+							interface = number
+						end
+					end
+				end
+			end
+			assert.is_number(interface)
 			rawset(_G, "GetBuildInfo", function()
-				return "", "", "", target.interface
+				return "", "", "", interface
 			end)
 			local sender = "Julia-Realm"
-			if target.game == "forever" then
+			if game == "forever" then
 				foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
 				sender = "Florace Bastille"
 			end
 			local mockPanel = QuestWithFriends.Panel
 			QuestWithFriends = nil
 			for line in io.lines("QuestWithFriends.toc") do
-				if line:match("^## Interface:") then
-					assert.is_not_nil(line:find(tostring(target.interface), 1, true))
-				elseif line:match("%.lua$") then
+				if line:match("%.lua$") then
 					assert(loadfile(line))()
 				end
 			end
 			QuestWithFriends.Panel = mockPanel
-			assert.are.equal(target.game, QuestWithFriends.QuestEquivalencesGame)
+			assert.are.equal(game, QuestWithFriends.QuestEquivalencesGame)
 			entries = { { questID = 42, title = "Errand" } }
 			objectives[42] = { { text = "Gnolls slain: 3/8", numFulfilled = 3, numRequired = 8 } }
 			questMaps[42] = 101
