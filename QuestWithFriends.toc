@@ -1,4 +1,4 @@
-## Interface: 120100, 16001
+## Interface: 120105, 16001
 ## Title: Quest With Friends
 ## Notes: Shows actionable quest differences in your party
 ## Version: 0.1.7
