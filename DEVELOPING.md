@@ -118,6 +118,30 @@ The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses
 
 To validate a proposed release tag, pass it to the bundler with `--tag`. The tag must equal `v` followed by the TOC version; a mismatch fails before writing a ZIP.
 
+## Upcoming-client compatibility reviews
+
+`.github/workflows/compatibility.yml` checks CurseForge's game-version catalog daily at 08:23 UTC (GitHub may delay scheduled runs), or on manual dispatch from the default branch. It considers only numeric `major.minor.patch` versions in the supported Retail and Forever version types. CurseForge listings are distribution metadata: they do not guarantee PTR availability or advance notice before a patch launches. Labeled beta/PTR entries are not converted into guessed interface numbers.
+
+`tools/compatibility_versions.json` records reviewed baselines and must stay aligned with the TOC. Each newer catalog version gets an independent `compatibility/<client>-<version>` branch and PR proposing the baseline and TOC update. Version comparisons are numeric, not based on catalog IDs. The PR mentions and requests review from `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner, and includes checkout instructions and a two-client smoke-test checklist. For organization-owned repositories, set the variable to a user login.
+
+Before enabling the workflow:
+
+- Install the **not-adam** GitHub App on this repository with **Contents: write** and **Pull requests: write** access.
+- Add repository secret `NOT_ADAM_APP_PRIVATE_KEY`; authentication uses `adampoit/not-adam@v1`.
+- Keep `CURSEFORGE_API_TOKEN` configured, as for publication.
+
+Branches and PRs use the App token so the existing push/PR test workflow runs normally, unlike PRs created with `GITHUB_TOKEN`. The monitor does not merge PRs, tag releases, or upload packages. A TOC bump is only a proposal: confirm the actual interface with `/dump GetBuildInfo()`, test the matching PTR/beta or live client, record the client build and addon revision, and fix regressions before merging. Merging marks the new baseline as reviewed; prepare a release separately. The pinned simulator and mocked tests do not certify new-client compatibility.
+
+Open, closed, and merged PRs all suppress further notifications for the same client/version. Close an unwanted or superseded PR to dismiss it, and reopen it to resume testing. Existing branches are never force-pushed; a branch left by a failed PR-creation attempt is reused on the next run. Multiple candidate PRs are independent: after merging one, rebase/reconcile the others against the new baseline and close older candidates rather than downgrading it.
+
+For a read-only local plan using a downloaded catalog:
+
+```sh
+python3 tools/check_game_versions.py /path/to/curseforge-versions.json
+```
+
+`--create-prs --base <default-branch> --reviewer <login>` is reserved for the workflow's clean Git checkout, not a local Jujutsu working copy. The tooling tests use temporary local Git repositories when Git is available; no network or GitHub credentials are needed.
+
 ## GitHub CI and releases
 
 `.github/workflows/test.yml` runs on branch pushes, pull requests, manual dispatch, and calls from the release workflow. It runs all Lua unit tests, the Python tooling suite on Python 3.10 and 3.13, a packaging smoke check, and simulator integration tests. Docker layers are cached. Only read permissions are granted to test jobs.
