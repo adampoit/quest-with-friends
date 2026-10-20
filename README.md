@@ -3,89 +3,59 @@
 **Know when everyone is ready to move on.**
 
 <p align="center">
-  <img src="screenshots/main.png" alt="Quest With Friends panel showing missing quests, objective progress, and party members ready to turn in." width="440" />
+  <img src="https://raw.githubusercontent.com/adampoit/quest-with-friends/main/screenshots/main.png" alt="Quest With Friends panel showing missing quests, objective progress, and party members ready to turn in." width="440" />
 </p>
 
 Quest With Friends shows the differences that matter while questing together: who missed a quest, who still needs an objective, and who is ready to turn in. When your party is caught up, it says **Party in sync**.
 
-Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-contained and works alongside Blizzard's quest tracker.
+Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-contained and works alongside Blizzard's quest tracker. Everyone in the party needs the addon to share their progress.
 
 ## Why use it?
 
 - **Catch missed quests before leaving town.** See which friends are missing a quest, with a **Share** button when WoW allows you to offer it.
-- **Avoid leaving someone behind.** See who still needs progress when another party member has finished an objective.
-- **Stop asking “Are you done yet?”** Readiness and completion differences appear together under one quest title.
+- **Avoid leaving someone behind.** See remaining objectives when another party member has finished, with readiness and completion differences grouped under one quest title.
+- **Put spare quest items to use.** For identifiable tradeable item objectives, finished members can show counts such as **10/10 · 2 spare** while a friend still needs items. Spare counts exclude items needed for the player's own logged quests and bank stock.
 - **Keep the view relevant.** Focus on the current zone and optionally include profession or class quests. On Forever, Camping quests count as profession quests too.
-- **Compare Retail quest variants.** Six reviewed Northshire families share completion status; four also compare objective progress, while two compare readiness. Other quests and Forever compare by exact quest ID.
-- **See connection health at a glance.** Clear notices distinguish offline members from waiting, refreshing, stale, or incompatible data.
+- **See connection health at a glance.** Notices distinguish offline members from waiting, refreshing, stale, or incompatible data. Last-known differences stay visible during recovery.
 
-The compact panel remembers its layout across characters and hides when you leave the party. Click a quest heading to collapse or expand its details; choices persist across reloads and logins. Collapsed headings retain a short summary and the **Share** button when available.
+## Get started
 
-## Install
+1. Install Quest With Friends for your client. For manual installation, download `QuestWithFriends-<version>.zip` from [GitHub Releases](https://github.com/adampoit/quest-with-friends/releases) and extract it so the addon manifest is at `Interface/AddOns/QuestWithFriends/QuestWithFriends.toc`.
+2. Enable **Quest With Friends** in the character-selection AddOns menu, then log in or `/reload`.
+3. Have your friends install the same release, then join a party. The panel appears and updates automatically as you quest.
 
-1. Open this repository's **Releases** page and download `QuestWithFriends-<version>.zip`, the ready-to-load addon package.
-2. Extract it into your client's `Interface/AddOns/` directory. The final layout must be:
+Install a separate copy in each client if you play both Retail and Forever.
 
-   ```text
-   Interface/AddOns/QuestWithFriends/QuestWithFriends.toc
-   ```
+**Try it solo:** use `/qwf preview`, or enable **Preview appearance** in the addon's settings, to explore sample party data and arrange the panel. Sharing is disabled in preview. Click **End preview** or use `/qwf preview off` to stop; joining a group or reloading also ends it.
 
-3. Enable **Quest With Friends** in the character-selection AddOns menu, then log in or `/reload`.
-4. Have your friends install the same release so everyone can exchange compatible quest data.
+## How it works
 
-Install a separate copy in each client if you play both Retail and Forever. The current TOC targets Retail 12.1 (`120100`) and WoW Forever beta 1.60.1 (`16001`); Forever beta interface numbers may change. The addon uses protocol 1.1, retaining baseline compatibility with 1.0 peers. Peers using older development builds or a different protocol major receive an update notice.
+The panel highlights **missing quests**, **unfinished objectives**, and **ready-to-turn-in or completed quests** when party members differ. Comparisons include differences between your friends, even when you are missing or still working on the quest yourself.
 
-## Use it
+Click **Share** beside a quest to offer it through WoW's normal party-wide sharing flow. WoW checks eligibility, and recipients accept the offer. Most comparisons use exact quest IDs; a small set of reviewed Retail Northshire quest variants also compare across class and race versions.
 
-Join a party and the panel appears automatically. Quest changes update it as you play. Comparisons cover the whole party, including differences between friends even when you are missing or still working on a quest. Each player's remaining objective appears once when any comparable party member has finished it; ready-to-turn-in and completed quests also reveal unfinished players' remaining progress.
+### Focus the view
 
-For identifiable tradeable item objectives, finished members also show counts while someone still needs the items. **`10/10 · 2 spare`** means the player has reserved their own logged quest requirements and carries two extra unbound, unlocked items. Bank stock is excluded. Ambiguous item matches or unavailable inventory data retain the normal display; older compatible addon versions do not show spare counts.
+Open **View** in the panel header to choose:
 
-**Try it solo:** use **`/qwf preview`**, or enable **Preview appearance** in the addon's settings, to show sample party data. Try the filters, collapse quest headings, and unlock the panel to arrange it. Share buttons are shown but disabled. Click **End preview**, use `/qwf preview` again, or `/qwf preview off` to stop. Preview also ends when you join a group or reload; it never sends sample data. Position and filter changes are saved normally, but sample collapse choices are not.
+- **Current zone only** — on by default.
+- **Show profession quests** and **Show class quests** — off by default.
+- **Smart** sorting — missing quests first, then most recent quest activity within each group — or **Title A–Z**.
 
-- **Missing:** a player is missing a quest known to another party member.
-- **Still in progress:** someone else has finished an objective or quest that this player still needs.
-- **Ready/completed:** highlights a readiness or completion difference.
-- **Party status incomplete:** a member is offline or waiting for fresh, compatible data. Cached differences stay visible.
-- **Offline:** the member is disconnected. Their last snapshot stays visible if available; syncing resumes automatically when they reconnect.
-
-Click **Share** beside a quest to offer it through WoW's normal party-wide sharing flow. WoW checks eligibility, and recipients accept the offer.
-
-Open **View** in the header. The **Show** section contains:
-
-| Filter                 | Default |
-| ---------------------- | ------- |
-| Current zone only      | On      |
-| Show profession quests | Off     |
-| Show class quests      | Off     |
-
-The dropdown also includes **Sort by**:
-
-- **Smart** (default): missing quests first, then most recent quest activity within both the missing and non-missing groups. Pickups, objective changes, readiness, completion and abandonment from you or a party member count as activity. Refreshes and unchanged snapshots do not.
-- **Title A–Z**: alphabetical order, without missing-first priority.
-
-Equal or unknown activity falls back to title, then quest ID. Activity is tracked during the current login, including quests outside the selected filters and quests currently in sync. Initial snapshots establish a baseline rather than counting as activity; activity history resets on reload. Preview uses fixed sample activity.
-
-Settings, including the sort choice, persist across reloads. Collapsing a quest only hides its details—it still contributes to party status. **Party in sync** reflects the selected filters. Quests with an unknown location remain visible; an unknown current zone temporarily expands the view to all zones. Long lists scroll so every quest difference remains reachable; the heading, status, scope, and connection notices stay pinned.
+**Party in sync** reflects these filters. Click a quest heading to collapse or expand its details; collapsed quests still count toward party status. Long lists scroll.
 
 ### Arrange the panel
 
-The panel is locked by default. Click the lock icon beside **View** to unlock it, using **Preview appearance** while solo if needed. **Lock panel** in **Settings → AddOns → Quest With Friends** controls the same preference. Drag the header to move it and the bottom-right corner to set its width and maximum height. Text and buttons keep their normal size.
+Click the lock icon beside **View** to unlock the panel. Drag the header to move it and the bottom-right corner to resize it, then lock it again. The locked panel shrinks to fit its content, scrolling when needed. Layout, filters, sorting, and collapse choices are saved across reloads and characters.
 
-While unlocked, the panel shows its full height allowance. Click the open lock icon when finished; it then shrinks to fit content, scrolling when the list exceeds that allowance. A minimum usable height protects pinned notices and quest space; extra notices may temporarily raise a small ceiling without changing your saved preference. Position, dimensions, and the lock preference persist across reloads and characters, with screen-boundary checks after display or UI-scale changes.
+The panel hides when you leave the party. Use `/qwf` to request a fresh party comparison if something looks out of date. **Party status incomplete** means a member is offline or the addon is waiting for fresh, compatible data—not that everyone is caught up.
 
-Recently completed quests stay available for comparisons during the current login, up to 30 entries. Use **`/qwf`** to request a fresh party comparison. Automatic retries and stalled-transfer recovery keep updates flowing.
+## Feedback and links
 
-## Reporting problems
+[Report a problem on GitHub](https://github.com/adampoit/quest-with-friends/issues) with your client (Retail or Forever), addon version, and reproduction steps. For sync issues, mention whether everyone used the same release and whether `/qwf` helped. Redact player identities from screenshots and keep account files and SavedVariables private.
 
-Open a GitHub issue with your client (Retail or Forever), addon version, reproduction steps, and expected versus actual behavior. For sync issues, include whether everyone used the same release and whether `/qwf` helped. Screenshots are useful with player identities redacted. Keep account files (`WTF` and SavedVariables) private.
+- [Changelog](https://github.com/adampoit/quest-with-friends/blob/main/CHANGELOG.md)
+- [Development and releases](https://github.com/adampoit/quest-with-friends/blob/main/DEVELOPING.md)
+- [Quest-data sources and tooling](https://github.com/adampoit/quest-with-friends/blob/main/tools/README.md)
 
-## Development and releases
-
-Developers can install **Quest With Friends (Dev)** alongside the release, with separate settings and dev-only screenshot/test tools. Enable only one copy at a time and reload; normal appearance preview and troubleshooting diagnostics remain available in both. See [development installations](DEVELOPING.md#release-and-development-installations) for setup.
-
-See [DEVELOPING.md](DEVELOPING.md) for tests, packaging, simulator screenshots, and releases; [CHANGELOG.md](CHANGELOG.md) for changes; and [PROTOCOL.md](PROTOCOL.md) for the wire format. Quest-data tooling is documented in [tools/README.md](tools/README.md).
-
-## License and credits
-
-Original code and documentation are [MIT licensed](LICENSE). Quest data uses ATT and QuestieDB.
+Original code and documentation are [MIT licensed](https://github.com/adampoit/quest-with-friends/blob/main/LICENSE). Quest data uses ATT and QuestieDB.

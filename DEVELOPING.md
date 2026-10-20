@@ -184,6 +184,18 @@ python3 tools/check_game_versions.py /path/to/curseforge-versions.json
 
 `--create-prs --base <default-branch> --reviewer <login>` is reserved for the workflow's clean Git checkout, not a local Jujutsu working copy. The tooling tests use temporary local Git repositories when Git is available and run the Lua suite against generated Retail, Forever, and combined TOC updates when Busted is available; no network or GitHub credentials are needed.
 
+## CurseForge description
+
+`README.md` is the source for the project description. Its centered, width-controlled HTML screenshot is kept for GitHub; the local exporter converts that block to a Markdown image and preserves the rest of the text, including absolute links:
+
+```sh
+python3 tools/export_curseforge.py > /tmp/quest-with-friends-curseforge.md
+```
+
+Paste the generated file's contents into CurseForge's description editor in **Markdown** mode, not WYSIWYG. On macOS, copy directly to the clipboard with `python3 tools/export_curseforge.py | pbcopy`. The exported screenshot uses the host's default sizing and alignment. No separately maintained description or automatic upload is involved.
+
+The exporter expects exactly one screenshot block in the README's current HTML format and fails if that format changes. Update its conversion and tests alongside any screenshot markup changes.
+
 ## GitHub CI and releases
 
 `.github/workflows/test.yml` runs on branch pushes, pull requests, manual dispatch, and calls from the release workflow. It runs all Lua unit tests, the Python tooling suite on Python 3.10 and 3.13, release/dev packaging smoke checks, and simulator integration tests for both identities. Docker layers are cached. Only read permissions are granted to test jobs.
