@@ -33,11 +33,13 @@ describe("Quest item stock comparisons and protocol", function()
 	end
 
 	it("round trips optional stock without changing baseline quest progress", function()
-		local input = { [42] = quest("ready", 12, 2, 2589) }
-		assert.same(input, Core.decode(Core.encode(input)))
-		assert.is_nil(input[42].extensions)
-		input[42].objectives[1].spare = 0
-		assert.same(input, Core.decode(Core.encode(input)))
+		for _, state in ipairs({ "ready", "completed" }) do
+			local input = { [42] = quest(state, 12, 2, 2589) }
+			assert.same(input, Core.decode(Core.encode(input)))
+			assert.is_nil(input[42].extensions)
+			input[42].objectives[1].spare = 0
+			assert.same(input, Core.decode(Core.encode(input)))
+		end
 	end)
 
 	it("preserves objective indices and replaces stock metadata on the next snapshot", function()
@@ -115,7 +117,7 @@ describe("Quest item stock comparisons and protocol", function()
 		end
 	end)
 
-	for _, state in ipairs({ "active", "ready" }) do
+	for _, state in ipairs({ "active", "ready", "completed" }) do
 		for _, localAhead in ipairs({ true, false }) do
 			it("shows stock for a " .. state .. " holder with localAhead=" .. tostring(localAhead), function()
 				local donor, unfinished = quest(state, 10, 2, 2589), quest("active", 3)
@@ -130,11 +132,11 @@ describe("Quest item stock comparisons and protocol", function()
 						not localAhead and 2 or nil
 					),
 				}
-				if state == "ready" then
+				if state ~= "active" then
 					table.insert(expected, localAhead and 2 or 3, {
 						player = localAhead and "You" or "Julia",
 						kind = "ahead",
-						reason = "ready",
+						reason = state,
 					})
 				end
 				assert.same(expected, groups[1].differences)
@@ -156,23 +158,26 @@ describe("Quest item stock comparisons and protocol", function()
 		assert.same({ row("Julia", "needs", 3) }, groups[1].differences)
 	end)
 
-	it("does not show stock when everyone is finished, nobody has the quest, or it was turned in", function()
-		for _, state in ipairs({ "active", "ready" }) do
-			assert.same(
-				{},
-				Core.compare({ [42] = quest(state, 10, 2, 2589) }, {
-					{ name = "Julia", quests = { [42] = quest(state, 10) } },
-				})
-			)
+	it(
+		"does not show stock when everyone is finished, nobody has the quest, or no spares remain after turn-in",
+		function()
+			for _, state in ipairs({ "active", "ready", "completed" }) do
+				assert.same(
+					{},
+					Core.compare({ [42] = quest(state, 10, 2, 2589) }, {
+						{ name = "Julia", quests = { [42] = quest(state, 10) } },
+					})
+				)
+			end
+			local groups = Core.compare({ [42] = quest("completed", 10, 0, 2589) }, {
+				{ name = "Julia", quests = { [42] = quest("active", 3) } },
+			})
+			assert.same({ player = "You", kind = "ahead", reason = "completed" }, groups[1].differences[1])
+			assert.are.equal(2, #groups[1].differences)
+			groups = Core.compare({ [42] = quest("active", 10, 2, 2589) }, { { name = "Julia", quests = {} } })
+			assert.same({ { player = "Julia", kind = "missing", reason = "missing" } }, groups[1].differences)
 		end
-		local groups = Core.compare({ [42] = quest("completed", 10, 2, 2589) }, {
-			{ name = "Julia", quests = { [42] = quest("active", 3) } },
-		})
-		assert.same({ player = "You", kind = "ahead", reason = "completed" }, groups[1].differences[1])
-		assert.are.equal(2, #groups[1].differences)
-		groups = Core.compare({ [42] = quest("active", 10, 2, 2589) }, { { name = "Julia", quests = {} } })
-		assert.same({ { player = "Julia", kind = "missing", reason = "missing" } }, groups[1].differences)
-	end)
+	)
 
 	it("deduplicates remote donors regardless of viewpoint and roster order", function()
 		local a = { name = "Alex", quests = { [42] = quest("active", 10, 2, 2589) } }

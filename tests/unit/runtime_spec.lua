@@ -384,7 +384,7 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal(2, snapshot[43].objectives[1].spare)
 	end)
 
-	it("retries stock identification when item data arrives and clears it on turn-in", function()
+	it("retries stock identification and retains known identities with fresh stock after turn-in", function()
 		entries = { { questID = 42, title = "Cloth Delivery" } }
 		objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
 		carriedCloth(12)
@@ -399,11 +399,104 @@ describe("Quest With Friends party sync", function()
 		fire("GET_ITEM_INFO_RECEIVED", 2589, true)
 		flush()
 		assert.are.equal(2, latestSnapshot()[42].objectives[1].spare)
-		entries, objectives = {}, {}
+		carriedCloth(2)
+		-- The turn-in event can precede removal of the old quest-log entry.
 		fire("QUEST_TURNED_IN", 42)
 		flush()
 		assert.are.equal("completed", latestSnapshot()[42].state)
-		assert.same({}, latestSnapshot()[42].objectives)
+		assert.same(
+			{ text = "Linen Cloth", have = 10, need = 10, itemID = 2589, spare = 2 },
+			latestSnapshot()[42].objectives[1]
+		)
+		receiveSnapshot({
+			[42] = {
+				title = "Cloth Delivery",
+				state = "active",
+				objectives = { { text = "Linen Cloth", have = 3, need = 10 } },
+			},
+		}, 1)
+		assert.are.equal(2, view.groups[1].differences[1].objective.spare)
+		assert.are.equal("completed", view.groups[1].differences[2].reason)
+		entries, objectives = {}, {}
+		carriedCloth(4)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.are.equal(4, latestSnapshot()[42].objectives[1].spare)
+		assert.are.equal(4, view.groups[1].differences[1].objective.spare)
+		_G.C_Container.GetContainerNumSlots = function()
+			return 0
+		end
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.is_nil(latestSnapshot()[42].objectives[1].spare)
+		assert.are.equal("completed", view.groups[1].differences[1].reason)
+		carriedCloth(2)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.are.equal(2, latestSnapshot()[42].objectives[1].spare)
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 2/10", type = "item", numFulfilled = 2, numRequired = 10 } }
+		fire("QUEST_ACCEPTED", 1, 42)
+		flush()
+		assert.are.equal("active", latestSnapshot()[42].state)
+		assert.are.equal(0, latestSnapshot()[42].objectives[1].spare)
+	end)
+
+	it("retains verified identities when a bag update precedes the turn-in event", function()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
+		carriedCloth(12)
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		carriedCloth(2)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.is_nil(latestSnapshot()[42].objectives[1].itemID)
+		fire("QUEST_TURNED_IN", 42)
+		flush()
+		assert.are.equal(2589, latestSnapshot()[42].objectives[1].itemID)
+		assert.are.equal(2, latestSnapshot()[42].objectives[1].spare)
+	end)
+
+	for _, changed in ipairs({ "text", "type", "need" }) do
+		it("does not retain a verified identity after objective " .. changed .. " changes", function()
+			entries = { { questID = 42, title = "Cloth Delivery" } }
+			objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
+			carriedCloth(12)
+			fire("PLAYER_ENTERING_WORLD")
+			flush()
+			if changed == "text" then
+				objectives[42][1].text = "Collect Linen Cloth"
+			elseif changed == "type" then
+				objectives[42][1].type = "monster"
+			else
+				objectives[42][1].numRequired = 20
+			end
+			carriedCloth(2)
+			fire("QUEST_LOG_UPDATE")
+			flush()
+			fire("QUEST_TURNED_IN", 42)
+			flush()
+			assert.is_nil(latestSnapshot()[42].objectives[1].itemID)
+		end)
+	end
+
+	it("does not infer item stock from completed history without a verified local identity", function()
+		carriedCloth(2)
+		_G.C_QuestLog.IsQuestFlaggedCompleted = function()
+			return true
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({
+			[42] = {
+				title = "Cloth Delivery",
+				state = "active",
+				objectives = { { text = "Linen Cloth", have = 3, need = 10, itemID = 2589, spare = 0 } },
+			},
+		}, 1)
+		assert.are.equal("completed", view.groups[1].differences[1].reason)
+		assert.are.equal(2, #view.groups[1].differences)
 	end)
 
 	it("renders remote-to-remote progress and missing players from received snapshots", function()

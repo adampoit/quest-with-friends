@@ -165,6 +165,34 @@ describe("Quest item stock", function()
 		assert.is_nil(progress.spare)
 	end)
 
+	it("rechecks known completed items without reserving their consumed requirements", function()
+		bags[0] = { stack(2589, "Linen Cloth", 7) }
+		local finished = objective()
+		finished.itemID = 2589
+		local logged = objective(5, 5)
+		annotate({ logged }, { finished })
+		assert.are.equal(2, finished.spare)
+		assert.are.equal(2, logged.spare)
+		bags[0][1].isLocked = true
+		annotate({}, { finished })
+		assert.is_nil(finished.spare)
+		assert.is_nil(finished.itemID)
+	end)
+
+	it("does not infer completed identities or reuse stale stock on missing APIs", function()
+		bags[0] = { stack(2589, "Linen Cloth", 2) }
+		for _, id in ipairs({ false, 999, 2589 }) do
+			local finished = objective()
+			finished.itemID = id or nil
+			if id == 2589 then
+				_G.C_Container = nil
+			end
+			annotate({}, { finished })
+			assert.is_nil(finished.itemID)
+			assert.is_nil(finished.spare)
+		end
+	end)
+
 	it("falls back without optional inventory APIs or bag-slot information", function()
 		for _, key in ipairs({ "C_Container", "C_Item", "NUM_BAG_SLOTS" }) do
 			local saved = _G[key]

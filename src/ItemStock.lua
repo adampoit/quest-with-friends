@@ -5,8 +5,14 @@ if QWF.disabled then
 end
 QWF.ItemStock = {}
 
-function QWF.ItemStock.annotate(objectives)
-	if #objectives == 0 then
+function QWF.ItemStock.annotate(objectives, completedObjectives)
+	completedObjectives = completedObjectives or {}
+	local retainedIDs = {}
+	for _, objective in ipairs(completedObjectives) do
+		retainedIDs[objective] = objective.itemID
+		objective.itemID, objective.spare = nil, nil
+	end
+	if #objectives == 0 and #completedObjectives == 0 then
 		return
 	end
 	local containers, items = _G.C_Container, _G.C_Item
@@ -53,18 +59,26 @@ function QWF.ItemStock.annotate(objectives)
 			stock.reserved = stock.reserved + objective.need
 		end
 	end
-	for _, objective in ipairs(objectives) do
+	local function annotate(objective, retainedID)
 		local stock = byName[objective.text]
-		-- Exact names and agreeing counts only; never fuzzy-match objective descriptions.
-		if
-			stock
-			and not stock.ambiguous
-			and stock.available > 0
-			and objective.need > 0
-			and math.min(objective.have, objective.need) == math.min(stock.total, objective.need)
-		then
+		-- Turned-in requirements no longer reserve stock; only reuse an already verified identity.
+		local agrees = stock
+			and (
+				retainedID and retainedID == stock.itemID
+				or not retainedID
+					and math.min(objective.have, objective.need) == math.min(stock.total, objective.need)
+			)
+		if stock and not stock.ambiguous and stock.available > 0 and objective.need > 0 and agrees then
 			objective.itemID = stock.itemID
 			objective.spare = math.max(0, stock.available - stock.reserved)
+		end
+	end
+	for _, objective in ipairs(objectives) do
+		annotate(objective)
+	end
+	for _, objective in ipairs(completedObjectives) do
+		if retainedIDs[objective] then
+			annotate(objective, retainedIDs[objective])
 		end
 	end
 end

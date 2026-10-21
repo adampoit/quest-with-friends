@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Right-click an abandonable quest heading and choose **Abandon quest…** to open WoW's normal confirmation, including quest-item removal warnings when applicable. Left-click still expands or collapses details. Abandonment uses your actual logged quest variant, rechecks eligibility when chosen, and is unavailable for preview or screenshot samples.
+- Keep showing confirmed spare tradeable items after turning in a quest during the current session, while a friend still needs them. Recheck carried stock and reserve other logged quest requirements; retain the Completed label and omit stock when identity or tradeability is uncertain.
 - Record deduplicated UI status and visibility transitions with AddonKit, including stale/offline notices, recovery timing, snapshot age and triggering events. Requires Debug mode; preview and screenshot views are labeled separately.
+- Right-click an abandonable quest heading and choose **Abandon quest…** to open WoW's normal confirmation, including quest-item removal warnings when applicable. Left-click still expands or collapses details. Abandonment uses your actual logged quest variant, rechecks eligibility when chosen, and is unavailable for preview or screenshot samples.
 
 ## 0.1.8
 

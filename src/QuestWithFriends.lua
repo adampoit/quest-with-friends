@@ -183,18 +183,28 @@ local function collectQuests()
 			headerCategory = headers[info.title]
 		elseif info and (info.isHidden or info.isInternalOnly) then
 			filtered = filtered + 1
-		elseif info and not info.isHeader and type(info.questID) == "number" and info.questID > 0 then
+		elseif
+			info
+			and not info.isHeader
+			and type(info.questID) == "number"
+			and info.questID > 0
+			and not completed[info.questID]
+		then
 			local id = info.questID
 			questCategories[id] = questCategory(id) or headerCategory or questCategories[id]
 			local objectives = {}
 			local raw = C_QuestLog.GetQuestObjectives(id) or {}
-			for _, objective in ipairs(raw) do
+			for objectiveIndex, objective in ipairs(raw) do
 				local need = tonumber(objective.numRequired) or 0
 				local have = tonumber(objective.numFulfilled) or (objective.finished and need or 0)
 				local text = (objective.text or ""):gsub("^%s*%d+/%d+%s+", ""):gsub(":%s*%d+/%d+%s*$", "")
 				local progress = { text = text, have = have, need = need }
 				objectives[#objectives + 1] = progress
 				if objective.type == "item" then
+					local previous = localQuests[id] and localQuests[id].objectives[objectiveIndex]
+					if previous and previous.text == text and previous.need == need then
+						progress.verifiedItemID = previous.itemID or previous.verifiedItemID
+					end
 					itemObjectives[#itemObjectives + 1] = progress
 				end
 			end
@@ -207,26 +217,38 @@ local function collectQuests()
 			}
 		end
 	end
-	QWF.ItemStock.annotate(itemObjectives)
+	local completedObjectives = {}
+	for id, record in pairs(completed) do
+		local objectives = {}
+		for _, saved in ipairs(record.objectives) do
+			local objective = { text = saved.text, have = saved.need, need = saved.need, itemID = saved.itemID }
+			objectives[#objectives + 1] = objective
+			if saved.itemID then
+				completedObjectives[#completedObjectives + 1] = objective
+			end
+		end
+		quests[id] = {
+			title = record.title,
+			state = "completed",
+			objectives = objectives,
+			mapID = record.mapID,
+			category = questCategories[id],
+		}
+	end
+	QWF.ItemStock.annotate(itemObjectives, completedObjectives)
+	for _, objective in ipairs(itemObjectives) do
+		objective.verifiedItemID = objective.itemID or objective.verifiedItemID
+	end
 	local visible = 0
-	for _ in pairs(quests) do
-		visible = visible + 1
+	for _, quest in pairs(quests) do
+		if quest.state ~= "completed" then
+			visible = visible + 1
+		end
 	end
 	local summary = visible .. ":" .. filtered
 	if summary ~= lastScanSummary then
 		lastScanSummary = summary
 		log("INFO", "scan", "Quest log scanned", { visible = visible, hiddenOrInternal = filtered })
-	end
-	for id, record in pairs(completed) do
-		if not quests[id] then
-			quests[id] = {
-				title = record.title,
-				state = "completed",
-				objectives = {},
-				mapID = record.mapID,
-				category = questCategories[id],
-			}
-		end
 	end
 	return quests
 end
@@ -1157,9 +1179,19 @@ frame:SetScript("OnEvent", function(_, event, ...)
 			local id = ...
 			if type(id) == "number" and id > 0 then
 				local info = C_QuestLog.GetTitleForQuestID(id)
+				local objectives = {}
+				-- Bag updates may consume the turn-in items before this event arrives.
+				for _, objective in ipairs(localQuests[id] and localQuests[id].objectives or {}) do
+					objectives[#objectives + 1] = {
+						text = objective.text,
+						need = objective.need,
+						itemID = objective.itemID or objective.verifiedItemID,
+					}
+				end
 				completed[id] = {
 					title = info or (localQuests[id] and localQuests[id].title) or ("Quest " .. id),
 					mapID = localQuests[id] and localQuests[id].mapID,
+					objectives = objectives,
 				}
 				completedOrder[#completedOrder + 1] = id
 				if #completedOrder > 30 then

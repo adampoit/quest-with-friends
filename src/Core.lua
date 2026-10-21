@@ -455,7 +455,7 @@ function Core.compare(localQuests, members, zoneID)
 			end
 		end
 		local function addItemStock(playerIndex, quest, other, sameID)
-			if quest.state == "completed" or other.state ~= "active" then
+			if other.state ~= "active" then
 				return
 			end
 			for index, objective in ipairs(quest.objectives) do
@@ -463,6 +463,7 @@ function Core.compare(localQuests, members, zoneID)
 				if
 					objective.itemID
 					and objective.spare ~= nil
+					and (quest.state ~= "completed" or objective.spare > 0)
 					and objective.need > 0
 					and objective.have >= objective.need
 					and remaining

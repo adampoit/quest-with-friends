@@ -14,7 +14,7 @@ Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-co
 
 - **Catch missed quests before leaving town.** See which friends are missing a quest, with a **Share** button when WoW allows you to offer it.
 - **Avoid leaving someone behind.** See remaining objectives when another party member has finished, with readiness and completion differences grouped under one quest title.
-- **Put spare quest items to use.** For identifiable tradeable item objectives, finished members can show counts such as **10/10 · 2 spare** while a friend still needs items. Spare counts exclude items needed for the player's own logged quests and bank stock.
+- **Put spare quest items to use.** For identifiable tradeable item objectives, finished members can show counts such as **10/10 · 2 spare** while a friend still needs items. Spare counts exclude items needed for the player's own logged quests and bank stock. Confirmed spares remain visible after turning in a quest during the current session; old completion history alone cannot identify spare items.
 - **Keep the view relevant.** Focus on the current zone and optionally include profession or class quests. On Forever, Camping quests count as profession quests too.
 - **See connection health at a glance.** Notices distinguish offline members from waiting, refreshing, stale, or incompatible data. Last-known differences stay visible during recovery.
 
