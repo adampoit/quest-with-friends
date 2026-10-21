@@ -100,7 +100,9 @@ Show a finished holder's objective only while a comparable member still needs it
 
 ## Delivery and recovery
 
-Messages are paced at 0.5-second intervals. Failed API submissions retry the same message with 1–8-second exponential backoff. At most one newer snapshot is queued behind an active snapshot; intermediate changes coalesce.
+Messages are paced at 0.5-second intervals. Failed API submissions retry with 1–8-second exponential backoff. At most one newer snapshot is queued behind an active snapshot; intermediate changes coalesce.
+
+Before the first successful chunk submission, routine snapshots are checked against the latest local event scan. Obsolete unsent revisions are discarded; the pending coalesced refresh queues the latest state. An unsent routine copy of the last fully submitted payload is also suppressed. This check includes retries of a rejected first chunk. Once any chunk succeeds, that revision finishes unchanged, including retries of the same message. Explicit refresh/recovery obligations are preserved, including requests absorbed by an already-queued routine snapshot. No wire format or version changes are involved.
 
 A peer awaiting a snapshot is checked for assembly progress every 15 seconds. Lack of progress requests a new snapshot, with recovery intervals backing off to 60 seconds. Routine snapshots received while cached data is healthy use a quiet updating indicator, retaining the last-known comparison without inserting connection notices. Pending snapshots still do not count as fully current internally. Initial loading, explicit refreshes, roster/reconnect recovery, invalid snapshots, and stalled transfers retain prominent waiting, refreshing or stale notices. Cached data remains comparable until a complete valid snapshot replaces it. Leaving the party cancels sends and recovery work.
 

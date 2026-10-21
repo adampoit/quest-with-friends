@@ -1105,6 +1105,27 @@ pump = function()
 	elseif oversizePending then
 		message = OVERSIZED
 	else
+		if not outgoing or outgoing.next == 1 then
+			-- Event scans can outdate unsent snapshots; the pending refresh will queue the latest state.
+			local payload = Core.encode(localQuests)
+			if outgoing and not outgoing.forced and outgoing.payload ~= payload then
+				logCanceledSnapshot(outgoing, "obsolete_before_start")
+				outgoing = nil
+			end
+			if queuedSnapshot and not queuedSnapshot.forced and queuedSnapshot.payload ~= payload then
+				logCanceledSnapshot(queuedSnapshot, "obsolete_before_start")
+				queuedSnapshot = nil
+			end
+			if
+				not outgoing
+				and queuedSnapshot
+				and not queuedSnapshot.forced
+				and queuedSnapshot.payload == lastPayload
+			then
+				logCanceledSnapshot(queuedSnapshot, "matches_submitted")
+				queuedSnapshot = nil
+			end
+		end
 		if not outgoing then
 			outgoing = queuedSnapshot
 			queuedSnapshot = nil
@@ -1186,6 +1207,7 @@ local function broadcast(force, context)
 		return
 	end
 	if matches(queuedSnapshot) then
+		queuedSnapshot.forced = forced
 		queuedSnapshot.context = mergeContext(context, queuedSnapshot.context)
 		logSuppressedSnapshot("matches_queued", payload, context)
 		return

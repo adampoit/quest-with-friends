@@ -255,6 +255,52 @@ local function uiLogs(client, message, status)
 	return found
 end
 
+local function syncLogs(client, message)
+	local found = {}
+	for _, entry in ipairs(client.logs) do
+		if entry.category == "sync" and entry.message == message then
+			found[#found + 1] = entry.data
+		end
+	end
+	return found
+end
+
+local function stockedNetwork(game)
+	local n = network(game)
+	local a = n.clients[1]
+	for id = 1, 8 do
+		a.quests[id] = quest(string.rep("x", 100))
+	end
+	a.quests[42] = quest("Cloth Delivery")
+	a.quests[42].objectives = {
+		{ text = "Linen Cloth: 10/10", numFulfilled = 10, numRequired = 10, type = "item" },
+	}
+	local inventory = { locked = false }
+	a.env.NUM_TOTAL_EQUIPPED_BAG_SLOTS = 0
+	a.env.C_Container = {
+		GetContainerNumSlots = function()
+			return 1
+		end,
+		GetContainerItemInfo = function()
+			return {
+				itemID = 2589,
+				itemName = "Linen Cloth",
+				stackCount = 15,
+				isBound = false,
+				isLocked = inventory.locked,
+			}
+		end,
+	}
+	a.env.C_Item = {
+		GetItemInfo = function()
+			return "Linen Cloth", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, 0
+		end,
+	}
+	n:join()
+	n:advance(12)
+	return n, a, inventory
+end
+
 for _, game in ipairs({ "retail", "forever" }) do
 	describe("Quest With Friends reliable sync on " .. game, function()
 		it("logs displayed unknown, waiting, incompatible and oversized transitions once", function()
@@ -859,6 +905,203 @@ for _, game in ipairs({ "retail", "forever" }) do
 			local attempts = #a.attempts
 			n:advance(20)
 			assert.are.equal(attempts, #a.attempts)
+		end)
+
+		for _, debugMode in ipairs({ true, false }) do
+			it(
+				"skips an obsolete inventory update after a brief lock with Debug mode " .. tostring(debugMode),
+				function()
+					local n, a, inventory = stockedNetwork(game)
+					a.env.QuestWithFriends.db.debugMode = debugMode
+					local attempts, snapshots = #a.attempts, #a:snapshots()
+					a:fire("QUEST_LOG_UPDATE")
+					n:advance(0.7)
+					inventory.locked = true
+					a:fire("ITEM_LOCK_CHANGED")
+					n:advance(0.2)
+					inventory.locked = false
+					a:fire("ITEM_LOCK_CHANGED")
+					n:advance(20)
+					assert.are.equal(attempts, #a.attempts)
+					assert.are.equal(snapshots, #a:snapshots())
+					assert.are.equal(5, a:snapshots()[snapshots][42].objectives[1].spare)
+					local canceled = syncLogs(a, "Quest snapshot canceled")
+					assert.are.equal(debugMode and 1 or 0, #canceled)
+					if debugMode then
+						assert.are.equal("obsolete_before_start", canceled[1].reason)
+						assert.are.equal(1, canceled[1].nextPart)
+					end
+				end
+			)
+		end
+
+		it("sends the latest state instead of starting an obsolete queued routine snapshot", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.quests[42] = quest(string.rep("a", 250))
+			n:join()
+			n:advance(8)
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(0.9)
+			a.quests[42].title = string.rep("c", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			local snapshots = a:snapshots()
+			assert.are.equal(2, #snapshots)
+			assert.are.equal(string.rep("c", 250), snapshots[2][42].title)
+			assert.are.equal(string.rep("c", 250), b.view.groups[1].title)
+			assert.is_true(b.view.complete)
+			assert.are.equal("obsolete_before_start", syncLogs(a, "Quest snapshot canceled")[1].reason)
+		end)
+
+		it("rechecks obsolete routine snapshots whose first chunk was rejected", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.quests[42] = quest(string.rep("a", 250))
+			n:join()
+			n:advance(8)
+			local rejected = {}
+			a.sendResult = function(message)
+				if message:match(":D:") and #rejected == 0 then
+					rejected[1] = message
+					return 5
+				end
+				return 0
+			end
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(1.4)
+			assert.are.equal(1, #rejected)
+			a.quests[42].title = string.rep("c", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			local repeated = 0
+			for _, attempt in ipairs(a.attempts) do
+				if attempt.message == rejected[1] then
+					repeated = repeated + 1
+				end
+			end
+			assert.are.equal(1, repeated)
+			assert.are.equal(2, #a:snapshots())
+			assert.are.equal(string.rep("c", 250), a:snapshots()[2][42].title)
+			assert.is_true(b.view.complete)
+			assert.are.equal("obsolete_before_start", syncLogs(a, "Quest snapshot canceled")[1].reason)
+		end)
+
+		it("does not resend the last submitted state when an unstarted throttled update is undone", function()
+			local n = network(game)
+			local a = n.clients[1]
+			a.quests[42] = quest(string.rep("a", 250))
+			n:join()
+			n:advance(8)
+			local attempts = #a.attempts
+			a.sendResult = function()
+				return 5
+			end
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(1.4)
+			a.sendResult = nil
+			a.quests[42].title = string.rep("a", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			assert.are.equal(attempts + 1, #a.attempts)
+			assert.are.equal(1, #a:snapshots())
+			local canceled = syncLogs(a, "Quest snapshot canceled")
+			assert.are.equal("obsolete_before_start", canceled[1].reason)
+			assert.are.equal("matches_submitted", canceled[2].reason)
+		end)
+
+		it("finishes a started revision and its throttled final chunk before sending newer data", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.quests[42] = quest(string.rep("a", 250))
+			n:join()
+			n:advance(8)
+			local finals = {}
+			a.sendResult = function(message)
+				local _, part, total = message:match("^1%.1:D:(%d+):(%d+):(%d+):")
+				if part and part == total then
+					finals[#finals + 1] = message
+					if #finals == 1 then
+						return 5
+					end
+				end
+				return 0
+			end
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(1.4)
+			a.quests[42].title = string.rep("c", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			assert.are.equal(finals[1], finals[2])
+			local snapshots = a:snapshots()
+			assert.are.equal(3, #snapshots)
+			assert.are.equal(string.rep("b", 250), snapshots[2][42].title)
+			assert.are.equal(string.rep("c", 250), snapshots[3][42].title)
+			assert.same({}, syncLogs(a, "Quest snapshot canceled"))
+			assert.is_true(b.view.complete)
+		end)
+
+		it("preserves explicit refresh snapshots even if newer data arrives before their first chunk", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.quests[42] = quest(string.rep("a", 250))
+			n:join()
+			n:advance(8)
+			a.env.SlashCmdList.QUESTWITHFRIENDS("")
+			n:advance(0.9)
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			local snapshots = a:snapshots()
+			assert.are.equal(3, #snapshots)
+			assert.are.equal(string.rep("a", 250), snapshots[2][42].title)
+			assert.are.equal(string.rep("b", 250), snapshots[3][42].title)
+			local submitted = syncLogs(a, "Submitted quest snapshot")
+			assert.is_true(submitted[2].forced)
+			assert.are.equal("manual_refresh", submitted[2].forceReasons)
+			assert.is_true(b.view.complete)
+		end)
+
+		it("retains a refresh obligation absorbed by a queued routine update when data reverts", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			for id = 1, 8 do
+				a.quests[id] = quest(string.rep("x", 200))
+			end
+			a.quests[42] = quest(string.rep("a", 250))
+			n:join()
+			n:advance(15)
+			local acceptActive = false
+			n.deliver = function(from, to)
+				return from ~= a or to ~= b or acceptActive
+			end
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(1.4)
+			a.quests[42].title = string.rep("c", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(0.9)
+			acceptActive = true
+			a:receive(b.sender, "1.1:H")
+			a:receive(b.sender, chunks(a, 999, {})[1])
+			n:advance(0.9)
+			a.quests[42].title = string.rep("b", 250)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(20)
+			local snapshots = a:snapshots()
+			assert.are.equal(3, #snapshots)
+			assert.same(snapshots[2], snapshots[3])
+			local submitted = syncLogs(a, "Submitted quest snapshot")
+			assert.is_true(submitted[3].forced)
+			assert.are.equal("snapshot_requested", submitted[3].forceReasons)
+			assert.is_true(b.view.complete)
+			for _, l in ipairs(b.logs) do
+				assert.are_not.equal("Quest snapshot timed out; requesting refresh", l.message)
+			end
 		end)
 
 		it("coalesces new quest updates while finishing the active snapshot", function()

@@ -74,7 +74,7 @@ Connection notices appear separately above quest groups. Distinguish offline mem
 
 Addon-enabled members exchange complete quest snapshots through WoW's addon communication channel. Each snapshot carries actual quest IDs, titles, states, objective counts, locations and classifications. Filters apply to the local presentation.
 
-Party changes and quest events drive updates. Paced messages, coalesced changes, automatic retries and stalled-transfer recovery keep synchronization responsive. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
+Party changes and quest events drive updates. Paced messages, coalesced changes, automatic retries and stalled-transfer recovery keep synchronization responsive. Routine updates that become outdated before transmission are skipped in favor of the latest state, while explicit refreshes and transfers already underway remain protected. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 
 ## Design principles
 

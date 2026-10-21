@@ -2,12 +2,10 @@
 
 ## Unreleased
 
+- Skip already-outdated routine snapshots before their first successful chunk, avoiding unnecessary full updates for brief item locks and other transient changes. Preserve explicit refresh/recovery requests and finish transfers already underway.
 - Add Debug-mode snapshot fingerprints, encoded-content change summaries, coalesced event/force reasons, queue/assembly timing, and deduplicated suppression/cancellation evidence to trace redundant sync traffic without logging raw payloads or changing the protocol.
-
 - Keep routine quest updates quiet: retain the last-known comparison with a muted Updating indicator instead of repeatedly showing incomplete-party warnings and moving quest rows. Initial loading, explicit refreshes and genuine recovery remain clearly signaled.
-
 - Add deduplicated Debug-mode diagnostics for objective matching and rejection reasons, fresh inventory counts, submitted/received stock metadata, filtering, and exact rendered or collapsed objective-row text. Requires AddonKit; normal logging is unchanged.
-
 - Keep showing confirmed spare tradeable items after turning in a quest during the current session, while a friend still needs them. Recheck carried stock and reserve other logged quest requirements; retain the Completed label and omit stock when identity or tradeability is uncertain.
 - Record deduplicated UI status and visibility transitions with AddonKit, including stale/offline notices, recovery timing, snapshot age and triggering events. Requires Debug mode; preview and screenshot views are labeled separately.
 - Right-click an abandonable quest heading and choose **Abandon quest…** to open WoW's normal confirmation, including quest-item removal warnings when applicable. Left-click still expands or collapses details. Abandonment uses your actual logged quest variant, rechecks eligibility when chosen, and is unavailable for preview or screenshot samples.
