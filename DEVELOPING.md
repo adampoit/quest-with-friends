@@ -37,6 +37,20 @@ The Python suite is network-free. Its emitted-Lua smoke test requires `lua` on P
 
 Keep Busted specs in `tests/unit/` with the `_spec.lua` suffix. Simulator tests live directly in `tests/` using filenames such as `simulator.lua`.
 
+## UI status diagnostics
+
+With AddonKit installed and Debug mode enabled, DEBUG `ui` entries record the initial displayed state and subsequent transitions:
+
+- **Panel visibility changed** records show/hide changes.
+- **Panel status changed** records `in_sync`, `out_of_sync`, `incomplete`, `preview` or `hidden`, with live/preview/screenshot mode, screenshot scenario, visible quest-group/notice counts and active quest filters.
+- **Displayed sync status changed** records each party member's previous/next displayed status, including `unknown`, `waiting`, `refreshing`, `stale`, `offline`, `oversized`, `incompatible` and recovery to `healthy`. Healthy means no connection notice, not that their quests match. `not_displayed` marks removal or hiding. Local oversized warnings use player **You**.
+
+Entries include the triggering event/action and session uptime. When the clock and a successful remote snapshot are available, peer entries include the last snapshot's age and revision, plus pending revision and chunk progress. `duration` measures time in the previous displayed state; `recoveryDuration` measures the continuous non-healthy displayed interval ending in recovery. Timing starts over after removal/hiding, reload or toggling Debug mode. Missing clock APIs omit timing fields. Snapshot age is diagnostic only: idle snapshots do not expire, and the recovery watchdog's lack of progress—not age alone—causes stale status.
+
+Repeated renders, duplicate chunks and retries without a displayed status change do not produce more `ui` entries. Quest-row text, objective changes that leave the overall status unchanged, layout and collapse changes are not logged. Sample modes are explicitly labeled and never report live peer recovery. Debug mode also adds detailed transport logs. UI status logging is disabled in normal mode; existing sync warnings remain available.
+
+To reproduce, keep AddonKit enabled and use `/qwf debug on` (or enable **Debug mode** in settings) before reproducing. Use `/qwf debug off` afterward to return to normal logging. Log out or `/reload` afterward to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Logs contain player identities; share only redacted relevant entries, not full SavedVariables.
+
 ## Quest-sharing diagnostics
 
 One-click sharing remains a direct call from the Share button. With AddonKit installed, each eligible click records an INFO `share` entry, **Quest sharing attempted**, even with Debug mode off. It includes the quest ID/title and current log index, client/addon versions, combat and group state, secure execution state, any taint reported for `QuestLogPushQuest`, and a bounded click stack. An attempt is not confirmation that anyone received or accepted the quest.

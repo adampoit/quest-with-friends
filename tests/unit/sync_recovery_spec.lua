@@ -35,7 +35,7 @@ local function network(game, size, minorVersions)
 		c.sender = game == "forever" and (name.first .. " " .. name.last) or (name.first .. "-Realm")
 		local env = setmetatable({
 			QuestWithFriends = false,
-			QuestWithFriendsDB = {},
+			QuestWithFriendsDB = { debugMode = true },
 			Constants = false,
 			C_Map = false,
 			GetQuestUiMapID = false,
@@ -49,6 +49,9 @@ local function network(game, size, minorVersions)
 		env._G = env
 		env.GetBuildInfo = function()
 			return "", "", "", game == "forever" and 16001 or 120100
+		end
+		env.GetTime = function()
+			return n.time
 		end
 		env.GetRealmName = function()
 			return "Realm"
@@ -141,8 +144,8 @@ local function network(game, size, minorVersions)
 		}
 		env.AddonKit = {
 			RegisterAddon = function() end,
-			Log = function(_, level, _, message, data)
-				c.logs[#c.logs + 1] = { level = level, message = message, data = data }
+			Log = function(_, level, category, message, data)
+				c.logs[#c.logs + 1] = { level = level, category = category, message = message, data = data }
 			end,
 		}
 		for _, path in ipairs({
@@ -241,8 +244,168 @@ local function chunks(c, serial, quests, minor, extensions)
 	return messages
 end
 
+local function uiLogs(client, message, status)
+	local found = {}
+	for _, entry in ipairs(client.logs) do
+		if entry.category == "ui" and entry.message == message and (not status or entry.data.status == status) then
+			assert.are.equal("DEBUG", entry.level)
+			found[#found + 1] = entry.data
+		end
+	end
+	return found
+end
+
 for _, game in ipairs({ "retail", "forever" }) do
 	describe("Quest With Friends reliable sync on " .. game, function()
+		it("logs displayed unknown, waiting, incompatible and oversized transitions once", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n.deliver = function()
+				return false
+			end
+			n:join()
+			local initial = uiLogs(a, "Displayed sync status changed")[1]
+			assert.are.equal(b.sender, initial.sender)
+			assert.are.equal("not_displayed", initial.previous)
+			assert.are.equal("unknown", initial.status)
+			assert.are.equal("PLAYER_ENTERING_WORLD", initial.trigger)
+			assert.is_false(initial.hasSnapshot)
+			assert.is_nil(initial.snapshotAge)
+			n:advance(2)
+			a:receive(b.sender, "1.1:H")
+			a:receive(b.sender, "1.1:H")
+			n:advance(16)
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "waiting"))
+			local waiting = uiLogs(a, "Displayed sync status changed", "waiting")[1]
+			assert.are.equal("unknown", waiting.previous)
+			assert.are.equal(2, waiting.duration)
+			assert.are.equal("snapshot_requested", waiting.trigger)
+			for _, message in ipairs({ "2.0:H", "2.0:H", "1.1:X", "1.1:X" }) do
+				a:receive(b.sender, message)
+			end
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "incompatible"))
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "oversized"))
+			assert.are.equal(
+				"peer_snapshot_oversized",
+				uiLogs(a, "Displayed sync status changed", "oversized")[1].trigger
+			)
+			a:receive(b.sender, chunks(a, 1, {})[1])
+			local recovered = uiLogs(a, "Displayed sync status changed", "healthy")[1]
+			assert.are.equal("oversized", recovered.previous)
+			assert.are.equal(18, recovered.recoveryDuration)
+			assert.are.equal(0, recovered.snapshotAge)
+			assert.are.equal(1, recovered.revision)
+			assert.are.equal("snapshot_received", recovered.trigger)
+		end)
+
+		it("logs cached snapshot age, stalled progress and recovery without retry or render spam", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n:join()
+			n:advance(5)
+			n.deliver = function(_, recipient)
+				return recipient ~= a
+			end
+			a:receive(b.sender, chunks(a, 100, { [43] = quest() })[1])
+			a.logs = {}
+			n:advance(2)
+			local messages = chunks(a, 101, { [43] = quest(string.rep("x", 250)) })
+			a:receive(b.sender, messages[1])
+			a:receive(b.sender, messages[1])
+			local refreshing = uiLogs(a, "Displayed sync status changed", "refreshing")[1]
+			assert.are.equal("healthy", refreshing.previous)
+			assert.are.equal(2, refreshing.snapshotAge)
+			assert.are.equal(100, refreshing.revision)
+			assert.are.equal(101, refreshing.pendingRevision)
+			assert.are.equal(1, refreshing.received)
+			assert.are.equal(#messages, refreshing.parts)
+			n:advance(15)
+			local stale = uiLogs(a, "Displayed sync status changed", "stale")[1]
+			assert.are.equal("refreshing", stale.previous)
+			assert.are.equal("snapshot_timeout", stale.trigger)
+			assert.are.equal(15, stale.duration)
+			assert.are.equal(17, stale.snapshotAge)
+			assert.are.equal(100, stale.revision)
+			assert.are.equal(1, stale.received)
+			n:advance(60)
+			for _ = 1, 5 do
+				a:fire("QUEST_LOG_UPDATE")
+			end
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "refreshing"))
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "stale"))
+			assert.are.equal(1, #uiLogs(a, "Panel status changed", "incomplete"))
+			for i = 2, #messages do
+				a:receive(b.sender, messages[i])
+			end
+			local recovered = uiLogs(a, "Displayed sync status changed", "healthy")[1]
+			assert.are.equal("stale", recovered.previous)
+			assert.are.equal(60, recovered.duration)
+			assert.are.equal(75, recovered.recoveryDuration)
+			assert.are.equal(0, recovered.snapshotAge)
+			assert.are.equal(101, recovered.revision)
+			assert.is_true(a.view.complete)
+		end)
+
+		it("does not reset snapshot age on invalid data or expire healthy idle snapshots", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n:join()
+			n:advance(5)
+			n.deliver = function()
+				return false
+			end
+			a:receive(b.sender, chunks(a, 100, {})[1])
+			a.logs = {}
+			n:advance(10)
+			a:receive(b.sender, "1.1:D:101:1:1:invalid")
+			local refreshing = uiLogs(a, "Displayed sync status changed", "refreshing")[1]
+			assert.are.equal("snapshot_rejected", refreshing.trigger)
+			assert.are.equal(10, refreshing.snapshotAge)
+			n:advance(15)
+			local stale = uiLogs(a, "Displayed sync status changed", "stale")[1]
+			assert.are.equal(25, stale.snapshotAge)
+			assert.are.equal(100, stale.revision)
+			assert.are.equal(0, #uiLogs(a, "Displayed sync status changed", "healthy"))
+			a:receive(b.sender, chunks(a, 102, {})[1])
+			n:advance(120)
+			a:fire("ZONE_CHANGED")
+			assert.is_true(a.view.complete)
+			assert.are.equal(3, #uiLogs(a, "Displayed sync status changed"))
+		end)
+
+		it("logs effective offline status, removal, hiding and rejoining", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n:join()
+			n:advance(5)
+			a.logs = {}
+			a.offline[2] = true
+			a:fire("UNIT_CONNECTION", "party1")
+			a:fire("UNIT_CONNECTION", "party1")
+			local offline = uiLogs(a, "Displayed sync status changed", "offline")[1]
+			assert.are.equal("healthy", offline.previous)
+			assert.are.equal("UNIT_CONNECTION", offline.trigger)
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "offline"))
+			a.offline[2] = nil
+			a:fire("UNIT_CONNECTION", "party1")
+			assert.are.equal("offline", uiLogs(a, "Displayed sync status changed", "stale")[1].previous)
+			a.units = {}
+			a:fire("GROUP_ROSTER_UPDATE")
+			assert.are.equal(b.sender, uiLogs(a, "Displayed sync status changed", "not_displayed")[1].sender)
+			a.party = false
+			a:fire("GROUP_ROSTER_UPDATE")
+			a:fire("GROUP_ROSTER_UPDATE")
+			assert.are.equal(1, #uiLogs(a, "Panel visibility changed"))
+			assert.is_false(uiLogs(a, "Panel visibility changed")[1].visible)
+			a.units, a.party = { 2 }, true
+			a:fire("GROUP_ROSTER_UPDATE")
+			assert.are.equal(2, #uiLogs(a, "Panel visibility changed"))
+			local rejoined = uiLogs(a, "Displayed sync status changed", "unknown")[1]
+			assert.are.equal("not_displayed", rejoined.previous)
+			assert.is_nil(rejoined.snapshotAge)
+			assert.is_nil(rejoined.recoveryDuration)
+		end)
+
 		for _, remoteMinor in ipairs({ 0, 1 }) do
 			it("syncs item stock with a protocol 1." .. remoteMinor .. " peer", function()
 				local n = network(game, 2, { 1, remoteMinor })

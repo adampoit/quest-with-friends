@@ -54,6 +54,7 @@ local screenshotMode = false
 local screenshotScenario = "differences"
 local previewCollapsed = {}
 local previewSetting
+local resettingPreviewSetting = false
 local panelLockSetting
 local render
 local setPreviewMode
@@ -335,7 +336,112 @@ local function requestAbandonQuest(id)
 	end
 end
 
-local function showPanel(groups, complete, notices)
+local displayedPeers = {}
+local displayedPanel
+
+local function peerDisplayStatus(peer)
+	if not peer.connected then
+		return "offline"
+	end
+	return peer.status or (peer.quests and "healthy" or "unknown")
+end
+
+local function recordUIState(visible, groups, complete, notices, trigger)
+	if not QWF.db.debugMode then
+		return
+	end
+	local now = GetTime and GetTime()
+	local mode = not visible and "hidden" or (screenshotMode and "screenshot" or (previewMode and "preview" or "live"))
+	local status = not visible and "hidden"
+		or (previewMode and not screenshotMode and "preview")
+		or (not complete and "incomplete")
+		or (#groups == 0 and "in_sync" or "out_of_sync")
+	local scenario = screenshotMode and screenshotScenario or nil
+	local previous = displayedPanel
+	if not previous or previous.visible ~= visible then
+		log("DEBUG", "ui", "Panel visibility changed", {
+			previous = previous and previous.visible or false,
+			visible = visible,
+			mode = mode,
+			trigger = trigger,
+			uptime = now,
+		})
+	end
+	if not previous or previous.status ~= status or previous.mode ~= mode or previous.scenario ~= scenario then
+		log("DEBUG", "ui", "Panel status changed", {
+			previous = previous and previous.status or "unobserved",
+			status = status,
+			previousMode = previous and previous.mode,
+			mode = mode,
+			scenario = scenario,
+			trigger = trigger,
+			uptime = now,
+			duration = now and previous and previous.since and (now - previous.since),
+			groups = groups and #groups or 0,
+			notices = notices and #notices or 0,
+			zoneFilter = QWF.db.zoneFilter,
+			showProfessionQuests = QWF.db.showProfessionQuests,
+			showClassQuests = QWF.db.showClassQuests,
+		})
+		displayedPanel = { visible = visible, status = status, mode = mode, scenario = scenario, since = now }
+	end
+
+	local nextDisplayed = {}
+	local function recordPeer(key, player, nextStatus, peer)
+		local old = displayedPeers[key]
+		if old and old.status == nextStatus then
+			nextDisplayed[key] = old
+			return
+		end
+		local unhealthySince = nextStatus ~= "healthy"
+				and nextStatus ~= "not_displayed"
+				and ((old and old.unhealthySince) or now)
+			or nil
+		log("DEBUG", "ui", "Displayed sync status changed", {
+			sender = key,
+			player = player,
+			previous = old and old.status or "not_displayed",
+			status = nextStatus,
+			trigger = trigger,
+			uptime = now,
+			duration = now and old and old.since and (now - old.since),
+			recoveryDuration = nextStatus == "healthy"
+					and now
+					and old
+					and old.unhealthySince
+					and (now - old.unhealthySince)
+				or nil,
+			hasSnapshot = peer and peer.quests ~= nil,
+			snapshotAge = now and peer and peer.snapshotAt and (now - peer.snapshotAt),
+			revision = peer and peer.snapshotRevision,
+			pendingRevision = peer and peer.pending and peer.pending.serial,
+			received = peer and peer.pending and peer.pending.received,
+			parts = peer and peer.pending and peer.pending.total,
+			mode = mode,
+		})
+		nextDisplayed[key] = { status = nextStatus, player = player, since = now, unhealthySince = unhealthySince }
+	end
+	-- Sample views never report live peers as recovered or healthy.
+	if mode == "live" then
+		for _, member in ipairs(members) do
+			local peer = peers[member.key]
+			recordPeer(member.key, member.name, peerDisplayStatus(peer), peer)
+		end
+		local myself = identity("player")
+		if myself and (snapshotTooLarge or displayedPeers[myself]) then
+			recordPeer(myself, "You", snapshotTooLarge and "oversized" or "healthy")
+		end
+	end
+	for key, old in pairs(displayedPeers) do
+		if not nextDisplayed[key] then
+			recordPeer(key, old.player, "not_displayed", peers[key])
+			nextDisplayed[key] = nil
+		end
+	end
+	displayedPeers = nextDisplayed
+end
+
+local function showPanel(groups, complete, notices, trigger)
 	Core.sortGroups(groups, QWF.db.sortMode, previewMode and QWF.Preview.activity or activity)
 	QWF.Panel.show(
 		groups,
@@ -343,7 +449,7 @@ local function showPanel(groups, complete, notices)
 		QWF.db.zoneFilter,
 		function()
 			QWF.db.zoneFilter = not QWF.db.zoneFilter
-			render()
+			render("zone_filter_changed")
 		end,
 		not previewMode
 				and function(id)
@@ -354,7 +460,7 @@ local function showPanel(groups, complete, notices)
 						recordShareAttempt(id, index)
 						QuestLogPushQuest(index)
 					else
-						render()
+						render("share_unavailable")
 					end
 				end
 			or nil,
@@ -364,11 +470,11 @@ local function showPanel(groups, complete, notices)
 			classes = QWF.db.showClassQuests,
 			toggleProfessions = function()
 				QWF.db.showProfessionQuests = not QWF.db.showProfessionQuests
-				render()
+				render("profession_filter_changed")
 			end,
 			toggleClasses = function()
 				QWF.db.showClassQuests = not QWF.db.showClassQuests
-				render()
+				render("class_filter_changed")
 			end,
 		},
 		{
@@ -384,7 +490,7 @@ local function showPanel(groups, complete, notices)
 			sortMode = QWF.db.sortMode,
 			onSort = function(mode)
 				QWF.db.sortMode = mode == "title" and "title" or "smart"
-				render()
+				render("sort_changed")
 			end,
 			preview = previewMode,
 			screenshot = screenshotMode,
@@ -399,10 +505,12 @@ local function showPanel(groups, complete, notices)
 			end or nil,
 		}
 	)
+	recordUIState(true, groups, complete, notices, trigger)
 end
 
-render = function()
-	if not QWF.Panel then
+render = function(trigger)
+	trigger = trigger or "render"
+	if not QWF.Panel or resettingPreviewSetting then
 		return
 	end
 	if previewMode and IsInGroup() then
@@ -411,22 +519,25 @@ render = function()
 		screenshotScenario = "differences"
 		previewCollapsed = {}
 		if previewSetting then
+			-- Keep the party event as the trigger instead of a nested settings redraw.
+			resettingPreviewSetting = true
 			previewSetting:SetValue(false)
+			resettingPreviewSetting = false
 		end
 	end
 	if previewMode then
-		showPanel(
-			QWF.Preview.compare(
-				QWF.db.zoneFilter,
-				QWF.db.showProfessionQuests,
-				QWF.db.showClassQuests,
-				screenshotMode and screenshotScenario or nil
-			)
+		local groups, complete, notices = QWF.Preview.compare(
+			QWF.db.zoneFilter,
+			QWF.db.showProfessionQuests,
+			QWF.db.showClassQuests,
+			screenshotMode and screenshotScenario or nil
 		)
+		showPanel(groups, complete, notices, trigger)
 		return
 	end
 	if not inParty() then
 		QWF.Panel.hide()
+		recordUIState(false, nil, nil, nil, trigger)
 		return
 	end
 	local roster = {}
@@ -437,11 +548,12 @@ render = function()
 	for _, member in ipairs(members) do
 		local peer = peers[member.key]
 		local quests = peer and peer.quests
-		local status = peer and peer.status
-		if peer and not peer.connected then
-			status = "offline"
-		end
-		roster[#roster + 1] = { name = member.name, quests = quests, syncStatus = status }
+		local status = peer and peerDisplayStatus(peer)
+		roster[#roster + 1] = {
+			name = member.name,
+			quests = quests,
+			syncStatus = status ~= "healthy" and status or nil,
+		}
 		if quests then
 			for id, quest in pairs(quests) do
 				if not Core.matchQuest(localView, id) then
@@ -494,7 +606,7 @@ render = function()
 		complete = false
 		table.insert(notices, 1, { player = "You", reason = "oversized" })
 	end
-	showPanel(groups, complete, notices)
+	showPanel(groups, complete, notices, trigger)
 end
 
 setPreviewMode = function(enabled, screenshot, scenario)
@@ -514,7 +626,7 @@ setPreviewMode = function(enabled, screenshot, scenario)
 			end
 		end
 	end
-	render()
+	render("preview_changed")
 	return true
 end
 
@@ -565,9 +677,9 @@ local function watchPeer(key, peer)
 				received = peer.pending and peer.pending.received,
 				parts = peer.pending and peer.pending.total,
 			})
-			render()
+			render("snapshot_timeout")
 			queueRequest()
-			refresh(true)
+			refresh(true, "snapshot_timeout")
 			watch.delay = math.min(60, watch.delay * 2)
 		end
 		C_Timer.After(watch.delay, check)
@@ -687,12 +799,12 @@ local function broadcast(force)
 		snapshotTooLarge = true
 		lastPayload = nil
 		log("WARN", "sync", "Quest snapshot exceeds protocol limit")
-		render()
+		render("local_snapshot_oversized")
 		return
 	end
 	snapshotTooLarge = false
 	oversizePending = false
-	render()
+	render("local_snapshot_ready")
 	revision = revision + 1
 	local snapshot = {
 		payload = payload,
@@ -722,9 +834,9 @@ local function broadcast(force)
 	scheduleSend(SEND_INTERVAL)
 end
 
-refresh = function(force)
+refresh = function(force, trigger)
 	scanQuests()
-	render()
+	render(trigger)
 	if not inParty() then
 		return
 	end
@@ -740,14 +852,14 @@ refresh = function(force)
 		end
 		scheduled = false
 		scanQuests()
-		render()
+		render("coalesced_refresh")
 		local forced = forceRefresh
 		forceRefresh = false
 		broadcast(forced)
 	end)
 end
 
-local function updateRoster(force)
+local function updateRoster(force, trigger)
 	local party = inParty()
 	local nextPeers, nextMembers = {}, {}
 	local changed = rosterInParty ~= party
@@ -784,7 +896,7 @@ local function updateRoster(force)
 	peers, members = nextPeers, nextMembers
 	rosterInParty = party
 	if not changed and not force then
-		render()
+		render(trigger)
 		return
 	end
 	if changed then
@@ -816,7 +928,7 @@ local function updateRoster(force)
 	if changed then
 		lastPayload = nil
 	end
-	refresh(true)
+	refresh(true, trigger)
 end
 
 local function senderKey(sender)
@@ -869,14 +981,14 @@ local function receive(sender, message)
 			protocol = version or "unversioned",
 			expected = Core.PROTOCOL_VERSION,
 		})
-		render()
+		render("unsupported_protocol")
 		return
 	end
 	if body == "X" then
 		peer.detected = true
 		peer.status = "oversized"
 		peer.pending, peer.watch = nil, nil
-		render()
+		render("peer_snapshot_oversized")
 		return
 	end
 	if body == "H" then
@@ -886,8 +998,8 @@ local function receive(sender, message)
 		peer.revision = nil
 		peer.allowReset = true
 		awaitingSnapshot(key, peer)
-		render()
-		refresh(true)
+		render("snapshot_requested")
+		refresh(true, "snapshot_requested")
 		return
 	end
 	local serialText, partText, totalText, data = body:match("^D:(%d+):(%d+):(%d+):(.+)$")
@@ -970,15 +1082,17 @@ local function receive(sender, message)
 			recordActivity(peer.quests, quests)
 			peer.revision = serial
 			peer.quests = quests
+			peer.snapshotAt = GetTime and GetTime()
+			peer.snapshotRevision = serial
 			peer.status, peer.watch = nil, nil
 			log("DEBUG", "sync", "Received quest snapshot", { sender = key, parts = total, protocol = pending.version })
-			render()
+			render("snapshot_received")
 		else
 			log("WARN", "sync", "Rejected invalid quest snapshot", { sender = key })
-			render()
+			render("snapshot_rejected")
 		end
 	else
-		render()
+		render("snapshot_chunk_received")
 	end
 end
 
@@ -1028,14 +1142,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
 			end
 		end
 	elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
-		updateRoster(event == "PLAYER_ENTERING_WORLD")
+		updateRoster(event == "PLAYER_ENTERING_WORLD", event)
 	elseif event == "UNIT_CONNECTION" then
 		local unit = ...
 		if type(unit) == "string" and unit:match("^party[1-4]$") then
-			updateRoster(false)
+			updateRoster(false, event)
 		end
 	elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" or event == "ZONE_CHANGED_NEW_AREA" then
-		render()
+		render(event)
 	elseif event == "GET_ITEM_INFO_RECEIVED" and select(2, ...) ~= true then
 		return
 	else
@@ -1059,11 +1173,14 @@ frame:SetScript("OnEvent", function(_, event, ...)
 				completed[id] = nil
 			end
 		end
-		refresh(false)
+		refresh(false, event)
 	end
 end)
 
 local function setDebugMode(enabled)
+	if QWF.db.debugMode ~= (enabled == true) then
+		displayedPeers, displayedPanel = {}, nil
+	end
 	QWF.db.debugMode = enabled == true
 	applyDebugMode()
 end
@@ -1167,7 +1284,7 @@ SlashCmdList.QUESTWITHFRIENDS = function(command)
 		return
 	end
 	if command == "" and previewMode then
-		render()
+		render("manual_refresh")
 		return
 	end
 	if command == "debug" or command == "debug on" or command == "debug off" then
@@ -1182,7 +1299,7 @@ SlashCmdList.QUESTWITHFRIENDS = function(command)
 			if not AddonKit or not AddonKit.SetLogLevel then
 				print("Quest With Friends: Enable AddonKit for debug logging.")
 			else
-				updateRoster(true)
+				updateRoster(true, "debug_enabled")
 			end
 		end
 		return
@@ -1190,7 +1307,7 @@ SlashCmdList.QUESTWITHFRIENDS = function(command)
 	if not inParty() then
 		print("Quest With Friends: Join a party to compare quests, or use /qwf preview to see sample data.")
 	else
-		updateRoster(true)
+		updateRoster(true, "manual_refresh")
 		print("Quest With Friends: Refreshing party quest status.")
 	end
 end

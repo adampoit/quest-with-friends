@@ -1149,6 +1149,153 @@ describe("Quest With Friends party sync", function()
 		end
 	end
 
+	local function uiRecords(records, message)
+		local found = {}
+		for _, record in ipairs(records) do
+			if record.category == "ui" and record.message == message then
+				assert.are.equal("DEBUG", record.level)
+				found[#found + 1] = record.data
+			end
+		end
+		return found
+	end
+
+	it("gates UI diagnostics behind Debug mode and resets the baseline when re-enabled", function()
+		local records = captureLogs()
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.is_nil(findLog(records, "Panel visibility changed"))
+		assert.is_nil(findLog(records, "Panel status changed"))
+		assert.is_nil(findLog(records, "Displayed sync status changed"))
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		assert.are.equal(1, #uiRecords(records, "Panel visibility changed"))
+		assert.are.equal(1, #uiRecords(records, "Panel status changed"))
+		assert.are.equal(1, #uiRecords(records, "Displayed sync status changed"))
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		assert.are.equal(1, #uiRecords(records, "Panel status changed"))
+		SlashCmdList.QUESTWITHFRIENDS("debug off")
+		local payload = QuestWithFriends.Core.encode({})
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.are.equal(1, #uiRecords(records, "Panel visibility changed"))
+		assert.are.equal(1, #uiRecords(records, "Panel status changed"))
+		assert.are.equal(1, #uiRecords(records, "Displayed sync status changed"))
+		party = true
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		local baseline = uiRecords(records, "Panel status changed")[2]
+		assert.are.equal("unobserved", baseline.previous)
+		assert.is_nil(baseline.duration)
+		assert.are.equal("not_displayed", uiRecords(records, "Displayed sync status changed")[2].previous)
+	end)
+
+	it("logs overall displayed status at DEBUG with filter and event triggers, without a clock", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local payload = QuestWithFriends.Core.encode({})
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
+		entries = { { questID = 42, title = "Errand" } }
+		questMaps[42] = 202
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		view.toggle()
+		view.toggle()
+		currentMap = 202
+		fire("ZONE_CHANGED_NEW_AREA")
+		entries = {}
+		fire("QUEST_REMOVED", 42)
+		flush()
+		local statuses = uiRecords(records, "Panel status changed")
+		local values = {}
+		for _, data in ipairs(statuses) do
+			assert.is_nil(data.uptime)
+			assert.is_nil(data.duration)
+			values[#values + 1] = data.status
+		end
+		assert.same({ "incomplete", "in_sync", "out_of_sync", "in_sync", "out_of_sync", "in_sync" }, values)
+		assert.are.equal("zone_filter_changed", statuses[3].trigger)
+		assert.is_false(statuses[3].zoneFilter)
+		assert.are.equal("ZONE_CHANGED_NEW_AREA", statuses[5].trigger)
+		assert.are.equal("QUEST_REMOVED", statuses[6].trigger)
+		assert.are.equal(1, #uiRecords(records, "Panel visibility changed"))
+		assert.are.equal(2, #uiRecords(records, "Displayed sync status changed"))
+		for _ = 1, 5 do
+			fire("QUEST_LOG_UPDATE")
+		end
+		flush()
+		assert.are.equal(6, #uiRecords(records, "Panel status changed"))
+		SlashCmdList.QUESTWITHFRIENDS("")
+		local refreshing = uiRecords(records, "Displayed sync status changed")[3]
+		assert.are.equal("refreshing", refreshing.status)
+		assert.are.equal("manual_refresh", refreshing.trigger)
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:2:1:1:" .. payload, "PARTY", "Julia-Realm")
+		local recovered = uiRecords(records, "Displayed sync status changed")[4]
+		assert.are.equal("healthy", recovered.status)
+		assert.is_nil(recovered.snapshotAge)
+		assert.is_nil(recovered.recoveryDuration)
+	end)
+
+	it("logs local oversized status and recovery even while overall status remains incomplete", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		for id = 1, 100 do
+			entries[id] = { questID = id, title = string.rep("x", 280) }
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		entries = {}
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		local states = uiRecords(records, "Displayed sync status changed")
+		assert.are.equal(3, #states)
+		assert.are.equal("Adam-Realm", states[2].sender)
+		assert.are.equal("You", states[2].player)
+		assert.are.equal("oversized", states[2].status)
+		assert.are.equal("local_snapshot_oversized", states[2].trigger)
+		assert.are.equal("oversized", states[3].previous)
+		assert.are.equal("healthy", states[3].status)
+		assert.are.equal("local_snapshot_ready", states[3].trigger)
+		assert.are.equal(1, #uiRecords(records, "Panel status changed"))
+	end)
+
+	it("separates preview and screenshot presentation from live sync diagnostics", function()
+		party = false
+		QuestWithFriends.isDevelopment = true
+		assert(loadfile("dev/Development.lua"))()
+		local settings = captureSettings()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		SlashCmdList.QUESTWITHFRIENDS("")
+		settings.buttons["Quest differences"].click()
+		settings.buttons["Collapsed headings"].click()
+		settings.buttons["Party in sync"].click()
+		local statuses = uiRecords(records, "Panel status changed")
+		assert.are.equal(5, #statuses)
+		assert.are.equal("hidden", statuses[1].mode)
+		assert.are.equal("preview", statuses[2].status)
+		assert.are.equal("screenshot", statuses[3].mode)
+		assert.are.equal("differences", statuses[3].scenario)
+		assert.are.equal("collapsed", statuses[4].scenario)
+		assert.are.equal("in_sync", statuses[5].status)
+		assert.are.equal(0, #uiRecords(records, "Displayed sync status changed"))
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		local live = uiRecords(records, "Displayed sync status changed")[1]
+		assert.are.equal("live", live.mode)
+		assert.are.equal("unknown", live.status)
+		assert.are.equal("GROUP_ROSTER_UPDATE", live.trigger)
+	end)
+
 	it("matches Forever First Last senders, retains surnames and ignores self echoes", function()
 		QuestWithFriends.QuestEquivalencesGame = "forever"
 		foreverNames({ player = { "Carola", "Goodspeed" }, party1 = { "Florace", "Bastille" } })
