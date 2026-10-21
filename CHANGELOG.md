@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep routine quest updates quiet: retain the last-known comparison with a muted Updating indicator instead of repeatedly showing incomplete-party warnings and moving quest rows. Initial loading, explicit refreshes and genuine recovery remain clearly signaled.
+
 - Add deduplicated Debug-mode diagnostics for objective matching and rejection reasons, fresh inventory counts, submitted/received stock metadata, filtering, and exact rendered or collapsed objective-row text. Requires AddonKit; normal logging is unchanged.
 
 - Keep showing confirmed spare tradeable items after turning in a quest during the current session, while a friend still needs them. Recheck carried stock and reserve other logged quest requirements; retain the Completed label and omit stock when identity or tradeability is uncertain.

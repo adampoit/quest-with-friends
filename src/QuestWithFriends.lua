@@ -504,7 +504,7 @@ local function peerDisplayStatus(peer)
 	return peer.status or (peer.quests and "healthy" or "unknown")
 end
 
-local function recordUIState(visible, groups, complete, notices, trigger)
+local function recordUIState(visible, groups, complete, notices, trigger, updating)
 	if not QWF.db.debugMode then
 		return
 	end
@@ -512,7 +512,7 @@ local function recordUIState(visible, groups, complete, notices, trigger)
 	local mode = not visible and "hidden" or (screenshotMode and "screenshot" or (previewMode and "preview" or "live"))
 	local status = not visible and "hidden"
 		or (previewMode and not screenshotMode and "preview")
-		or (not complete and "incomplete")
+		or (not complete and not (updating and #notices == 0) and "incomplete")
 		or (#groups == 0 and "in_sync" or "out_of_sync")
 	local scenario = screenshotMode and screenshotScenario or nil
 	local previous = displayedPanel
@@ -525,7 +525,13 @@ local function recordUIState(visible, groups, complete, notices, trigger)
 			uptime = now,
 		})
 	end
-	if not previous or previous.status ~= status or previous.mode ~= mode or previous.scenario ~= scenario then
+	if
+		not previous
+		or previous.status ~= status
+		or previous.mode ~= mode
+		or previous.scenario ~= scenario
+		or previous.updating ~= updating
+	then
 		log("DEBUG", "ui", "Panel status changed", {
 			previous = previous and previous.status or "unobserved",
 			status = status,
@@ -537,11 +543,13 @@ local function recordUIState(visible, groups, complete, notices, trigger)
 			duration = now and previous and previous.since and (now - previous.since),
 			groups = groups and #groups or 0,
 			notices = notices and #notices or 0,
+			updating = updating,
 			zoneFilter = QWF.db.zoneFilter,
 			showProfessionQuests = QWF.db.showProfessionQuests,
 			showClassQuests = QWF.db.showClassQuests,
 		})
-		displayedPanel = { visible = visible, status = status, mode = mode, scenario = scenario, since = now }
+		displayedPanel =
+			{ visible = visible, status = status, mode = mode, scenario = scenario, since = now, updating = updating }
 	end
 
 	local nextDisplayed = {}
@@ -552,6 +560,7 @@ local function recordUIState(visible, groups, complete, notices, trigger)
 			return
 		end
 		local unhealthySince = nextStatus ~= "healthy"
+				and nextStatus ~= "updating"
 				and nextStatus ~= "not_displayed"
 				and ((old and old.unhealthySince) or now)
 			or nil
@@ -600,6 +609,15 @@ local function recordUIState(visible, groups, complete, notices, trigger)
 end
 
 local function showPanel(groups, complete, notices, trigger)
+	local updating, warnings = false, {}
+	for _, notice in ipairs(notices) do
+		if notice.reason == "updating" then
+			updating = true
+		else
+			warnings[#warnings + 1] = notice
+		end
+	end
+	notices = warnings
 	Core.sortGroups(groups, QWF.db.sortMode, previewMode and QWF.Preview.activity or activity)
 	QWF.Panel.show(
 		groups,
@@ -638,6 +656,7 @@ local function showPanel(groups, complete, notices, trigger)
 		{
 			getAbandonQuestID = not previewMode and getAbandonQuestID or nil,
 			onAbandon = not previewMode and requestAbandonQuest or nil,
+			updating = updating,
 			onObjectiveRows = QWF.db.debugMode and function(rows)
 				local records = {}
 				for _, row in ipairs(rows) do
@@ -672,7 +691,7 @@ local function showPanel(groups, complete, notices, trigger)
 			end or nil,
 		}
 	)
-	recordUIState(true, groups, complete, notices, trigger)
+	recordUIState(true, groups, complete, notices, trigger, updating)
 end
 
 render = function(trigger)
@@ -891,10 +910,16 @@ local function watchPeer(key, peer)
 	C_Timer.After(watch.delay, check)
 end
 
-local function awaitingSnapshot(key, peer)
+local function awaitingSnapshot(key, peer, explicit)
 	peer.detected = true
 	if peer.status ~= "stale" then
-		peer.status = peer.quests and "refreshing" or "waiting"
+		if not peer.quests then
+			peer.status = "waiting"
+		elseif explicit or (peer.status and peer.status ~= "updating") then
+			peer.status = "refreshing"
+		else
+			peer.status = "updating"
+		end
 	end
 	watchPeer(key, peer)
 end
@@ -1123,7 +1148,7 @@ local function updateRoster(force, trigger)
 			if peer.connected and peer.detected and peer.status ~= "incompatible" then
 				peer.revision = nil
 				peer.allowReset = true
-				awaitingSnapshot(key, peer)
+				awaitingSnapshot(key, peer, true)
 			end
 		end
 		queueRequest()
@@ -1209,7 +1234,7 @@ local function receive(sender, message)
 		-- without discarding the last snapshot or an assembly in progress.
 		peer.revision = nil
 		peer.allowReset = true
-		awaitingSnapshot(key, peer)
+		awaitingSnapshot(key, peer, true)
 		render("snapshot_requested")
 		refresh(true, "snapshot_requested")
 		return
@@ -1300,6 +1325,9 @@ local function receive(sender, message)
 			log("DEBUG", "sync", "Received quest snapshot", { sender = key, parts = total, protocol = pending.version })
 			render("snapshot_received")
 		else
+			if peer.status ~= "stale" then
+				peer.status = peer.quests and "refreshing" or "waiting"
+			end
 			log("WARN", "sync", "Rejected invalid quest snapshot", { sender = key })
 			render("snapshot_rejected")
 		end

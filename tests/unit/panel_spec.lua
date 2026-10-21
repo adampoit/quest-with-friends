@@ -711,6 +711,66 @@ describe("Quest With Friends panel", function()
 		assert.same({}, diagnostics)
 	end)
 
+	it("shows background updating without changing the header, quest geometry or scroll position", function()
+		loadPanel()
+		QuestWithFriendsDB.panelSize = { width = 300, height = 150 }
+		local groups = {}
+		for id = 1, 12 do
+			groups[#groups + 1] = group(id)
+		end
+		for _, data in ipairs({ {}, groups }) do
+			QuestWithFriends.Panel.show(data, true, true)
+			panel.scroll:SetVerticalScroll(#data > 0 and 20 or 0)
+			local header, height, scopeWidth = panel.status.text, panel.height, panel.scope.width
+			local pinned, scroll = panel.scroll.points.TOPLEFT[4], panel.scroll.scroll
+			QuestWithFriends.Panel.show(data, false, true, nil, nil, {}, nil, { updating = true })
+			assert.are.equal(header, panel.status.text)
+			assert.are.equal(height, panel.height)
+			assert.are.equal(scopeWidth, panel.scope.width)
+			assert.are.equal(pinned, panel.scroll.points.TOPLEFT[4])
+			assert.are.equal(scroll, panel.scroll.scroll)
+			assert.is_true(panel.updating.shown)
+			panel.updating.OnEnter(panel.updating)
+			assert.are.equal("Updating quest data", GameTooltip.text)
+			assert.are.equal("Showing the last complete snapshots while new data arrives.", GameTooltip.line)
+			QuestWithFriends.Panel.show(data, true, true)
+			assert.is_false(panel.updating.shown)
+			assert.is_false(GameTooltip.shown)
+			assert.are.equal(header, panel.status.text)
+			assert.are.equal(height, panel.height)
+		end
+	end)
+
+	it("does not hide connection warnings or leak updating into sample views", function()
+		loadPanel()
+		QuestWithFriends.Panel.show(
+			{},
+			false,
+			true,
+			nil,
+			nil,
+			{ { player = "Bob", reason = "offline" } },
+			nil,
+			{ updating = true }
+		)
+		assert.are.equal("Party status incomplete", panel.status.text)
+		assert.are.equal("Bob: Offline · sync resumes when online", fontStrings[4].text)
+		assert.is_true(panel.updating.shown)
+		for _, screenshot in ipairs({ false, true }) do
+			QuestWithFriends.Panel.show(
+				{},
+				true,
+				true,
+				nil,
+				nil,
+				{},
+				nil,
+				{ preview = true, screenshot = screenshot, updating = true }
+			)
+			assert.is_false(panel.updating.shown)
+		end
+	end)
+
 	it("distinguishes offline members and sync health without claiming the party is in sync", function()
 		loadPanel()
 		local cases = {

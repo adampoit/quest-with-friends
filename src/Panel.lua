@@ -32,6 +32,8 @@ local CONTROL_INSET = 10
 local SCROLLBAR_GAP = 6
 local STATUS_Y = 36
 local HEADER_BODY_GAP = 5
+local UPDATING_WIDTH = 68
+local UPDATING_GAP = 8
 local layoutBusy = false
 local resizing = false
 local moving = false
@@ -229,6 +231,27 @@ local function createPanel()
 	panel.scope:SetWidth(DEFAULT_WIDTH - 2 * PANEL_INSET)
 	panel.scope:SetJustifyH("LEFT")
 	panel.scope:SetTextColor(0.72, 0.78, 0.85)
+
+	panel.updating = CreateFrame("Frame", nil, panel)
+	panel.updating:SetSize(UPDATING_WIDTH, 15)
+	panel.updating:EnableMouse(true)
+	local updatingText = panel.updating:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	updatingText:SetAllPoints()
+	updatingText:SetJustifyH("RIGHT")
+	updatingText:SetTextColor(0.72, 0.78, 0.85)
+	updatingText:SetText("Updating")
+	panel.updating:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText("Updating quest data")
+		GameTooltip:AddLine("Showing the last complete snapshots while new data arrives.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	panel.updating:SetScript("OnLeave", function(self)
+		if GameTooltip:IsOwned(self) then
+			GameTooltip:Hide()
+		end
+	end)
+	panel.updating:SetScript("OnHide", panel.updating:GetScript("OnLeave"))
 
 	panel.lock = CreateFrame("Button", nil, panel)
 	panel.lock:SetSize(24, 24)
@@ -582,17 +605,20 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	end
 	collapsedQuests = presentation.collapsedQuests or QWF.db.collapsedQuests
 	panel.scope:SetText(scopeText())
+	local updating = not isPreview and presentation.updating == true
+	local comparisonKnown = complete or (updating and #(notices or {}) == 0)
+	panel.updating:SetShown(updating)
 	panel.filter:GenerateMenu()
 	panel.status:SetFontObject(showPreviewNotice and "GameFontHighlightSmall" or "GameFontHighlight")
 	panel.status:SetJustifyH("LEFT")
 	if showPreviewNotice then
 		panel.status:SetText("Preview · Sample party data")
 		panel.status:SetTextColor(0.72, 0.78, 0.85)
-	elseif #groups == 0 and complete then
+	elseif #groups == 0 and comparisonKnown then
 		panel.status:SetText("Party in sync")
 		panel.status:SetTextColor(0.52, 0.87, 0.62)
 	else
-		panel.status:SetText(complete and "Party out of sync" or "Party status incomplete")
+		panel.status:SetText(comparisonKnown and "Party out of sync" or "Party status incomplete")
 		panel.status:SetTextColor(0.98, 0.73, 0.40)
 	end
 	onLock = presentation.onLock
@@ -653,10 +679,13 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 			panel.status:SetWidth(width - 2 * PANEL_INSET)
 			panel.status:SetPoint("TOPLEFT", PANEL_INSET, -STATUS_Y)
 		end
-		panel.scope:SetWidth(width - 2 * PANEL_INSET)
+		-- Reserve activity space even when idle so routine updates never rewrap the scope or move quest rows.
+		panel.scope:SetWidth(width - 2 * PANEL_INSET - (isPreview and 0 or UPDATING_WIDTH + UPDATING_GAP))
 		local scopeY = STATUS_Y + (showPreviewNotice and 0 or math.max(15, panel.status:GetStringHeight()) + 3)
 		panel.scope:ClearAllPoints()
 		panel.scope:SetPoint("TOPLEFT", PANEL_INSET, -scopeY)
+		panel.updating:ClearAllPoints()
+		panel.updating:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PANEL_INSET, -scopeY)
 		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + HEADER_BODY_GAP
 		panel.lock:Show()
 		panel.lock.icon:SetTexCoord(unlocked and 0.5 or 0, unlocked and 1 or 0.5, 0, 1)

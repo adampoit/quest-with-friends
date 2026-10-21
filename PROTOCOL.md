@@ -102,6 +102,6 @@ Show a finished holder's objective only while a comparable member still needs it
 
 Messages are paced at 0.5-second intervals. Failed API submissions retry the same message with 1–8-second exponential backoff. At most one newer snapshot is queued behind an active snapshot; intermediate changes coalesce.
 
-A peer awaiting a snapshot is checked for assembly progress every 15 seconds. Lack of progress requests a new snapshot, with recovery intervals backing off to 60 seconds. Cached data remains labeled refreshing or stale, and does not count as a complete party status. Leaving the party cancels sends and recovery work.
+A peer awaiting a snapshot is checked for assembly progress every 15 seconds. Lack of progress requests a new snapshot, with recovery intervals backing off to 60 seconds. Routine snapshots received while cached data is healthy use a quiet updating indicator, retaining the last-known comparison without inserting connection notices. Pending snapshots still do not count as fully current internally. Initial loading, explicit refreshes, roster/reconnect recovery, invalid snapshots, and stalled transfers retain prominent waiting, refreshing or stale notices. Cached data remains comparable until a complete valid snapshot replaces it. Leaving the party cancels sends and recovery work.
 
 Successful API submission is not an acknowledgement of delivery. Missing fragments are recovered through the watchdog; this protocol has no per-fragment acknowledgements or heartbeat for otherwise idle peers.

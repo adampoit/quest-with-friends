@@ -679,6 +679,25 @@ partyTest("partial and duplicate chunks stay unknown until reverse-order assembl
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
 end)
 
+partyTest("routine chunk transfers keep the header and geometry stable with quiet update activity", function(quests)
+	quests[987655] = { title = string.rep("Completed quest ", 17), state = "completed", objectives = {} }
+	sendSnapshot(quests, 100)
+	local panel = QuestWithFriendsPanel
+	local height, scopeWidth, scrollTop = panel:GetHeight(), panel.scope:GetWidth(), panel.scroll:GetTop()
+	local payload = QuestWithFriends.Core.encode(quests)
+	local total = math.ceil(#payload / 220)
+	assertTrue(total > 1)
+	for part = 1, total do
+		receive("1.1:D:101:" .. part .. ":" .. total .. ":" .. payload:sub((part - 1) * 220 + 1, part * 220))
+		assertEquals("Party in sync", panel.status:GetText())
+		assertEquals(part < total, panel.updating:IsShown())
+		assertAlmostEquals(height, panel:GetHeight())
+		assertAlmostEquals(scopeWidth, panel.scope:GetWidth())
+		assertAlmostEquals(scrollTop, panel.scroll:GetTop())
+		assertTrue(panel.scope:GetRight() < panel.updating:GetLeft())
+	end
+end)
+
 partyTest("remote quest differences render and stale snapshots cannot replace them", function(quests)
 	sendSnapshot(quests, 100)
 	local original = QuestWithFriends.Core.encode(quests)

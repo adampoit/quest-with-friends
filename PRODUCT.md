@@ -68,7 +68,7 @@ Reviewed Retail variant families let friends on different class/race versions of
 
 ### Show connection health
 
-Connection notices appear separately above quest groups. Distinguish offline members, addon detection, waiting for a snapshot, refreshing, stale data and protocol incompatibility. Keep the last comparison visible during recovery or disconnection, with a clear status. Offline members keep party status incomplete; syncing resumes automatically when they reconnect. `/qwf` requests a fresh comparison for online members.
+Connection notices appear separately above quest groups. Distinguish offline members, addon detection, waiting for a snapshot, explicit refreshing, stale data and protocol incompatibility. Routine updates with a healthy cached snapshot retain the last-known comparison and header, with a muted **Updating** indicator beside the scope; its tooltip explains that the comparison uses the last complete snapshots. Reserve the indicator's space even while idle so updates do not reflow the panel. Initial loading, explicit refreshes, roster/reconnect recovery and stalled or invalid transfers keep prominent notices. Keep the last comparison visible during recovery or disconnection, with a clear status. Offline members keep party status incomplete; syncing resumes automatically when they reconnect. `/qwf` requests a fresh comparison for online members.
 
 ## Synchronization
 

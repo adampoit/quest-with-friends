@@ -165,8 +165,8 @@ local function network(game, size, minorVersions)
 			end
 		end
 		env.QuestWithFriends.Panel = {
-			show = function(groups, complete, _, _, _, notices)
-				c.view = { groups = groups, complete = complete, notices = notices }
+			show = function(groups, complete, _, _, _, notices, _, presentation)
+				c.view = { groups = groups, complete = complete, notices = notices, updating = presentation.updating }
 			end,
 			hide = function()
 				c.view = { hidden = true }
@@ -298,6 +298,76 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.are.equal("snapshot_received", recovered.trigger)
 		end)
 
+		it("keeps routine and identical multi-chunk updates quiet while replacing snapshots atomically", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n:join()
+			n:advance(5)
+			n.deliver = function(_, recipient)
+				return recipient ~= a
+			end
+			local remote = { [43] = quest(string.rep("x", 250)) }
+			for _, message in ipairs(chunks(a, 100, remote)) do
+				a:receive(b.sender, message)
+			end
+			for serial = 101, 103 do
+				a.logs = {}
+				local cached = a.view.groups
+				if serial == 102 then
+					remote[43].title = string.rep("y", 250)
+				end
+				local messages = chunks(a, serial, remote)
+				a:receive(b.sender, messages[1])
+				a:receive(b.sender, messages[1])
+				a:fire("ZONE_CHANGED")
+				assert.is_false(a.view.complete)
+				assert.is_true(a.view.updating)
+				assert.same({}, a.view.notices)
+				assert.same(cached, a.view.groups)
+				assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "updating"))
+				assert.are.equal(0, #uiLogs(a, "Panel status changed", "incomplete"))
+				for i = #messages, 2, -1 do
+					n:advance(0.5)
+					a:receive(b.sender, messages[i])
+				end
+				assert.is_true(a.view.complete)
+				assert.is_false(a.view.updating)
+				assert.are.equal(remote[43].title, a.view.groups[1].title)
+				local healthy = uiLogs(a, "Displayed sync status changed", "healthy")[1]
+				assert.is_nil(healthy.recoveryDuration)
+			end
+		end)
+
+		it("keeps initial loading and explicit refresh prominent throughout chunk assembly", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n.deliver = function()
+				return false
+			end
+			n:join()
+			local remote = { [43] = quest(string.rep("x", 250)) }
+			local messages = chunks(a, 100, remote)
+			a:receive(b.sender, messages[1])
+			assert.are.equal("waiting", a.view.notices[1].reason)
+			assert.is_false(a.view.updating)
+			for i = 2, #messages do
+				a:receive(b.sender, messages[i])
+			end
+			messages = chunks(a, 101, remote)
+			a:receive(b.sender, messages[1])
+			assert.is_true(a.view.updating)
+			a.env.SlashCmdList.QUESTWITHFRIENDS("")
+			assert.are.equal("refreshing", a.view.notices[1].reason)
+			assert.is_false(a.view.updating)
+			a:receive(b.sender, messages[1])
+			assert.are.equal("refreshing", a.view.notices[1].reason)
+			for i = 2, #messages do
+				a:receive(b.sender, messages[i])
+			end
+			assert.is_true(a.view.complete)
+			assert.same({}, a.view.notices)
+		end)
+
 		it("logs cached snapshot age, stalled progress and recovery without retry or render spam", function()
 			local n = network(game)
 			local a, b = unpack(n.clients)
@@ -312,16 +382,16 @@ for _, game in ipairs({ "retail", "forever" }) do
 			local messages = chunks(a, 101, { [43] = quest(string.rep("x", 250)) })
 			a:receive(b.sender, messages[1])
 			a:receive(b.sender, messages[1])
-			local refreshing = uiLogs(a, "Displayed sync status changed", "refreshing")[1]
-			assert.are.equal("healthy", refreshing.previous)
-			assert.are.equal(2, refreshing.snapshotAge)
-			assert.are.equal(100, refreshing.revision)
-			assert.are.equal(101, refreshing.pendingRevision)
-			assert.are.equal(1, refreshing.received)
-			assert.are.equal(#messages, refreshing.parts)
+			local updating = uiLogs(a, "Displayed sync status changed", "updating")[1]
+			assert.are.equal("healthy", updating.previous)
+			assert.are.equal(2, updating.snapshotAge)
+			assert.are.equal(100, updating.revision)
+			assert.are.equal(101, updating.pendingRevision)
+			assert.are.equal(1, updating.received)
+			assert.are.equal(#messages, updating.parts)
 			n:advance(15)
 			local stale = uiLogs(a, "Displayed sync status changed", "stale")[1]
-			assert.are.equal("refreshing", stale.previous)
+			assert.are.equal("updating", stale.previous)
 			assert.are.equal("snapshot_timeout", stale.trigger)
 			assert.are.equal(15, stale.duration)
 			assert.are.equal(17, stale.snapshotAge)
@@ -331,7 +401,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			for _ = 1, 5 do
 				a:fire("QUEST_LOG_UPDATE")
 			end
-			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "refreshing"))
+			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "updating"))
 			assert.are.equal(1, #uiLogs(a, "Displayed sync status changed", "stale"))
 			assert.are.equal(1, #uiLogs(a, "Panel status changed", "incomplete"))
 			for i = 2, #messages do
@@ -340,7 +410,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			local recovered = uiLogs(a, "Displayed sync status changed", "healthy")[1]
 			assert.are.equal("stale", recovered.previous)
 			assert.are.equal(60, recovered.duration)
-			assert.are.equal(75, recovered.recoveryDuration)
+			assert.are.equal(60, recovered.recoveryDuration)
 			assert.are.equal(0, recovered.snapshotAge)
 			assert.are.equal(101, recovered.revision)
 			assert.is_true(a.view.complete)
@@ -500,7 +570,8 @@ for _, game in ipairs({ "retail", "forever" }) do
 			local messages = chunks(a, 100, remote, 7, { optional_feature = "enabled" })
 			a:receive(b.sender, messages[1])
 			assert.is_false(a.view.complete)
-			assert.are.equal("refreshing", a.view.notices[1].reason)
+			assert.same({}, a.view.notices)
+			assert.is_true(a.view.updating)
 			for i = #messages, 2, -1 do
 				a:receive(b.sender, messages[i])
 			end
@@ -705,7 +776,8 @@ for _, game in ipairs({ "retail", "forever" }) do
 			n:advance(8)
 			assert.is_true(dropped)
 			assert.is_false(b.view.complete)
-			assert.are.equal("refreshing", b.view.notices[1].reason)
+			assert.same({}, b.view.notices)
+			assert.is_true(b.view.updating)
 			n:advance(45)
 			assert.is_true(b.view.complete)
 			assert.are.equal(43, b.view.groups[1].questID)
