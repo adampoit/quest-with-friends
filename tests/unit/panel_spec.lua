@@ -675,6 +675,42 @@ describe("Quest With Friends panel", function()
 		end
 	end)
 
+	it("reports the exact objective row text and whether its quest is collapsed", function()
+		loadPanel()
+		local diagnostics
+		local groups = {
+			group(42, {
+				{
+					player = "You",
+					kind = "ahead",
+					reason = "objective",
+					objective = { text = "Linen Cloth", have = 12, need = 10, spare = 2 },
+				},
+			}),
+		}
+		local function show()
+			QuestWithFriends.Panel.show(groups, true, true, nil, nil, nil, nil, {
+				onObjectiveRows = function(rows)
+					diagnostics = rows
+				end,
+			})
+		end
+		show()
+		assert.are.equal(fontStrings[5].text, diagnostics[1].text)
+		assert.are.equal("You: Linen Cloth 10/10 · 2 spare", diagnostics[1].text)
+		assert.are.equal("rendered", diagnostics[1].result)
+		assert.are.equal(42, diagnostics[1].questID)
+		assert.are.equal(12, diagnostics[1].have)
+		assert.are.equal(10, diagnostics[1].need)
+		QuestWithFriendsDB.collapsedQuests[42] = true
+		show()
+		assert.are.equal("quest_collapsed", diagnostics[1].result)
+		assert.is_false(fontStrings[5].shown)
+		groups = {}
+		show()
+		assert.same({}, diagnostics)
+	end)
+
 	it("distinguishes offline members and sync health without claiming the party is in sync", function()
 		loadPanel()
 		local cases = {

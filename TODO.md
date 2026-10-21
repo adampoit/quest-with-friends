@@ -18,4 +18,4 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Offline member handling.** Show a distinct Offline notice, retain cached comparisons, and resume syncing automatically on reconnection.
 - [x] **Redundant counts in the UI**
 - [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.
-- [ ] - Recipe of the Kaldorei bugged. Didn't show that I had spider legs to offer
+- [ ] **Recheck Recipe of the Kaldorei in game.** Confirm x/x counts and spare spider legs before and after turn-in. Post-turn-in stock and targeted Debug-mode diagnostics are implemented; capture `item_stock` entries if counts are still missing.

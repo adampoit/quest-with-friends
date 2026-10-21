@@ -782,6 +782,29 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 			savePosition()
 		end
 		layoutBusy = false
+		if presentation.onObjectiveRows then
+			local diagnostics = {}
+			for _, group in ipairs(groups) do
+				for index, difference in ipairs(group.differences) do
+					local objective = difference.objective
+					if objective then
+						diagnostics[#diagnostics + 1] = {
+							questID = group.questID,
+							rowIndex = index,
+							player = difference.player,
+							kind = difference.kind,
+							reason = difference.reason,
+							text = differenceText(difference),
+							have = objective.have,
+							need = objective.need,
+							spare = objective.spare,
+							result = collapsedQuests[group.questID] == true and "quest_collapsed" or "rendered",
+						}
+					end
+				end
+			end
+			presentation.onObjectiveRows(diagnostics)
+		end
 	end
 	reflow()
 	panel:Show()

@@ -47,9 +47,23 @@ With AddonKit installed and Debug mode enabled, DEBUG `ui` entries record the in
 
 Entries include the triggering event/action and session uptime. When the clock and a successful remote snapshot are available, peer entries include the last snapshot's age and revision, plus pending revision and chunk progress. `duration` measures time in the previous displayed state; `recoveryDuration` measures the continuous non-healthy displayed interval ending in recovery. Timing starts over after removal/hiding, reload or toggling Debug mode. Missing clock APIs omit timing fields. Snapshot age is diagnostic only: idle snapshots do not expire, and the recovery watchdog's lack of progress—not age alone—causes stale status.
 
-Repeated renders, duplicate chunks and retries without a displayed status change do not produce more `ui` entries. Quest-row text, objective changes that leave the overall status unchanged, layout and collapse changes are not logged. Sample modes are explicitly labeled and never report live peer recovery. Debug mode also adds detailed transport logs. UI status logging is disabled in normal mode; existing sync warnings remain available.
+Repeated renders, duplicate chunks and retries without a displayed status change do not produce more `ui` entries. Objective and collapse evidence is recorded separately under `item_stock`, below; layout changes are not logged. Sample modes are explicitly labeled and never report live peer recovery. Debug mode also adds detailed transport logs. UI status logging is disabled in normal mode; existing sync warnings remain available.
 
 To reproduce, keep AddonKit enabled and use `/qwf debug on` (or enable **Debug mode** in settings) before reproducing. Use `/qwf debug off` afterward to return to normal logging. Log out or `/reload` afterward to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Logs contain player identities; share only redacted relevant entries, not full SavedVariables.
+
+## Objective and spare-item diagnostics
+
+With AddonKit and Debug mode enabled, DEBUG `item_stock` entries trace why a count or spare-item row is present or missing:
+
+- **Quest objective scan changed:** quest ID/title/state, objective index, raw API text/type, normalized text, fulfilled/required counts, matching result, item ID and spare count. Matching inventory evidence includes total carried, tradeable available, reserved requirements, and counts with uncached/restricted binding, bound/locked stacks or unknown flags. These counts can overlap. Only objective-related aggregates are logged, not a bag dump.
+- **Submitted objective stock changed:** objective data decoded from the actual fully submitted payload, with revision and protocol. This exposes stock omitted by extension limits. Successful submission is not proof of delivery.
+- **Peer objective stock changed:** the peer's accepted snapshot counts and item metadata, including `no_stock_metadata` or `no_objectives`. It cannot establish why the sender omitted metadata.
+- **Quest comparison selection changed:** `included`, `zone_filter`, `profession_filter`, `class_filter` or `no_difference`. The last means no comparison group was produced, not that every peer has supplied a healthy snapshot.
+- **Objective row changed:** the exact formatted row text, player, counts and surplus, with `rendered` or `quest_collapsed`. Removed rows produce `removed`. `rendered` means the panel laid out the row, not proof that it was inside the scrolled viewport or unobscured on screen. Preview/screenshot rows are explicitly labeled; scan and transport evidence is live-only.
+
+Matching results distinguish `matched`, `not_item_objective`, `no_exact_name_match`, `ambiguous_item_name`, `progress_stock_mismatch`, `retained_identity_mismatch`, `non_counted_objective`, `no_tradeable_stock`, `inventory_api_unavailable`, `unnamed_bag_item`, and `completed_identity_unavailable`. For completed quests, retained identity is historical but inventory totals and reservations are fresh.
+
+Entries record initial observations, changes and removals, not every render, bag event or identical snapshot. Timing, triggers and submission revisions do not defeat deduplication. Current-state caches reset on reload or a Debug-mode toggle and discard removed entries. No new diagnostic messages are sent to peers or saved in the addon's own settings. Objective text and player identities are private data: share only relevant redacted entries. Persist logs via logout or `/reload` as described above.
 
 ## Quest-sharing diagnostics
 

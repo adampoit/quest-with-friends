@@ -91,6 +91,95 @@ local function log(level, category, message, data)
 	end
 end
 
+local objectiveDiagnostics = {}
+local objectiveMessages = {
+	scan = "Quest objective scan changed",
+	peer = "Peer objective stock changed",
+	submitted = "Submitted objective stock changed",
+	selection = "Quest comparison selection changed",
+	rows = "Objective row changed",
+}
+
+local function sameFields(first, second)
+	if not first then
+		return false
+	end
+	for key, value in pairs(first) do
+		if second[key] ~= value then
+			return false
+		end
+	end
+	for key, value in pairs(second) do
+		if first[key] ~= value then
+			return false
+		end
+	end
+	return true
+end
+
+local function recordObjectiveDiagnostics(stage, records, trigger, context)
+	if not QWF.db.debugMode then
+		return
+	end
+	local previous = objectiveDiagnostics[stage] or {}
+	local function emit(data, removed)
+		local entry = {}
+		for key, value in pairs(data) do
+			entry[key] = value
+		end
+		for key, value in pairs(context or {}) do
+			entry[key] = value
+		end
+		if removed then
+			entry.previousResult, entry.result = entry.result, "removed"
+		end
+		entry.trigger, entry.uptime = trigger or "render", GetTime and GetTime()
+		log("DEBUG", "item_stock", objectiveMessages[stage], entry)
+	end
+	for key, data in pairs(records) do
+		if not sameFields(previous[key], data) then
+			emit(data)
+		end
+	end
+	for key, data in pairs(previous) do
+		if not records[key] then
+			emit(data, true)
+		end
+	end
+	objectiveDiagnostics[stage] = records
+end
+
+local function snapshotObjectiveDiagnostics(records, quests, sender)
+	if not QWF.db.debugMode then
+		return
+	end
+	for id, quest in pairs(quests) do
+		local function track(index, objective)
+			records[sender .. ":" .. id .. ":" .. index] = {
+				sender = sender,
+				questID = id,
+				title = quest.title,
+				state = quest.state,
+				objectiveIndex = index,
+				text = objective.text,
+				have = objective.have,
+				need = objective.need,
+				itemID = objective.itemID,
+				spare = objective.spare,
+				mode = "live",
+				result = index == 0 and "no_objectives"
+					or (objective.itemID and objective.spare ~= nil and "identified" or "no_stock_metadata"),
+			}
+		end
+		if #quest.objectives == 0 then
+			track(0, {})
+		end
+		for index, objective in ipairs(quest.objectives) do
+			track(index, objective)
+		end
+	end
+end
+
 local function inParty()
 	return IsInGroup() and not IsInRaid()
 end
@@ -171,8 +260,33 @@ local function categoryHeaders()
 	return headers
 end
 
-local function collectQuests()
+local function collectQuests(trigger)
 	local quests, itemObjectives = {}, {}
+	local scanDiagnostics, objectiveContexts = {}, {}
+	local function track(objective, id, index, title, state, rawText, objectiveType)
+		if QWF.db.debugMode then
+			objectiveContexts[objective] = {
+				questID = id,
+				objectiveIndex = index,
+				title = title,
+				state = state,
+				text = objective.text,
+				have = objective.have,
+				need = objective.need,
+				rawText = rawText,
+				objectiveType = objectiveType,
+				mode = "live",
+			}
+		end
+	end
+	local function diagnose(objective, data)
+		data.verifiedItemID = objective.itemID or objective.verifiedItemID
+		local context = objectiveContexts[objective]
+		for key, value in pairs(context) do
+			data[key] = value
+		end
+		scanDiagnostics[context.questID .. ":" .. context.objectiveIndex] = data
+	end
 	local headers = categoryHeaders()
 	local headerCategory
 	local filtered = 0
@@ -194,23 +308,27 @@ local function collectQuests()
 			questCategories[id] = questCategory(id) or headerCategory or questCategories[id]
 			local objectives = {}
 			local raw = C_QuestLog.GetQuestObjectives(id) or {}
+			local state = C_QuestLog.IsComplete(id) and "ready" or "active"
 			for objectiveIndex, objective in ipairs(raw) do
 				local need = tonumber(objective.numRequired) or 0
 				local have = tonumber(objective.numFulfilled) or (objective.finished and need or 0)
 				local text = (objective.text or ""):gsub("^%s*%d+/%d+%s+", ""):gsub(":%s*%d+/%d+%s*$", "")
 				local progress = { text = text, have = have, need = need }
 				objectives[#objectives + 1] = progress
+				track(progress, id, objectiveIndex, info.title, state, objective.text, objective.type or "unknown")
 				if objective.type == "item" then
 					local previous = localQuests[id] and localQuests[id].objectives[objectiveIndex]
 					if previous and previous.text == text and previous.need == need then
 						progress.verifiedItemID = previous.itemID or previous.verifiedItemID
 					end
 					itemObjectives[#itemObjectives + 1] = progress
+				elseif QWF.db.debugMode then
+					diagnose(progress, { result = "not_item_objective" })
 				end
 			end
 			quests[id] = {
 				title = info.title or ("Quest " .. id),
-				state = C_QuestLog.IsComplete(id) and "ready" or "active",
+				state = state,
 				objectives = objectives,
 				mapID = GetQuestUiMapID and zoneMapID(GetQuestUiMapID(id, true)) or nil,
 				category = questCategories[id],
@@ -220,11 +338,14 @@ local function collectQuests()
 	local completedObjectives = {}
 	for id, record in pairs(completed) do
 		local objectives = {}
-		for _, saved in ipairs(record.objectives) do
+		for index, saved in ipairs(record.objectives) do
 			local objective = { text = saved.text, have = saved.need, need = saved.need, itemID = saved.itemID }
 			objectives[#objectives + 1] = objective
+			track(objective, id, index, record.title, "completed", nil, "retained")
 			if saved.itemID then
 				completedObjectives[#completedObjectives + 1] = objective
+			elseif QWF.db.debugMode then
+				diagnose(objective, { result = "completed_identity_unavailable" })
 			end
 		end
 		quests[id] = {
@@ -235,10 +356,25 @@ local function collectQuests()
 			category = questCategories[id],
 		}
 	end
-	QWF.ItemStock.annotate(itemObjectives, completedObjectives)
+	QWF.ItemStock.annotate(itemObjectives, completedObjectives, QWF.db.debugMode and diagnose or nil)
 	for _, objective in ipairs(itemObjectives) do
 		objective.verifiedItemID = objective.itemID or objective.verifiedItemID
 	end
+	if QWF.db.debugMode then
+		for id, quest in pairs(quests) do
+			if #quest.objectives == 0 then
+				scanDiagnostics[id .. ":0"] = {
+					questID = id,
+					objectiveIndex = 0,
+					title = quest.title,
+					state = quest.state,
+					result = "no_objectives",
+					mode = "live",
+				}
+			end
+		end
+	end
+	recordObjectiveDiagnostics("scan", scanDiagnostics, trigger)
 	local visible = 0
 	for _, quest in pairs(quests) do
 		if quest.state ~= "completed" then
@@ -258,8 +394,8 @@ local function recordActivity(previous, current)
 	Core.recordActivity(activity, previous, current, activitySequence)
 end
 
-local function scanQuests()
-	local quests = collectQuests()
+local function scanQuests(trigger)
+	local quests = collectQuests(trigger)
 	recordActivity(localSnapshotKnown and localQuests or nil, quests)
 	localQuests = quests
 	localSnapshotKnown = true
@@ -502,6 +638,15 @@ local function showPanel(groups, complete, notices, trigger)
 		{
 			getAbandonQuestID = not previewMode and getAbandonQuestID or nil,
 			onAbandon = not previewMode and requestAbandonQuest or nil,
+			onObjectiveRows = QWF.db.debugMode and function(rows)
+				local records = {}
+				for _, row in ipairs(rows) do
+					row.mode = screenshotMode and "screenshot" or (previewMode and "preview" or "live")
+					row.scenario = screenshotMode and screenshotScenario or nil
+					records[row.questID .. ":" .. row.rowIndex] = row
+				end
+				recordObjectiveDiagnostics("rows", records, "panel_layout")
+			end or nil,
 			onLock = function(locked)
 				if panelLockSetting then
 					panelLockSetting:SetValue(locked)
@@ -560,9 +705,12 @@ render = function(trigger)
 	if not inParty() then
 		QWF.Panel.hide()
 		recordUIState(false, nil, nil, nil, trigger)
+		recordObjectiveDiagnostics("rows", {}, trigger)
+		recordObjectiveDiagnostics("selection", {}, trigger)
+		recordObjectiveDiagnostics("peer", {}, trigger)
 		return
 	end
-	local roster = {}
+	local roster, peerDiagnostics = {}, {}
 	local localView = {}
 	for id, quest in pairs(localQuests) do
 		localView[id] = quest
@@ -577,6 +725,7 @@ render = function(trigger)
 			syncStatus = status ~= "healthy" and status or nil,
 		}
 		if quests then
+			snapshotObjectiveDiagnostics(peerDiagnostics, quests, member.key)
 			for id, quest in pairs(quests) do
 				if not Core.matchQuest(localView, id) then
 					for _, variantID in ipairs(Core.completionIDs(id)) do
@@ -590,12 +739,39 @@ render = function(trigger)
 			end
 		end
 	end
+	recordObjectiveDiagnostics("peer", peerDiagnostics, trigger)
 	local zoneID = QWF.db.zoneFilter
 			and C_Map
 			and C_Map.GetBestMapForUnit
 			and zoneMapID(C_Map.GetBestMapForUnit("player"))
 		or nil
 	local groups, complete, notices = Core.compare(localView, roster, zoneID)
+	local selectionDiagnostics = {}
+	if QWF.db.debugMode then
+		local function track(quests)
+			for id, quest in pairs(quests) do
+				local canonicalID = Core.questIDs(id)[1]
+				selectionDiagnostics[canonicalID] = {
+					questID = canonicalID,
+					title = quest.title,
+					result = "no_difference",
+					zoneID = zoneID,
+					mode = "live",
+				}
+			end
+		end
+		track(localView)
+		for _, member in ipairs(roster) do
+			track(member.quests or {})
+		end
+		local allGroups = zoneID and Core.compare(localView, roster) or groups
+		for _, group in ipairs(allGroups) do
+			selectionDiagnostics[group.questID].result = "zone_filter"
+		end
+		for _, group in ipairs(groups) do
+			selectionDiagnostics[group.questID].result = "included"
+		end
+	end
 	if not QWF.db.showProfessionQuests or not QWF.db.showClassQuests then
 		local visible = {}
 		local function hidden(category)
@@ -611,7 +787,12 @@ render = function(trigger)
 					local remote = peer and peer.quests and peer.quests[id]
 					category = category or (remote and remote.category)
 				end
-				excluded = excluded or hidden(category)
+				if hidden(category) then
+					excluded = true
+					if QWF.db.debugMode then
+						selectionDiagnostics[group.questID].result = category .. "_filter"
+					end
+				end
 			end
 			if not excluded then
 				visible[#visible + 1] = group
@@ -619,6 +800,7 @@ render = function(trigger)
 		end
 		groups = visible
 	end
+	recordObjectiveDiagnostics("selection", selectionDiagnostics, trigger)
 	for _, group in ipairs(groups) do
 		if group.shareQuestID and not shareableQuestIndex(group.shareQuestID) then
 			group.shareQuestID = nil
@@ -773,6 +955,14 @@ pump = function()
 		outgoing.next = outgoing.next + 1
 		if outgoing.next > #outgoing.messages then
 			lastPayload = outgoing.payload
+			if QWF.db.debugMode then
+				local diagnostics = {}
+				snapshotObjectiveDiagnostics(diagnostics, Core.decode(outgoing.payload) or {}, "You")
+				recordObjectiveDiagnostics("submitted", diagnostics, "snapshot_submitted", {
+					revision = outgoing.revision,
+					protocol = VERSION,
+				})
+			end
 			log("DEBUG", "sync", "Submitted quest snapshot", {
 				quests = outgoing.quests,
 				bytes = #outgoing.payload,
@@ -857,7 +1047,7 @@ local function broadcast(force)
 end
 
 refresh = function(force, trigger)
-	scanQuests()
+	scanQuests(trigger)
 	render(trigger)
 	if not inParty() then
 		return
@@ -873,7 +1063,7 @@ refresh = function(force, trigger)
 			return
 		end
 		scheduled = false
-		scanQuests()
+		scanQuests("coalesced_refresh")
 		render("coalesced_refresh")
 		local forced = forceRefresh
 		forceRefresh = false
@@ -1212,6 +1402,7 @@ end)
 local function setDebugMode(enabled)
 	if QWF.db.debugMode ~= (enabled == true) then
 		displayedPeers, displayedPanel = {}, nil
+		objectiveDiagnostics = {}
 	end
 	QWF.db.debugMode = enabled == true
 	applyDebugMode()

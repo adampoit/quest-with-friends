@@ -193,6 +193,62 @@ describe("Quest item stock", function()
 		end
 	end)
 
+	it("reports exact-name, count, ambiguity and tradeability rejection evidence", function()
+		local function report(progress)
+			local result
+			annotate({ progress }, nil, function(scanned, data)
+				assert.are.equal(progress, scanned)
+				result = data
+			end)
+			return result
+		end
+		bags[0] = { stack(2589, "Linen Cloth", 12) }
+		local progress = objective()
+		local matched = report(progress)
+		assert.are.equal("matched", matched.result)
+		assert.are.equal(2589, matched.itemID)
+		assert.are.equal(12, matched.total)
+		assert.are.equal(12, matched.available)
+		assert.are.equal(10, matched.reserved)
+		assert.are.equal(2, matched.spare)
+		assert.are.equal("no_exact_name_match", report(objective(10, 10, "Collect Linen Cloth")).result)
+		assert.are.equal("progress_stock_mismatch", report(objective(3)).result)
+		assert.are.equal("non_counted_objective", report(objective(0, 0)).result)
+		bags[0][1].isLocked = true
+		local locked = report(progress)
+		assert.are.equal("no_tradeable_stock", locked.result)
+		assert.are.equal(12, locked.locked)
+		assert.is_nil(locked.spare)
+		bags[0][1].isLocked = false
+		bindings[2589] = nil
+		assert.are.equal(12, report(progress).uncachedBinding)
+		bindings[2589] = 1
+		assert.are.equal(12, report(progress).restrictedBinding)
+		bags[0][1].isBound = true
+		assert.are.equal(12, report(progress).bound)
+		bags[0][1].isBound = nil
+		assert.are.equal(12, report(progress).unknownFlags)
+		bags[0][2] = stack(999, "Linen Cloth", 1)
+		assert.are.equal("ambiguous_item_name", report(progress).result)
+	end)
+
+	it("reports global scan failures for every affected item objective", function()
+		local first, finished = objective(), objective()
+		finished.itemID = 2589
+		for _, reason in ipairs({ "unnamed_bag_item", "inventory_api_unavailable" }) do
+			bags[0] = { stack(999, nil, 1) }
+			if reason == "inventory_api_unavailable" then
+				_G.C_Item = nil
+			end
+			local reports = {}
+			annotate({ first }, { finished }, function(scanned, data)
+				reports[scanned] = data
+			end)
+			assert.are.equal(reason, reports[first].result)
+			assert.are.equal(reason, reports[finished].result)
+		end
+	end)
+
 	it("falls back without optional inventory APIs or bag-slot information", function()
 		for _, key in ipairs({ "C_Container", "C_Item", "NUM_BAG_SLOTS" }) do
 			local saved = _G[key]

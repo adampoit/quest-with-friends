@@ -1253,6 +1253,214 @@ describe("Quest With Friends party sync", function()
 		return found
 	end
 
+	local function stockRecords(records, message)
+		local found = {}
+		for _, record in ipairs(records) do
+			if record.category == "item_stock" and (not message or record.message == message) then
+				assert.are.equal("DEBUG", record.level)
+				found[#found + 1] = record.data
+			end
+		end
+		return found
+	end
+
+	it("logs deduplicated scan and submitted stock evidence only in Debug mode", function()
+		local records = captureLogs()
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
+		carriedCloth(12)
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.same({}, stockRecords(records))
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		flush()
+		local scans = stockRecords(records, "Quest objective scan changed")
+		assert.are.equal(1, #scans)
+		assert.are.equal(42, scans[1].questID)
+		assert.are.equal(1, scans[1].objectiveIndex)
+		assert.are.equal("Linen Cloth: 10/10", scans[1].rawText)
+		assert.are.equal("Linen Cloth", scans[1].text)
+		assert.are.equal("item", scans[1].objectiveType)
+		assert.are.equal("matched", scans[1].result)
+		assert.are.equal(2, scans[1].spare)
+		local submitted = stockRecords(records, "Submitted objective stock changed")
+		assert.are.equal(1, #submitted)
+		assert.are.equal("identified", submitted[1].result)
+		assert.are.equal(2589, submitted[1].itemID)
+		assert.are.equal(2, submitted[1].spare)
+		assert.are.equal("1.1", submitted[1].protocol)
+		assert.is_number(submitted[1].revision)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.are.equal(1, #stockRecords(records, "Quest objective scan changed"))
+		assert.are.equal(1, #stockRecords(records, "Submitted objective stock changed"))
+		carriedCloth(15)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		scans = stockRecords(records, "Quest objective scan changed")
+		assert.are.equal(2, #scans)
+		assert.are.equal(5, scans[2].spare)
+		assert.are.equal("BAG_UPDATE_DELAYED", scans[2].trigger)
+		SlashCmdList.QUESTWITHFRIENDS("debug off")
+		carriedCloth(18)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.are.equal(2, #stockRecords(records, "Quest objective scan changed"))
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		flush()
+		scans = stockRecords(records, "Quest objective scan changed")
+		assert.are.equal(3, #scans)
+		assert.are.equal(8, scans[3].spare)
+		entries, objectives = {}, {}
+		fire("QUEST_REMOVED", 42)
+		flush()
+		scans = stockRecords(records, "Quest objective scan changed")
+		assert.are.equal("removed", scans[#scans].result)
+	end)
+
+	it("logs unsupported types and fresh completed stock instead of stale pre-turn-in counts", function()
+		local records = captureLogs()
+		QuestWithFriendsDB.debugMode = true
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 10/10", type = "monster", numFulfilled = 10, numRequired = 10 } }
+		carriedCloth(12)
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local scans = stockRecords(records, "Quest objective scan changed")
+		assert.are.equal("not_item_objective", scans[1].result)
+		assert.are.equal("monster", scans[1].objectiveType)
+		objectives[42][1].type = "item"
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		carriedCloth(2)
+		entries, objectives = {}, {}
+		fire("QUEST_TURNED_IN", 42)
+		flush()
+		scans = stockRecords(records, "Quest objective scan changed")
+		local last = scans[#scans]
+		assert.are.equal("completed", last.state)
+		assert.are.equal("matched", last.result)
+		assert.are.equal(2589, last.retainedItemID)
+		assert.are.equal(2, last.total)
+		assert.are.equal(0, last.reserved)
+		assert.are.equal(2, last.spare)
+	end)
+
+	it("records peer metadata replacement without repeating unchanged snapshots", function()
+		local records = captureLogs()
+		QuestWithFriendsDB.debugMode = true
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local peer = {
+			[42] = {
+				title = "Cloth Delivery",
+				state = "ready",
+				objectives = { { text = "Linen Cloth", have = 10, need = 10, itemID = 2589, spare = 2 } },
+			},
+		}
+		receiveSnapshot(peer, 1)
+		receiveSnapshot(peer, 2)
+		local stock = stockRecords(records, "Peer objective stock changed")
+		assert.are.equal(1, #stock)
+		assert.are.equal("Julia-Realm", stock[1].sender)
+		assert.are.equal("identified", stock[1].result)
+		assert.are.equal(2, stock[1].spare)
+		peer[42].objectives[1].itemID, peer[42].objectives[1].spare = nil, nil
+		receiveSnapshot(peer, 3)
+		stock = stockRecords(records, "Peer objective stock changed")
+		assert.are.equal(2, #stock)
+		assert.are.equal("no_stock_metadata", stock[2].result)
+		assert.is_nil(stock[2].itemID)
+		peer[42].objectives = {}
+		receiveSnapshot(peer, 4)
+		stock = stockRecords(records, "Peer objective stock changed")
+		local results = {}
+		for _, data in ipairs(stock) do
+			results[data.result] = true
+		end
+		assert.is_true(results.no_objectives)
+		assert.is_true(results.removed)
+	end)
+
+	it("explains zone, profession, class and comparison omissions", function()
+		local records = captureLogs()
+		QuestWithFriendsDB.debugMode = true
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		questMaps[42] = 202
+		objectives[42] = { { text = "Linen Cloth: 3/10", type = "item", numFulfilled = 3, numRequired = 10 } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [42] = { title = "Cloth Delivery", state = "completed", objectives = {} } }, 1)
+		local function result()
+			local selections = stockRecords(records, "Quest comparison selection changed")
+			return selections[#selections].result
+		end
+		assert.are.equal("zone_filter", result())
+		view.toggle()
+		assert.are.equal("included", result())
+		tags[42] = { worldQuestType = 1 }
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		assert.are.equal("profession_filter", result())
+		view.filters.toggleProfessions()
+		assert.are.equal("included", result())
+		tags[42], questTypes[42] = nil, 21
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		assert.are.equal("class_filter", result())
+		view.filters.toggleClasses()
+		assert.are.equal("included", result())
+		receiveSnapshot({
+			[42] = {
+				title = "Cloth Delivery",
+				state = "active",
+				objectives = { { text = "Linen Cloth", have = 3, need = 10 } },
+			},
+		}, 2)
+		assert.are.equal("no_difference", result())
+	end)
+
+	it("deduplicates panel row evidence and records collapse, removal and sample modes", function()
+		local records = captureLogs()
+		QuestWithFriendsDB.debugMode = true
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local function report(result)
+			view.presentation.onObjectiveRows({
+				{
+					questID = 42,
+					rowIndex = 1,
+					player = "You",
+					result = result,
+					text = "You: Linen Cloth 10/10 · 2 spare",
+					have = 10,
+					need = 10,
+					spare = 2,
+				},
+			})
+		end
+		report("rendered")
+		report("rendered")
+		assert.are.equal(1, #stockRecords(records, "Objective row changed"))
+		report("quest_collapsed")
+		local rows = stockRecords(records, "Objective row changed")
+		assert.are.equal(2, #rows)
+		assert.are.equal("quest_collapsed", rows[2].result)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		rows = stockRecords(records, "Objective row changed")
+		assert.are.equal("removed", rows[3].result)
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		report("rendered")
+		rows = stockRecords(records, "Objective row changed")
+		assert.are.equal("preview", rows[4].mode)
+	end)
+
 	it("gates UI diagnostics behind Debug mode and resets the baseline when re-enabled", function()
 		local records = captureLogs()
 		assert(loadfile("src/QuestWithFriends.lua"))()
