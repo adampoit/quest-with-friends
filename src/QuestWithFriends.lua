@@ -38,6 +38,8 @@ local snapshotTooLarge = false
 local revision = 0
 local scheduled = false
 local forceRefresh = false
+local refreshTriggers, refreshForceReasons = {}, {}
+local lastQueuedDiagnosticPayload, lastSubmittedDiagnosticPayload, lastSnapshotDecision
 local generation = 0
 local rosterInParty
 local outgoing
@@ -115,6 +117,159 @@ local function sameFields(first, second)
 		end
 	end
 	return true
+end
+
+local function fingerprint(payload)
+	if not payload then
+		return nil
+	end
+	-- Adler-32 uses exact integer arithmetic in Lua 5.1 without optional bit libraries.
+	local a, b = 1, 0
+	for index = 1, #payload do
+		a = (a + payload:byte(index)) % 65521
+		b = (b + a) % 65521
+	end
+	return "adler32:" .. string.format("%08x", b * 65536 + a) .. ":" .. #payload
+end
+
+local function sortedKeys(set)
+	local keys = {}
+	for key in pairs(set or {}) do
+		keys[#keys + 1] = key
+	end
+	table.sort(keys)
+	return keys
+end
+
+local function mergeContext(current, previous)
+	if not QWF.db.debugMode then
+		return nil
+	end
+	local context = { triggers = {}, forceReasons = {} }
+	for _, source in ipairs({ current or {}, previous or {} }) do
+		for _, field in ipairs({ "triggers", "forceReasons" }) do
+			for reason in pairs(source[field] or {}) do
+				context[field][reason] = true
+			end
+		end
+	end
+	return context
+end
+
+local function snapshotEvidence(payload, previous)
+	local data = { fingerprint = fingerprint(payload), previousFingerprint = fingerprint(previous) }
+	if not previous then
+		data.changeReason = "baseline"
+		return data
+	end
+	data.payloadChanged = payload ~= previous
+	if not data.payloadChanged then
+		data.changeReason = "unchanged"
+		return data
+	end
+	local before, after = Core.decode(previous), Core.decode(payload)
+	local changes, ids, changedIDs = {}, {}, {}
+	local function change(reason)
+		changes[reason] = (changes[reason] or 0) + 1
+	end
+	for id in pairs(before or {}) do
+		ids[id] = true
+	end
+	for id in pairs(after or {}) do
+		ids[id] = true
+	end
+	for _, id in ipairs(sortedKeys(ids)) do
+		local old, new = before and before[id], after and after[id]
+		local changed = false
+		local function mark(reason)
+			change(reason)
+			changed = true
+		end
+		if not old then
+			mark("added")
+		elseif not new then
+			mark("removed")
+		else
+			for _, field in ipairs({ "title", "state", "mapID", "category" }) do
+				if old[field] ~= new[field] then
+					mark(field)
+				end
+			end
+			local objectivesChanged = #old.objectives ~= #new.objectives
+			local stockChanged = false
+			for index = 1, math.max(#old.objectives, #new.objectives) do
+				local first, second = old.objectives[index] or {}, new.objectives[index] or {}
+				for _, field in ipairs({ "text", "have", "need" }) do
+					objectivesChanged = objectivesChanged or first[field] ~= second[field]
+				end
+				stockChanged = stockChanged or first.itemID ~= second.itemID or first.spare ~= second.spare
+			end
+			if objectivesChanged then
+				mark("objectives")
+			end
+			if stockChanged then
+				mark("item_stock")
+			end
+		end
+		if changed then
+			changedIDs[#changedIDs + 1] = id
+		end
+	end
+	data.changeReason = next(changes) and table.concat(sortedKeys(changes), ",") or "wire_only"
+	data.changes = changes
+	data.changedQuests = #changedIDs
+	data.changedQuestIDs = {}
+	for index = 1, math.min(12, #changedIDs) do
+		data.changedQuestIDs[index] = changedIDs[index]
+	end
+	return data
+end
+
+local function logSnapshot(message, payload, previous, data, context)
+	if QWF.db.debugMode then
+		for field, value in pairs(snapshotEvidence(payload, previous)) do
+			data[field] = value
+		end
+		if context then
+			data.triggers = table.concat(sortedKeys(context.triggers), ",")
+			data.forceReasons = table.concat(sortedKeys(context.forceReasons), ",")
+		end
+	end
+	log("DEBUG", "sync", message, data)
+end
+
+local function logSuppressedSnapshot(reason, payload, context)
+	if not QWF.db.debugMode then
+		return
+	end
+	local triggers = table.concat(sortedKeys(context and context.triggers), ",")
+	local forceReasons = table.concat(sortedKeys(context and context.forceReasons), ",")
+	local decision = { reason = reason, payload = payload, triggers = triggers, forceReasons = forceReasons }
+	if sameFields(lastSnapshotDecision, decision) then
+		return
+	end
+	lastSnapshotDecision = decision
+	log("DEBUG", "sync", "Quest snapshot suppressed", {
+		reason = reason,
+		fingerprint = fingerprint(payload),
+		bytes = #payload,
+		triggers = triggers,
+		forceReasons = forceReasons,
+		activeRevision = outgoing and outgoing.revision,
+		queuedRevision = queuedSnapshot and queuedSnapshot.revision,
+	})
+end
+
+local function logCanceledSnapshot(snapshot, reason)
+	if QWF.db.debugMode and snapshot then
+		log("DEBUG", "sync", "Quest snapshot canceled", {
+			revision = snapshot.revision,
+			fingerprint = fingerprint(snapshot.payload),
+			reason = reason,
+			nextPart = snapshot.next,
+			parts = snapshot.parts,
+		})
+	end
 end
 
 local function recordObjectiveDiagnostics(stage, records, trigger, context)
@@ -965,6 +1120,8 @@ pump = function()
 				revision = outgoing.revision,
 				part = outgoing.next,
 				parts = outgoing.parts,
+				fingerprint = QWF.db.debugMode and fingerprint(outgoing.payload) or nil,
+				retryDelay = retryDelay,
 			})
 		end
 		scheduleSend(retryDelay)
@@ -988,12 +1145,18 @@ pump = function()
 					protocol = VERSION,
 				})
 			end
-			log("DEBUG", "sync", "Submitted quest snapshot", {
+			logSnapshot("Submitted quest snapshot", outgoing.payload, lastSubmittedDiagnosticPayload, {
 				quests = outgoing.quests,
 				bytes = #outgoing.payload,
 				parts = outgoing.parts,
 				revision = outgoing.revision,
-			})
+				forced = outgoing.forced == true,
+				queueToSubmit = QWF.db.debugMode and GetTime and outgoing.queuedAt and (GetTime() - outgoing.queuedAt)
+					or nil,
+			}, outgoing.context)
+			if QWF.db.debugMode then
+				lastSubmittedDiagnosticPayload = outgoing.payload
+			end
 			outgoing = nil
 		end
 	end
@@ -1007,7 +1170,7 @@ queueRequest = function()
 	scheduleSend(SEND_INTERVAL)
 end
 
-local function broadcast(force)
+local function broadcast(force, context)
 	if not inParty() then
 		return
 	end
@@ -1017,13 +1180,19 @@ local function broadcast(force)
 	end
 	local forced = force or (queuedSnapshot and queuedSnapshot.forced)
 	if matches(outgoing) and not forced then
+		logSuppressedSnapshot("matches_active", payload, context)
+		logCanceledSnapshot(queuedSnapshot, "matches_active")
 		queuedSnapshot = nil
 		return
 	end
 	if matches(queuedSnapshot) then
+		queuedSnapshot.context = mergeContext(context, queuedSnapshot.context)
+		logSuppressedSnapshot("matches_queued", payload, context)
 		return
 	end
 	if not outgoing and payload == lastPayload and not forced then
+		logSuppressedSnapshot("matches_submitted", payload, context)
+		logCanceledSnapshot(queuedSnapshot, "matches_submitted")
 		queuedSnapshot = nil
 		return
 	end
@@ -1032,6 +1201,8 @@ local function broadcast(force)
 			oversizePending = true
 			scheduleSend(SEND_INTERVAL)
 		end
+		logCanceledSnapshot(outgoing, "oversized")
+		logCanceledSnapshot(queuedSnapshot, "oversized")
 		outgoing, queuedSnapshot = nil, nil
 		snapshotTooLarge = true
 		lastPayload = nil
@@ -1049,6 +1220,8 @@ local function broadcast(force)
 		next = 1,
 		revision = revision,
 		forced = forced,
+		context = mergeContext(context, queuedSnapshot and queuedSnapshot.context),
+		queuedAt = QWF.db.debugMode and GetTime and GetTime() or nil,
 	}
 	local total = math.max(1, math.ceil(#payload / CHUNK_SIZE))
 	for part = 1, total do
@@ -1067,6 +1240,19 @@ local function broadcast(force)
 	end
 	snapshot.quests = count
 	snapshot.parts = total
+	if QWF.db.debugMode then
+		logSnapshot("Quest snapshot queued", payload, lastQueuedDiagnosticPayload, {
+			revision = revision,
+			quests = count,
+			bytes = #payload,
+			parts = total,
+			forced = forced == true,
+			activeRevision = outgoing and outgoing.revision,
+			replacedRevision = queuedSnapshot and queuedSnapshot.revision,
+		}, snapshot.context)
+		lastQueuedDiagnosticPayload, lastSnapshotDecision = payload, nil
+	end
+	logCanceledSnapshot(queuedSnapshot, "superseded")
 	queuedSnapshot = snapshot
 	scheduleSend(SEND_INTERVAL)
 end
@@ -1078,6 +1264,12 @@ refresh = function(force, trigger)
 		return
 	end
 	forceRefresh = forceRefresh or force == true
+	if QWF.db.debugMode then
+		refreshTriggers[trigger or "refresh"] = true
+		if force then
+			refreshForceReasons[trigger or "refresh"] = true
+		end
+	end
 	if scheduled then
 		return
 	end
@@ -1091,8 +1283,10 @@ refresh = function(force, trigger)
 		scanQuests("coalesced_refresh")
 		render("coalesced_refresh")
 		local forced = forceRefresh
+		local context = { triggers = refreshTriggers, forceReasons = refreshForceReasons }
 		forceRefresh = false
-		broadcast(forced)
+		refreshTriggers, refreshForceReasons = {}, {}
+		broadcast(forced, context)
 	end)
 end
 
@@ -1139,6 +1333,9 @@ local function updateRoster(force, trigger)
 	if changed then
 		generation = generation + 1
 		scheduled, forceRefresh, sending = false, false, false
+		refreshTriggers, refreshForceReasons = {}, {}
+		logCanceledSnapshot(outgoing, "roster_changed")
+		logCanceledSnapshot(queuedSnapshot, "roster_changed")
 		outgoing, queuedSnapshot = nil, nil
 		requestPending, oversizePending = false, false
 		retryDelay = 1
@@ -1277,7 +1474,14 @@ local function receive(sender, message)
 			)
 			return
 		end
-		pending = { serial = serial, total = total, version = version, parts = {}, received = 0 }
+		pending = {
+			serial = serial,
+			total = total,
+			version = version,
+			parts = {},
+			received = 0,
+			startedAt = QWF.db.debugMode and GetTime and GetTime() or nil,
+		}
 		peer.pending = pending
 	end
 	peer.allowReset = nil
@@ -1314,7 +1518,8 @@ local function receive(sender, message)
 	})
 	if pending.received == total then
 		peer.pending = nil
-		local quests = Core.decode(table.concat(pending.parts), pending.version)
+		local payload = table.concat(pending.parts)
+		local quests = Core.decode(payload, pending.version)
 		if quests then
 			recordActivity(peer.quests, quests)
 			peer.revision = serial
@@ -1322,7 +1527,21 @@ local function receive(sender, message)
 			peer.snapshotAt = GetTime and GetTime()
 			peer.snapshotRevision = serial
 			peer.status, peer.watch = nil, nil
-			log("DEBUG", "sync", "Received quest snapshot", { sender = key, parts = total, protocol = pending.version })
+			logSnapshot("Received quest snapshot", payload, peer.diagnosticPayload, {
+				sender = key,
+				parts = total,
+				protocol = pending.version,
+				revision = serial,
+				bytes = #payload,
+				assemblyDuration = QWF.db.debugMode
+						and GetTime
+						and pending.startedAt
+						and (GetTime() - pending.startedAt)
+					or nil,
+			})
+			if QWF.db.debugMode then
+				peer.diagnosticPayload = payload
+			end
 			render("snapshot_received")
 		else
 			if peer.status ~= "stale" then
@@ -1431,6 +1650,14 @@ local function setDebugMode(enabled)
 	if QWF.db.debugMode ~= (enabled == true) then
 		displayedPeers, displayedPanel = {}, nil
 		objectiveDiagnostics = {}
+		refreshTriggers, refreshForceReasons = {}, {}
+		lastQueuedDiagnosticPayload, lastSubmittedDiagnosticPayload, lastSnapshotDecision = nil, nil, nil
+		for _, peer in pairs(peers) do
+			peer.diagnosticPayload = nil
+		end
+		for _, snapshot in pairs({ outgoing = outgoing, queued = queuedSnapshot }) do
+			snapshot.context, snapshot.queuedAt = nil, nil
+		end
 	end
 	QWF.db.debugMode = enabled == true
 	applyDebugMode()

@@ -735,6 +735,132 @@ for _, game in ipairs({ "retail", "forever" }) do
 			end
 		end)
 
+		it("retains coalesced causes and fingerprints through queue replacement and delivery", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			for id = 1, 20 do
+				a.quests[id] = quest(string.rep("x", 200))
+			end
+			n:join()
+			n:advance(2)
+			a.logs = {}
+			a.quests[99] = quest("Version 1")
+			a:fire("QUEST_LOG_UPDATE")
+			a:fire("BAG_UPDATE_DELAYED")
+			n:advance(0.9)
+			a:receive(b.sender, "1.1:H")
+			a:receive(b.sender, chunks(a, 100, {})[1])
+			n:advance(0.9)
+			a.quests[99] = quest("Version 2")
+			a:fire("ITEM_LOCK_CHANGED")
+			n:advance(0.9)
+			n:advance(40)
+			local queued, submitted, canceled, received, suppressed = {}, {}, {}, {}, {}
+			for _, l in ipairs(a.logs) do
+				if l.message == "Quest snapshot queued" then
+					queued[#queued + 1] = l.data
+				end
+				if l.message == "Submitted quest snapshot" then
+					submitted[#submitted + 1] = l.data
+				end
+				if l.message == "Quest snapshot canceled" then
+					canceled[#canceled + 1] = l.data
+				end
+				if l.message == "Quest snapshot suppressed" then
+					suppressed[#suppressed + 1] = l.data
+				end
+			end
+			for _, l in ipairs(b.logs) do
+				if l.message == "Received quest snapshot" then
+					received[#received + 1] = l.data
+				end
+			end
+			assert.are.equal(2, #queued)
+			assert.are.equal("added", queued[1].changeReason)
+			assert.are.equal("title", queued[2].changeReason)
+			assert.are.equal(queued[1].fingerprint, queued[2].previousFingerprint)
+			assert.are.equal(queued[1].revision, queued[2].replacedRevision)
+			assert.are.equal(
+				"BAG_UPDATE_DELAYED,ITEM_LOCK_CHANGED,QUEST_LOG_UPDATE,snapshot_requested",
+				queued[2].triggers
+			)
+			assert.are.equal("snapshot_requested", queued[2].forceReasons)
+			assert.are.equal("matches_queued", suppressed[1].reason)
+			assert.are.equal("superseded", canceled[1].reason)
+			assert.are.equal(queued[1].revision, canceled[1].revision)
+			assert.are.equal(queued[1].fingerprint, canceled[1].fingerprint)
+			assert.are.equal("adler32:9150d79f:4523", submitted[1].fingerprint)
+			local final = submitted[#submitted]
+			assert.are.equal("added", final.changeReason)
+			assert.are.equal(queued[2].fingerprint, final.fingerprint)
+			assert.are.equal(queued[2].triggers, final.triggers)
+			assert.are.equal(queued[2].forceReasons, final.forceReasons)
+			assert.is_true(final.queueToSubmit > 0)
+			assert.are.equal(final.fingerprint, received[#received].fingerprint)
+			assert.are.equal(final.revision, received[#received].revision)
+			assert.is_true(received[#received].assemblyDuration > 0)
+			assert.are.equal("Version 2", a:snapshots()[2][99].title)
+		end)
+
+		it("correlates throttled retries and roster cancellations without changing transport", function()
+			local n = network(game)
+			local a = n.clients[1]
+			a.quests[42] = quest()
+			local failures = 0
+			a.sendResult = function(message)
+				if message:match(":D:") and failures < 2 then
+					failures = failures + 1
+					return 5
+				end
+				return 0
+			end
+			n:join()
+			n:advance(12)
+			local queued, submitted, failed = {}, {}, {}
+			for _, l in ipairs(a.logs) do
+				if l.message == "Quest snapshot queued" then
+					queued[#queued + 1] = l.data
+				end
+				if l.message == "Submitted quest snapshot" then
+					submitted[#submitted + 1] = l.data
+				end
+				if l.message == "Quest snapshot submission failed" then
+					failed[#failed + 1] = l.data
+				end
+			end
+			assert.are.equal(2, #failed)
+			assert.are.equal(1, failed[1].retryDelay)
+			assert.are.equal(2, failed[2].retryDelay)
+			assert.are.equal(queued[1].fingerprint, failed[1].fingerprint)
+			assert.are.equal(queued[1].fingerprint, failed[2].fingerprint)
+			assert.are.equal(queued[1].fingerprint, submitted[1].fingerprint)
+			assert.are.equal(queued[1].revision, submitted[1].revision)
+			assert.is_true(submitted[1].queueToSubmit >= 3)
+			for id = 1, 20 do
+				a.quests[id] = quest(string.rep("x", 200))
+			end
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(2)
+			a.party = false
+			a:fire("GROUP_ROSTER_UPDATE")
+			local canceled = {}
+			queued = {}
+			for _, l in ipairs(a.logs) do
+				if l.message == "Quest snapshot queued" then
+					queued[#queued + 1] = l.data
+				end
+				if l.message == "Quest snapshot canceled" then
+					canceled[#canceled + 1] = l.data
+				end
+			end
+			assert.are.equal("roster_changed", canceled[1].reason)
+			assert.are.equal(queued[#queued].fingerprint, canceled[1].fingerprint)
+			assert.are.equal(queued[#queued].revision, canceled[1].revision)
+			local attempts = #a.attempts
+			n:advance(20)
+			assert.are.equal(attempts, #a.attempts)
+		end)
+
 		it("coalesces new quest updates while finishing the active snapshot", function()
 			local n = network(game)
 			local a = n.clients[1]

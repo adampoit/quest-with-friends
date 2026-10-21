@@ -51,6 +51,21 @@ Repeated renders, duplicate chunks and retries without a displayed status change
 
 To reproduce, keep AddonKit enabled and use `/qwf debug on` (or enable **Debug mode** in settings) before reproducing. Use `/qwf debug off` afterward to return to normal logging. Log out or `/reload` afterward to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Logs contain player identities; share only redacted relevant entries, not full SavedVariables.
 
+## Snapshot traffic diagnostics
+
+With AddonKit and Debug mode enabled, `sync` entries explain why complete snapshots are sent and whether their contents really changed:
+
+- **Quest snapshot queued** includes revision, size/chunks, `forced`, sorted coalesced event `triggers`, `forceReasons` (such as `manual_refresh`, `snapshot_requested`, `snapshot_timeout` or roster/world events), and active/replaced revisions. Causes survive coalescing and queued-snapshot replacement. `forceReasons` records requests folded into the snapshot even when an already-queued update satisfied them.
+- **Submitted quest snapshot** carries the same causes plus `queueToSubmit` seconds when a clock is available. Failed chunk submissions include revision, fingerprint and retry delay; a submitted snapshot still is not proof of delivery.
+- **Received quest snapshot** adds accepted revision, exact payload size and `assemblyDuration` seconds when available. Its sender-side event causes are unknown; they are not transmitted.
+- **Quest snapshot suppressed** explains `matches_active`, `matches_queued` or `matches_submitted`. Consecutive identical payload/reason/event combinations are deduplicated. **Quest snapshot canceled** identifies superseded, roster-canceled or oversized transfers, including the next unsent part.
+
+Queued, submitted and accepted snapshots include `fingerprint` and `previousFingerprint` in the form `adler32:<8 hex digits>:<byte length>`. These cover the exact complete wire payload, excluding revision/chunk envelopes, so equal payloads can be correlated across clients. Adler-32 is a non-cryptographic diagnostic checksum, not an anonymization or security mechanism. `payloadChanged` uses exact byte equality, not checksum equality, and is absent without a baseline.
+
+`changeReason` is `baseline`, `unchanged`, or a sorted list of changed categories: `added`, `removed`, `title`, `state`, `mapID`, `category`, `objectives` or `item_stock`. `changes` counts affected quests per category; `changedQuests` counts distinct quests and `changedQuestIDs` contains the first 12 sorted actual IDs. Comparisons decode the transmitted payload, not unencoded local inventory or omitted extension entries. `wire_only` means bytes changed without a decoded known-field difference (for example a protocol minor or unknown extension).
+
+Each stage has its own baseline: previous queued payload (even if later canceled), previous fully submitted payload, or previous accepted payload from that peer. Local baselines survive roster changes; removed peers lose their receive baseline. Reloads and Debug-mode toggles reset diagnostic baselines. No raw payloads are logged or added to SavedVariables; Debug-only in-memory payload references permit exact comparisons and are cleared when Debug mode is turned off. Fingerprints, quest IDs and existing identity/objective diagnostics remain private session evidence. Persist and redact logs as described above.
+
 ## Objective and spare-item diagnostics
 
 With AddonKit and Debug mode enabled, DEBUG `item_stock` entries trace why a count or spare-item row is present or missing:

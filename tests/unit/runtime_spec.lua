@@ -2168,6 +2168,225 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal(#QuestWithFriends.Core.encode({}), snapshot.bytes)
 	end)
 
+	local function syncRecords(records, message)
+		local data = {}
+		for _, record in ipairs(records) do
+			if record.message == message then
+				assert.are.equal("DEBUG", record.level)
+				assert.are.equal("sync", record.category)
+				data[#data + 1] = record.data
+			end
+		end
+		return data
+	end
+
+	it("fingerprints exact queued, submitted and received payloads with coalesced force reasons", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		fire("QUEST_LOG_UPDATE")
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		local queued = syncRecords(records, "Quest snapshot queued")[1]
+		local submitted = syncRecords(records, "Submitted quest snapshot")[1]
+		assert.are.equal("adler32:0d6e023e:11", queued.fingerprint)
+		assert.are.equal(queued.fingerprint, submitted.fingerprint)
+		assert.are.equal("baseline", queued.changeReason)
+		assert.is_nil(queued.previousFingerprint)
+		assert.is_nil(queued.payloadChanged)
+		assert.is_true(queued.forced)
+		assert.are.equal("BAG_UPDATE_DELAYED,PLAYER_ENTERING_WORLD,QUEST_LOG_UPDATE", queued.triggers)
+		assert.are.equal("PLAYER_ENTERING_WORLD", queued.forceReasons)
+		assert.are.equal(queued.triggers, submitted.triggers)
+		receiveSnapshot({}, 1)
+		local received = syncRecords(records, "Received quest snapshot")[1]
+		assert.are.equal(queued.fingerprint, received.fingerprint)
+		assert.are.equal(1, received.revision)
+		assert.are.equal("baseline", received.changeReason)
+		assert.is_nil(received.triggers)
+		SlashCmdList.QUESTWITHFRIENDS("")
+		flush()
+		queued = syncRecords(records, "Quest snapshot queued")[2]
+		submitted = syncRecords(records, "Submitted quest snapshot")[2]
+		assert.is_false(queued.payloadChanged)
+		assert.are.equal("unchanged", queued.changeReason)
+		assert.are.equal(queued.fingerprint, queued.previousFingerprint)
+		assert.are.equal("manual_refresh", queued.forceReasons)
+		assert.are.equal("unchanged", submitted.changeReason)
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Julia-Realm")
+		flush()
+		assert.are.equal("snapshot_requested", syncRecords(records, "Submitted quest snapshot")[3].forceReasons)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		flush()
+		local rejoined = syncRecords(records, "Submitted quest snapshot")[4]
+		assert.are.equal("unchanged", rejoined.changeReason)
+		assert.are.equal("GROUP_ROSTER_UPDATE", rejoined.forceReasons)
+		assert.are.equal(rejoined.fingerprint, rejoined.previousFingerprint)
+		receiveSnapshot({}, 2)
+		local peerRejoined = syncRecords(records, "Received quest snapshot")[2]
+		assert.are.equal("baseline", peerRejoined.changeReason)
+		assert.is_nil(peerRejoined.previousFingerprint)
+		for _, record in ipairs(records) do
+			assert.is_nil(record.data and record.data.payload)
+			assert.is_nil(record.data and record.data.previousPayload)
+		end
+	end)
+
+	it("summarizes actual encoded quest changes with bounded deterministic quest IDs", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({
+			[42] = {
+				title = "Old",
+				state = "active",
+				mapID = 101,
+				category = "profession",
+				objectives = {
+					{ text = "Cloth", have = 10, need = 10, itemID = 2589, spare = 2 },
+				},
+			},
+			[43] = { title = "Removed", state = "active", objectives = {} },
+		}, 1)
+		receiveSnapshot({
+			[42] = {
+				title = "New",
+				state = "ready",
+				mapID = 202,
+				category = "class",
+				objectives = {
+					{ text = "Other cloth", have = 11, need = 11, itemID = 2590, spare = 1 },
+				},
+			},
+			[44] = { title = "Added", state = "active", objectives = {} },
+		}, 2)
+		local received = syncRecords(records, "Received quest snapshot")
+		local changed = received[2]
+		assert.is_true(changed.payloadChanged)
+		assert.are.equal(received[1].fingerprint, changed.previousFingerprint)
+		assert.are.equal("added,category,item_stock,mapID,objectives,removed,state,title", changed.changeReason)
+		assert.same(
+			{ added = 1, removed = 1, category = 1, item_stock = 1, mapID = 1, objectives = 1, state = 1, title = 1 },
+			changed.changes
+		)
+		assert.are.equal(3, changed.changedQuests)
+		assert.same({ 42, 43, 44 }, changed.changedQuestIDs)
+		receiveSnapshot({}, 3)
+		local many = {}
+		for id = 30, 1, -1 do
+			many[id] = { title = "Added", state = "active", objectives = {} }
+		end
+		receiveSnapshot(many, 4)
+		changed = syncRecords(records, "Received quest snapshot")[4]
+		assert.are.equal(30, changed.changedQuests)
+		assert.same({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }, changed.changedQuestIDs)
+	end)
+
+	it("identifies stock-only changes from the submitted wire payload rather than uncapped inventory", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		entries = { { questID = 42, title = "Cloth Delivery" } }
+		objectives[42] = { { text = "Linen Cloth: 10/10", type = "item", numFulfilled = 10, numRequired = 10 } }
+		carriedCloth(12)
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		carriedCloth(15)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		local data = syncRecords(records, "Submitted quest snapshot")[2]
+		assert.are.equal("item_stock", data.changeReason)
+		assert.same({ item_stock = 1 }, data.changes)
+		assert.same({ 42 }, data.changedQuestIDs)
+		assert.are.equal("BAG_UPDATE_DELAYED", data.triggers)
+		assert.is_false(data.forced)
+	end)
+
+	it("distinguishes wire-only changes and never advances the diagnostic baseline on rejected data", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({}, 1)
+		local core = QuestWithFriends.Core
+		core.PROTOCOL_MINOR = 9
+		local payload = core.encode({}, { future_feature = "opaque" })
+		core.PROTOCOL_MINOR = 1
+		fire("CHAT_MSG_ADDON", "QWF", "1.9:D:2:1:1:" .. payload, "PARTY", "Julia-Realm")
+		local wire = syncRecords(records, "Received quest snapshot")[2]
+		assert.is_true(wire.payloadChanged)
+		assert.are.equal("wire_only", wire.changeReason)
+		assert.same({}, wire.changes)
+		assert.are.equal(0, wire.changedQuests)
+		fire("CHAT_MSG_ADDON", "QWF", "1.9:D:3:1:1:invalid", "PARTY", "Julia-Realm")
+		assert.are.equal(2, #syncRecords(records, "Received quest snapshot"))
+		fire("CHAT_MSG_ADDON", "QWF", "1.9:D:4:1:1:" .. payload, "PARTY", "Julia-Realm")
+		local repeated = syncRecords(records, "Received quest snapshot")[3]
+		assert.are.equal(wire.fingerprint, repeated.previousFingerprint)
+		assert.are.equal("unchanged", repeated.changeReason)
+		assert.is_false(repeated.payloadChanged)
+	end)
+
+	it("deduplicates unchanged suppression decisions without hiding different event causes", function()
+		local records = captureLogs(true)
+		_G.QuestWithFriendsDB = { debugMode = true }
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local sent = #messages
+		for _ = 1, 5 do
+			fire("QUEST_LOG_UPDATE")
+			flush()
+		end
+		local skipped = syncRecords(records, "Quest snapshot suppressed")
+		assert.are.equal(1, #skipped)
+		assert.are.equal("matches_submitted", skipped[1].reason)
+		assert.are.equal("QUEST_LOG_UPDATE", skipped[1].triggers)
+		fire("BAG_UPDATE_DELAYED")
+		flush()
+		assert.are.equal(2, #syncRecords(records, "Quest snapshot suppressed"))
+		assert.are.equal(sent, #messages)
+		assert.are.equal(1, #syncRecords(records, "Quest snapshot queued"))
+	end)
+
+	it("keeps new evidence Debug-only and resets baselines when Debug mode is toggled", function()
+		local records = captureLogs()
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		receiveSnapshot({}, 1)
+		assert.is_nil(findLog(records, "Quest snapshot queued"))
+		assert.is_nil(findLog(records, "Quest snapshot suppressed"))
+		assert.is_nil(findLog(records, "Submitted quest snapshot").data.fingerprint)
+		assert.is_nil(findLog(records, "Received quest snapshot").data.fingerprint)
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		flush()
+		receiveSnapshot({}, 2)
+		SlashCmdList.QUESTWITHFRIENDS("debug off")
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		flush()
+		receiveSnapshot({}, 3)
+		for _, message in ipairs({ "Quest snapshot queued", "Submitted quest snapshot", "Received quest snapshot" }) do
+			local data = syncRecords(records, message)
+			assert.are.equal("baseline", data[#data].changeReason)
+			assert.is_nil(data[#data].previousFingerprint)
+		end
+		_G.AddonKit = nil
+		fire("QUEST_LOG_UPDATE")
+		flush()
+		receiveSnapshot({}, 4)
+		assert.is_true(view.complete)
+	end)
+
 	it("logs send failures and automatically retries an unchanged snapshot", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()

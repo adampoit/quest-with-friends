@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add Debug-mode snapshot fingerprints, encoded-content change summaries, coalesced event/force reasons, queue/assembly timing, and deduplicated suppression/cancellation evidence to trace redundant sync traffic without logging raw payloads or changing the protocol.
+
 - Keep routine quest updates quiet: retain the last-known comparison with a muted Updating indicator instead of repeatedly showing incomplete-party warnings and moving quest rows. Initial loading, explicit refreshes and genuine recovery remain clearly signaled.
 
 - Add deduplicated Debug-mode diagnostics for objective matching and rejection reasons, fresh inventory counts, submitted/received stock metadata, filtering, and exact rendered or collapsed objective-row text. Requires AddonKit; normal logging is unchanged.
