@@ -302,6 +302,39 @@ local function recordShareBlocked(event, blockedAddon, functionName)
 	log("WARN", "share", "Quest sharing blocked", data)
 end
 
+local function canAbandonQuest(id)
+	if previewMode or not inParty() or type(QuestMapQuestOptions_AbandonQuest) ~= "function" then
+		return false
+	end
+	local index = C_QuestLog.GetLogIndexForQuestID(id)
+	local info = index and index > 0 and C_QuestLog.GetInfo(index)
+	return info
+			and info.questID == id
+			and not info.isHeader
+			and not info.isHidden
+			and not info.isInternalOnly
+			and C_QuestLog.CanAbandonQuest(id)
+			and not C_QuestLog.IsQuestDisabledForSession(id)
+		or false
+end
+
+local function getAbandonQuestID(groupID)
+	for _, id in ipairs(Core.questIDs(groupID)) do
+		if canAbandonQuest(id) then
+			return id
+		end
+	end
+end
+
+local function requestAbandonQuest(id)
+	-- Recheck the exact quest captured by the menu, not a replacement variant.
+	if canAbandonQuest(id) then
+		QuestMapQuestOptions_AbandonQuest(id)
+	else
+		render()
+	end
+end
+
 local function showPanel(groups, complete, notices)
 	Core.sortGroups(groups, QWF.db.sortMode, previewMode and QWF.Preview.activity or activity)
 	QWF.Panel.show(
@@ -339,6 +372,8 @@ local function showPanel(groups, complete, notices)
 			end,
 		},
 		{
+			getAbandonQuestID = not previewMode and getAbandonQuestID or nil,
+			onAbandon = not previewMode and requestAbandonQuest or nil,
 			onLock = function(locked)
 				if panelLockSetting then
 					panelLockSetting:SetValue(locked)

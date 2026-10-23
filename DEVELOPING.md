@@ -45,6 +45,20 @@ One-click sharing remains a direct call from the Share button. With AddonKit ins
 
 After reproducing, log out or `/reload` to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Compare the `share` entries with BugGrabber's original stack, especially combat versus non-combat attempts and minimal-addon versus normal setups. Keep full SavedVariables private; share only redacted relevant entries. No API hooks, automatic retries, or security-error suppression are added.
 
+## Quest-abandonment validation
+
+Quest headings offer **Abandon quest…** through a native right-click menu only when the local logged quest is abandonable and not session-disabled. The runtime resolves real variant IDs from the current quest log and revalidates the exact captured ID when the menu action is chosen. It calls `QuestMapQuestOptions_AbandonQuest` to preserve Blizzard's confirmation and item-removal warnings; it never calls `C_QuestLog.AbandonQuest` directly or overrides Blizzard's dialogs. Samples never offer the action.
+
+Unit tests verify eligibility, variant resolution, retained menu callbacks, preview safety and refresh after `QUEST_REMOVED`. The existing simulator suite exercises the real quest-heading handler, native context menu, Blizzard abandonment helper and confirmation dialogs: expanded/collapsed headings, cancel/accept, selection restoration, the item-removal warning and preview safety. Missing simulator game-API behavior (eligibility, selection, the pending target and quest items) is supplied by scoped fixtures; acceptance is spied at the game-API boundary rather than removing a quest. These tests require no screenshot renderer, image baselines or extra CI job. They do not certify live quest removal, protected actions or combat behavior. Before release, validate on both Retail and Forever and record `/dump GetBuildInfo()` and the addon revision:
+
+- Right-click expanded and collapsed headings; cancel, press Escape, and confirm abandonment. Left-click and Share must remain unchanged.
+- Confirm a quest with removable quest items and verify the native warning.
+- Check non-abandonable, session-disabled, friends-only and completed-history quests; samples must never offer abandonment.
+- Remove or turn in the quest while its menu is open; an old action must not target another quest or replacement variant.
+- Open another quest or abandonment prompt while confirmation is pending; verify the displayed title and actual abandoned quest remain consistent. The native API's pending abandonment target is shared state.
+- Repeat with the quest log closed/open, in combat and out of combat, and with minimal/normal addon configurations; check for Lua and security errors. Include controller mode on Forever, whose native helper includes gamepad-specific handling.
+- Verify both party panels refresh after confirmed abandonment. Canceling must not change either quest log.
+
 ## Simulator integration tests
 
 [**wow-ui-sim**](https://github.com/Osso/wow-ui-sim) loads the shipped TOC and exercises simulated frames, party APIs, event dispatch, and timer callbacks. With Docker running:
@@ -74,7 +88,7 @@ docker run --rm \
   wow-ui-sim:0.1.32-portable run-tests QuestWithFriendsDev
 ```
 
-`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), hidden screenshot-tool visibility and native scenario buttons, party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, scrolling and row reuse, persistent quest-heading toggles, collapsed summaries, sharing, locked/unlocked layout controls, saved panel dimensions and position, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
+`tests/simulator.lua` covers solo appearance preview (sample rendering, filters, disabled sharing, settings and automatic exit on joining), hidden screenshot-tool visibility and native scenario buttons, party join/leave, unknown members, snapshot assembly, stale/invalid messages, filter clicks, native sorting choices and activity ordering, scope summaries, scrolling and row reuse, persistent quest-heading toggles, collapsed summaries, sharing, native abandonment menus and confirmation dialogs, locked/unlocked layout controls, saved panel dimensions and position, and refresh coalescing. It captures outgoing messages and injects peer messages, rather than emulating a second client. Timer delays are compressed to zero while retaining the callback queue: use the clocked unit tests for real-time pacing assertions.
 
 ## In-game promotional screenshots
 

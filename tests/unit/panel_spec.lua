@@ -1,5 +1,6 @@
 describe("Quest With Friends panel", function()
 	local panel, buttons, fontStrings, textures, panelFontCount
+	local contextMenu, originalMenuUtil
 
 	local function widget()
 		local w = {}
@@ -87,7 +88,9 @@ describe("Quest With Friends panel", function()
 			self.mouseEnabled = value
 		end
 		function w:RegisterForDrag(...) end
-		function w:RegisterForClicks(...) end
+		function w:RegisterForClicks(...)
+			self.clicks = { ... }
+		end
 		function w:SetClampedToScreen(...) end
 		function w:StartMoving()
 			self.moving = true
@@ -190,6 +193,11 @@ describe("Quest With Friends panel", function()
 				entries[#entries + 1] = entry
 				return entry
 			end
+			function root:CreateButton(text, responder)
+				local entry = self:CreateCheckbox(text, nil, responder)
+				entry.kind = "button"
+				return entry
+			end
 			function root:CreateRadio(text, isSelected, responder)
 				local entry = self:CreateCheckbox(text, isSelected, responder)
 				entry.kind = "radio"
@@ -249,6 +257,17 @@ describe("Quest With Friends panel", function()
 	end
 
 	before_each(function()
+		originalMenuUtil = _G.MenuUtil
+		contextMenu = nil
+		_G.MenuUtil = {
+			CreateContextMenu = function(owner, generator)
+				contextMenu = widget()
+				contextMenu.owner = owner
+				contextMenu:SetupMenu(generator)
+				contextMenu:GenerateMenu()
+				return contextMenu
+			end,
+		}
 		buttons, fontStrings, textures, panelFontCount = {}, {}, {}, 0
 		_G.GameTooltip = widget()
 		function GameTooltip:SetOwner(owner, anchor)
@@ -287,6 +306,111 @@ describe("Quest With Friends panel", function()
 			end
 			return w
 		end)
+	end)
+
+	after_each(function()
+		_G.MenuUtil = originalMenuUtil
+	end)
+
+	it("offers abandonment in a right-click menu without changing collapse or Share", function()
+		loadPanel()
+		local requested, shared
+		local presentation = {
+			getAbandonQuestID = function(id)
+				assert.are.equal(42, id)
+				return 43
+			end,
+			onAbandon = function(id)
+				requested = id
+			end,
+		}
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, function(id)
+			shared = id
+		end, nil, nil, presentation)
+		local heading = fontStrings[4].toggleButton
+		assert.same({ "LeftButtonUp", "RightButtonUp" }, heading.clicks)
+		heading.OnEnter(heading)
+		assert.are.equal("Right-click for quest actions", GameTooltip.line)
+		heading.OnClick(heading, "RightButton")
+		assert.is_nil(QuestWithFriendsDB.collapsedQuests[42])
+		assert.is_false(GameTooltip.shown)
+		assert.are.equal(heading, contextMenu.owner)
+		assert.same({ "Errand" }, contextMenu.menuTitles)
+		assert.are.equal(1, #contextMenu.entries)
+		assert.are.equal("Abandon quest…", contextMenu.entries[1].text)
+		assert.is_nil(requested)
+		contextMenu.entries[1].responder()
+		assert.are.equal(43, requested)
+		assert.is_nil(shared)
+		fontStrings[4].shareButton.OnClick()
+		assert.are.equal(42, shared)
+		heading.OnClick(heading, "LeftButton")
+		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
+		heading.OnClick(heading, "RightButton")
+		assert.is_true(QuestWithFriendsDB.collapsedQuests[42])
+	end)
+
+	it("does not offer abandonment for ineligible quests, preview or screenshot samples", function()
+		loadPanel()
+		local presentation = {
+			getAbandonQuestID = function() end,
+			onAbandon = function()
+				error("Must not abandon sample quests")
+			end,
+		}
+		for _, mode in ipairs({ "live", "preview", "screenshot" }) do
+			presentation.preview = mode ~= "live"
+			presentation.screenshot = mode == "screenshot"
+			QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, presentation)
+			local heading = fontStrings[4].toggleButton
+			heading.OnClick(heading, "RightButton")
+			assert.is_nil(contextMenu)
+			heading.OnEnter(heading)
+			assert.are.equal("Click to collapse", GameTooltip.line)
+			presentation.getAbandonQuestID = function()
+				return 42
+			end
+		end
+	end)
+
+	it("keeps menu targets immutable and rejects callbacks after row reuse, hiding or preview", function()
+		loadPanel()
+		local requested = {}
+		local presentation = {
+			getAbandonQuestID = function(id)
+				return id
+			end,
+			onAbandon = function(id)
+				requested[#requested + 1] = id
+			end,
+		}
+		local function show(id)
+			QuestWithFriends.Panel.show({ group(id) }, true, true, nil, nil, nil, nil, presentation)
+		end
+		show(42)
+		local heading = fontStrings[4].toggleButton
+		heading.OnClick(heading, "RightButton")
+		local oldAction = contextMenu.entries[1].responder
+		show(7)
+		oldAction()
+		assert.same({}, requested)
+		heading.OnClick(heading, "RightButton")
+		local currentAction = contextMenu.entries[1].responder
+		QuestWithFriends.Panel.hide()
+		currentAction()
+		assert.same({}, requested)
+		show(7)
+		heading.OnClick(heading, "RightButton")
+		currentAction = contextMenu.entries[1].responder
+		presentation.preview = true
+		show(7)
+		currentAction()
+		assert.same({}, requested)
+		presentation.preview = false
+		show(7)
+		heading.OnClick(heading, "RightButton")
+		contextMenu.entries[1].responder()
+		assert.same({ 7 }, requested)
 	end)
 
 	it("puts three independent checkbox filters in one native dropdown", function()

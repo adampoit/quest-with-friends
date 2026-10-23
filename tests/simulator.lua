@@ -82,6 +82,94 @@ local function chooseFilter(text)
 	button:Click()
 end
 
+local function rightClickHeading(row)
+	-- v0.1.32's Button:Click does not forward the right-button argument.
+	local button = row.toggleButton
+	button:GetScript("OnClick")(button, "RightButton")
+end
+
+local function abandonAction(row)
+	rightClickHeading(row)
+	local menu = Menu.GetManager():GetOpenMenu()
+	assertNotNil(menu)
+	assertTrue(menu:IsShown())
+	assertEquals(row.toggleButton, menu:GetOwnerRegion())
+	for _, child in ipairs({ menu:GetChildren() }) do
+		local description = child.GetElementDescription and child:GetElementDescription()
+		if description and MenuUtil.GetElementText(description) == "Abandon quest…" then
+			assertTrue(child:IsShown())
+			return child, menu
+		end
+	end
+	error("Abandon quest action not found")
+end
+
+local function abandonableHeading(quests)
+	for _, row in ipairs(panelRegions()) do
+		if row:IsShown() and row.groupID then
+			local quest, id = QuestWithFriends.Core.matchQuest(quests, row.groupID)
+			if quest and quest.state ~= "completed" and C_QuestLog.CanAbandonQuest(id) then
+				return row, id, quest.title
+			end
+		end
+	end
+	error("No abandonable local quest heading found")
+end
+
+local function withAbandonQuestAPI(items, callback)
+	local names = {
+		"CanAbandonQuest",
+		"GetSelectedQuest",
+		"SetSelectedQuest",
+		"SetAbandonQuest",
+		"GetAbandonQuest",
+		"GetAbandonQuestItems",
+		"AbandonQuest",
+	}
+	local originals = {}
+	for _, name in ipairs(names) do
+		originals[name] = C_QuestLog[name]
+	end
+	local previousSelection = C_QuestLog.GetSelectedQuest()
+	local selected, pending, abandoned = previousSelection or 0, nil, {}
+	-- Supply missing game-API behavior, not replacements for the runtime, helper or dialogs.
+	C_QuestLog.CanAbandonQuest = function(id)
+		local index = C_QuestLog.GetLogIndexForQuestID(id)
+		return index ~= nil and index > 0
+	end
+	C_QuestLog.GetSelectedQuest = function()
+		return selected
+	end
+	C_QuestLog.SetSelectedQuest = function(id)
+		selected = id
+	end
+	C_QuestLog.SetAbandonQuest = function()
+		pending = C_QuestLog.GetSelectedQuest()
+	end
+	C_QuestLog.GetAbandonQuest = function()
+		return pending
+	end
+	C_QuestLog.GetAbandonQuestItems = function()
+		return items
+	end
+	C_QuestLog.AbandonQuest = function()
+		abandoned[#abandoned + 1] = pending
+	end
+	local ok, err = pcall(function()
+		callback(abandoned)
+	end)
+	Menu.GetManager():CloseMenus()
+	StaticPopup_Hide("ABANDON_QUEST")
+	StaticPopup_Hide("ABANDON_QUEST_WITH_ITEMS")
+	for _, name in ipairs(names) do
+		C_QuestLog[name] = originals[name]
+	end
+	C_QuestLog.SetSelectedQuest(previousSelection)
+	if not ok then
+		error(err)
+	end
+end
+
 local function receive(message, prefix, channel, sender)
 	local name, realm = UnitFullName("party1")
 	realm = realm and realm ~= "" and realm or GetRealmName()
@@ -249,6 +337,15 @@ test("solo preview uses the real panel and filters without sending or sharing sa
 			end
 		end
 		assertTrue(foundShare)
+		Menu.GetManager():CloseMenus()
+		for _, row in ipairs(panelRegions()) do
+			if row:IsShown() and row.toggleButton and row.groupID then
+				rightClickHeading(row)
+				assertFalse(Menu.GetManager():IsAnyMenuOpen())
+			end
+		end
+		assertEquals(nil, StaticPopup_FindVisible("ABANDON_QUEST"))
+		assertEquals(nil, StaticPopup_FindVisible("ABANDON_QUEST_WITH_ITEMS"))
 		chooseFilter("Current zone only")
 		assertContains(panelTexts(), "Delivery to the Next Town")
 		chooseFilter("Show profession quests")
@@ -750,6 +847,68 @@ partyTest("real Share buttons use current row IDs and disappear when differences
 	assertFalse(shareButton:IsShown())
 	assertFalse(GameTooltip:IsShown())
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
+end)
+
+partyTest(
+	"quest actions open native confirmation and preserve collapse state through cancel and accept",
+	function(quests)
+		sendSnapshot({}, 100)
+		withAbandonQuestAPI(nil, function(abandoned)
+			local row, id, title = abandonableHeading(quests)
+			local selected = C_QuestLog.GetSelectedQuest()
+			local index = C_QuestLog.GetLogIndexForQuestID(id)
+			for _, collapsed in ipairs({ false, true }) do
+				if (QuestWithFriendsDB.collapsedQuests[row.groupID] == true) ~= collapsed then
+					row.toggleButton:Click()
+				end
+				local action, menu = abandonAction(row)
+				assertEquals(collapsed, row.toggleButton.summary:IsShown())
+				assertEquals(nil, StaticPopup_FindVisible("ABANDON_QUEST"))
+				assertEquals(0, #abandoned)
+				action:Click()
+				assertFalse(menu:IsShown())
+				local dialog = StaticPopup_FindVisible("ABANDON_QUEST")
+				assertNotNil(dialog)
+				assertTrue(dialog:IsShown())
+				assertTrue(dialog:GetTextFontString():GetText():find(title, 1, true) ~= nil)
+				assertTrue(dialog:GetButton1():IsShown())
+				assertTrue(dialog:GetButton2():IsShown())
+				assertEquals(selected, C_QuestLog.GetSelectedQuest())
+				assertEquals(0, #abandoned)
+				if collapsed then
+					dialog:GetButton1():Click()
+					assertEquals(1, #abandoned)
+					assertEquals(id, abandoned[1])
+				else
+					dialog:GetButton2():Click()
+					assertEquals(0, #abandoned)
+				end
+				assertEquals(nil, StaticPopup_FindVisible("ABANDON_QUEST"))
+				assertEquals(collapsed, row.toggleButton.summary:IsShown())
+				assertEquals(index, C_QuestLog.GetLogIndexForQuestID(id))
+			end
+		end)
+	end
+)
+
+partyTest("quest actions show Blizzard's item-removal warning before abandonment", function(quests)
+	sendSnapshot({}, 100)
+	withAbandonQuestAPI({ 6948 }, function(abandoned)
+		local row, _, title = abandonableHeading(quests)
+		local action = abandonAction(row)
+		action:Click()
+		assertEquals(nil, StaticPopup_FindVisible("ABANDON_QUEST"))
+		local dialog = StaticPopup_FindVisible("ABANDON_QUEST_WITH_ITEMS")
+		assertNotNil(dialog)
+		assertTrue(dialog:IsShown())
+		local text = dialog:GetTextFontString():GetText()
+		assertTrue(text:find(title, 1, true) ~= nil)
+		assertTrue(text:find("Hearthstone", 1, true) ~= nil)
+		assertEquals(0, #abandoned)
+		dialog:GetButton2():Click()
+		assertEquals(0, #abandoned)
+		assertEquals(nil, StaticPopup_FindVisible("ABANDON_QUEST_WITH_ITEMS"))
+	end)
 end)
 
 partyTest("quest heading clicks persist collapse choices without hiding sharing or notices", function(quests)
