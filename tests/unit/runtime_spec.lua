@@ -2,10 +2,12 @@ describe("Quest With Friends party sync", function()
 	local eventHandler, timers, messages, view, objectives, entries, party, currentMap, questMaps, pushed, pushable
 	local originalBuildInfo, originalConstants, originalTradeSkillUI, originalClassMale, originalClassFemale
 	local tags, questTypes
+	local abandonable, disabledQuests, abandonRequests
 	local originalSettings, originalSettingsPanel, originalSettingsInbound, originalHeaderInitializer, originalButtonInitializer
 	local captureSettings
 	local registeredEvents, originalDiagnostics
 	local diagnosticGlobals = {
+		"QuestMapQuestOptions_AbandonQuest",
 		"GetTime",
 		"InCombatLockdown",
 		"UnitAffectingCombat",
@@ -58,6 +60,10 @@ describe("Quest With Friends party sync", function()
 		party = true
 		currentMap, questMaps = 101, {}
 		pushed, pushable = {}, {}
+		abandonable, disabledQuests, abandonRequests = {}, {}, {}
+		_G.QuestMapQuestOptions_AbandonQuest = function(id)
+			abandonRequests[#abandonRequests + 1] = id
+		end
 		_G.QuestLogPushQuest = function(index)
 			pushed[#pushed + 1] = index
 		end
@@ -114,6 +120,12 @@ describe("Quest With Friends party sync", function()
 			end,
 		}
 		_G.C_QuestLog = {
+			CanAbandonQuest = function(id)
+				return abandonable[id] ~= false
+			end,
+			IsQuestDisabledForSession = function(id)
+				return disabledQuests[id] == true
+			end,
 			GetQuestTagInfo = function(id)
 				return tags[id]
 			end,
@@ -628,6 +640,10 @@ describe("Quest With Friends party sync", function()
 			assert.are.equal(42, view.groups[1].shareQuestID)
 			view.share(42)
 			assert.same({ 1 }, pushed)
+			assert.are.equal(42, view.presentation.getAbandonQuestID(42))
+			assert.same({}, abandonRequests)
+			view.presentation.onAbandon(42)
+			assert.same({ 42 }, abandonRequests)
 			receiveQuests({
 				[42] = {
 					title = "Errand",
@@ -683,6 +699,100 @@ describe("Quest With Friends party sync", function()
 			assert.are.equal("missing", view.groups[1].differences[1].reason)
 		end)
 	end
+
+	it("resolves the real local variant for abandonment even when sharing is unavailable", function()
+		entries = { { questID = 71002, title = "Local variant" } }
+		questMaps[71002] = 101
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({}, 1)
+		assert.are.equal(71001, view.groups[1].questID)
+		assert.are.equal(71002, view.presentation.getAbandonQuestID(71001))
+		assert.is_false(C_QuestLog.IsPushableQuest(71002))
+		view.presentation.onAbandon(71002)
+		assert.same({ 71002 }, abandonRequests)
+	end)
+
+	it("rejects non-abandonable, disabled, hidden, internal and friends-only quests", function()
+		entries = { { questID = 42, title = "Errand" } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local actions = view.presentation
+		assert.are.equal(42, actions.getAbandonQuestID(42))
+		assert.is_nil(actions.getAbandonQuestID(99))
+		actions.onAbandon(99)
+		---@type table<string, any>
+		local entry = entries[1]
+		for _, flag in ipairs({ "isHidden", "isInternalOnly", "isHeader" }) do
+			entry[flag] = true
+			assert.is_nil(actions.getAbandonQuestID(42))
+			actions.onAbandon(42)
+			entry[flag] = nil
+		end
+		abandonable[42] = false
+		assert.is_nil(actions.getAbandonQuestID(42))
+		actions.onAbandon(42)
+		abandonable[42], disabledQuests[42] = true, true
+		assert.is_nil(actions.getAbandonQuestID(42))
+		actions.onAbandon(42)
+		disabledQuests[42] = nil
+		_G.QuestMapQuestOptions_AbandonQuest = nil
+		assert.is_nil(actions.getAbandonQuestID(42))
+		actions.onAbandon(42)
+		assert.same({}, abandonRequests)
+	end)
+
+	it("revalidates a captured exact ID rather than abandoning a replacement variant", function()
+		entries = { { questID = 71002, title = "Local variant" } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local actions = view.presentation
+		local id = actions.getAbandonQuestID(71001)
+		assert.are.equal(71002, id)
+		entries = { { questID = 71001, title = "Replacement variant" } }
+		actions.onAbandon(id)
+		assert.same({}, abandonRequests)
+		assert.are.equal(71001, actions.getAbandonQuestID(71001))
+		-- A stale log index must never identify a different quest.
+		C_QuestLog.GetLogIndexForQuestID = function()
+			return 1
+		end
+		actions.onAbandon(id)
+		assert.same({}, abandonRequests)
+	end)
+
+	it("rejects retained live actions after leaving the party or entering preview", function()
+		entries = { { questID = 42, title = "Errand" } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local actions = view.presentation
+		party = false
+		actions.onAbandon(42)
+		assert.is_nil(actions.getAbandonQuestID(42))
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.is_nil(view.presentation.onAbandon)
+		assert.is_nil(view.presentation.getAbandonQuestID)
+		actions.onAbandon(42)
+		assert.same({}, abandonRequests)
+	end)
+
+	it("refreshes and synchronizes the quest log after abandonment", function()
+		entries = { { questID = 42, title = "Errand" } }
+		questMaps[42] = 101
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [42] = { title = "Errand", state = "active", mapID = 101, objectives = {} } }, 1)
+		local actions = view.presentation
+		actions.onAbandon(42)
+		-- The native helper only opens confirmation; nothing changes until the game removes the quest.
+		assert.are.equal(42, entries[1].questID)
+		entries = {}
+		fire("QUEST_REMOVED", 42)
+		flush()
+		assert.are.equal("missing", view.groups[1].differences[1].reason)
+		assert.are.equal("You", view.groups[1].differences[1].player)
+		assert.is_nil(view.presentation.getAbandonQuestID(42))
+	end)
 
 	for _, game in ipairs({ "retail", "forever" }) do
 		it("previews plausible data solo with working filters and no network traffic on " .. game, function()

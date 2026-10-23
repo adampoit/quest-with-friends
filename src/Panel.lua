@@ -11,6 +11,8 @@ local toggleFilter
 local currentZoneOnly
 local questFilters = {}
 local shareQuest
+local getAbandonQuestID
+local abandonQuest
 local redraw
 local isPreview = false
 local isScreenshot = false
@@ -341,7 +343,7 @@ local function setQuestHeading(row, group, collapsed, y, width)
 	if not row.toggleButton then
 		local button = CreateFrame("Button", nil, panel.content)
 		row.toggleButton = button
-		button:RegisterForClicks("LeftButtonUp")
+		button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		local highlight = button:CreateTexture(nil, "HIGHLIGHT")
 		highlight:SetAllPoints()
 		highlight:SetColorTexture(1, 1, 1, 0.06)
@@ -354,7 +356,29 @@ local function setQuestHeading(row, group, collapsed, y, width)
 		button.summary:SetPoint("RIGHT", 0, 0)
 		button.summary:SetJustifyH("RIGHT")
 		button.summary:SetWordWrap(false)
-		button:SetScript("OnClick", function()
+		button:SetScript("OnClick", function(self, mouseButton)
+			if mouseButton == "RightButton" then
+				local id = not isPreview and getAbandonQuestID and row.groupID and getAbandonQuestID(row.groupID)
+				if id and abandonQuest then
+					hideTooltip(self)
+					local groupID, onAbandon = row.groupID, abandonQuest
+					MenuUtil.CreateContextMenu(self, function(_, root)
+						root:CreateTitle(row.title)
+						root:CreateButton("Abandon quest…", function()
+							if
+								not isPreview
+								and panel:IsShown()
+								and self:IsShown()
+								and row.groupID == groupID
+								and abandonQuest == onAbandon
+							then
+								onAbandon(id)
+							end
+						end)
+					end)
+				end
+				return
+			end
 			if row.groupID then
 				local saved = collapsedQuests
 				saved[row.groupID] = saved[row.groupID] ~= true or nil
@@ -366,6 +390,9 @@ local function setQuestHeading(row, group, collapsed, y, width)
 			GameTooltip:SetText(row.title)
 			GameTooltip:AddLine(row.summaryText, 1, 1, 1, true)
 			GameTooltip:AddLine(row.collapsed and "Click to expand" or "Click to collapse", 1, 1, 1, true)
+			if not isPreview and abandonQuest and getAbandonQuestID and getAbandonQuestID(row.groupID) then
+				GameTooltip:AddLine("Right-click for quest actions", 1, 1, 1, true)
+			end
 			GameTooltip:Show()
 		end)
 		button:SetScript("OnLeave", hideTooltip)
@@ -543,6 +570,8 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	currentZoneOnly = zoneFilter == true
 	questFilters = filters or {}
 	shareQuest = onShare
+	getAbandonQuestID = presentation.getAbandonQuestID
+	abandonQuest = presentation.onAbandon
 	if not panel then
 		createPanel()
 	end
