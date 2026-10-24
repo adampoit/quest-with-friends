@@ -235,7 +235,7 @@ Catalog entries are distribution metadata: they do not prove that a PTR exists, 
 
 `tools/compatibility_versions.json` must match the TOC. On `main` it records supported live targets; on a compatibility branch it records prospective targets. Detection changes only the integration branch, never the live baseline on `main`.
 
-The issue is assigned to `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner. For organization-owned repositories, set this to a user login. It contains the candidate's catalog details, checkout commands, testing checklist, preview instructions, and promotion checklist. Keep its `<!-- qwf-compatibility:... -->` marker intact: the tooling uses it to identify the branch. Only issues authored by `not-adam[bot]` or an owner, member, or collaborator are recognized; public issue bodies cannot register branches for privileged automation. Open and closed issues both suppress repeat detection. Closing an issue stops syncing and preview publication; reopening resumes them. A newer candidate does not retire older branches automatically: explicitly close superseded issues and delete unwanted branches.
+The issue is assigned to `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner. For organization-owned repositories, set this to a user login. It contains the candidate's catalog details, checkout commands, testing checklist, preview instructions, and promotion checklist. Keep its `<!-- qwf-compatibility:... -->` marker intact: the tooling uses it to identify the branch. Only issues authored by `not-adam[bot]` or an owner, member, or collaborator are recognized; public issue bodies cannot register branches for privileged automation. Existing issues prevent duplicate notifications. Closing an issue stops syncing, preview publication, and branch recreation; reopening resumes them. If an upcoming target's issue is open but its branch is missing, rerunning detection recreates it from current `main`, reusing the same issue—even if a newer catalog candidate has since appeared. A newer candidate does not retire older branches automatically: explicitly close superseded issues and delete unwanted branches.
 
 Before enabling these workflows:
 
@@ -243,7 +243,9 @@ Before enabling these workflows:
 - Configure `NOT_ADAM_APP_PRIVATE_KEY`; authentication uses `adampoit/not-adam@v1`.
 - Keep `CURSEFORGE_API_TOKEN` configured for catalog discovery and stable publication.
 
-Branch creation and upstream merges use the App token, so pushes trigger normal tests. No release is created by detection or syncing. Existing branches (including those created by the former PR monitor) are reused without resetting, rebasing, or force-pushing. If a push succeeds but issue creation fails, rerunning recovers it.
+The issue is created first. The detector uploads the complete candidate tree and commit, then uses GitHub's `createLinkedBranch` mutation to create the branch at that commit and associate it with the issue's **Development** section. A failed request cannot leave a visible branch missing its metadata; rerunning recovers partial failures without duplicating issues. Branch creation and upstream merges use the App token. Compatibility branch creation has an explicit `create` test trigger, so it does not depend on GitHub emitting a push event for API-created refs. Detection also immediately syncs active branches with `main`, rather than waiting for another push or the daily schedule. No release is created by detection or syncing.
+
+Existing branches (including those created by the former PR monitor) are reused without resetting, rebasing, or force-pushing. GitHub's native association is established at creation, so legacy branches are not retroactively linked. If a legacy branch contains only generated metadata, explicitly delete it and rerun detection to recreate it with a native link; preserve any real compatibility work before deleting a branch.
 
 ### Working on a candidate
 
@@ -257,7 +259,7 @@ python3 tools/bundle_addon.py --dev
 
 Install the resulting development ZIP in the matching PTR client's AddOns directory. For a linked `QuestWithFriendsDev` checkout, use `--dev-toc` instead. Record the actual client build/interface and tested addon revision in the tracking issue. Target short-lived functionality and compatibility PRs at the integration branch. Shared changes may go to `main` first if they are safe for live clients.
 
-`.github/workflows/compatibility-sync.yml` automatically merges `main` into all open tracked branches after pushes to `main`, on manual dispatch, and daily at 08:43 UTC for retries. Server-side merges use a pinned source commit and the current destination tip; concurrent changes cannot be overwritten. Clean updates trigger the existing test workflow. Conflicts or missing branches are reported on the issue without altering history. Failures in push-triggered branch tests are also reported, ignoring obsolete revisions. Repeated reports for the same main commit/tested revision are deduplicated. Resolve conflicts with a normal merge, not a force push; preview publication requires the latest default-branch commit to be included and fresh tests to pass.
+`.github/workflows/compatibility-sync.yml` automatically merges `main` into all open tracked branches after pushes to `main`, on manual dispatch, and daily at 08:43 UTC for retries. Server-side merges use a pinned source commit and the current destination tip; concurrent changes cannot be overwritten. Clean updates trigger the existing test workflow. Conflicts or missing branches are reported on the issue without altering history. To restore a deliberately deleted upcoming branch, rerun detection while its tracking issue is open. Failures in push- or creation-triggered branch tests are also reported, ignoring obsolete revisions. Repeated reports for the same main commit/tested revision are deduplicated. Resolve conflicts with a normal merge, not a force push; preview publication requires the latest default-branch commit to be included and fresh tests to pass.
 
 ### Optional GitHub previews
 
@@ -293,7 +295,7 @@ python3 tools/check_game_versions.py /path/to/curseforge-versions.json
 
 `--create-tracking --base <default-branch> --reviewer <login>` is reserved for a clean CI Git checkout, not a local Jujutsu working copy. `tools/compatibility_branches.py sync` mutates GitHub branches/issues and is also CI-only. Network-free tests cover detection, temporary local Git branches, issue recovery, sync/reporting, preview gating, and packaging.
 
-After adopting this workflow, rerun detection to create tracking issues for existing candidate branches. Close the old compatibility PRs without merging, linking their replacement issues and copying any validation evidence. Reconcile old branches with current `main` before publishing; they are intentionally not rewritten by migration.
+After adopting this workflow, rerun detection to create tracking issues for existing candidate branches. Close the old compatibility PRs without merging, linking their replacement issues and copying any validation evidence. Either reconcile old branches with current `main` before publishing, or—only after verifying that no real work would be lost—delete and recreate them through detection. Recreated branches retain their existing issues and appear under **Development**; migration never rewrites a branch automatically.
 
 ## CurseForge description
 

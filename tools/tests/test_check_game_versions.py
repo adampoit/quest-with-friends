@@ -275,6 +275,43 @@ class CandidateTests(unittest.TestCase):
 		self.assertIn("requires --base and --reviewer", result.stderr)
 
 
+class JsonPostTests(unittest.TestCase):
+	def test_json_api_requests_send_structured_stdin_not_shell_arguments(self):
+		payload: dict[str, object] = {
+			"message": 'quoted " text $(not-a-command)',
+			"parents": ["a" * 40],
+		}
+		with patch.object(
+			subprocess,
+			"run",
+			return_value=subprocess.CompletedProcess([], 0, stdout='{"sha":"result"}'),
+		) as command:
+			self.assertEqual(
+				{"sha": "result"}, monitor.post_json(Path("."), "endpoint", payload)
+			)
+			assert command.call_args is not None
+			self.assertEqual(
+				payload, json.loads(cast(str, command.call_args.kwargs["input"]))
+			)
+			self.assertEqual(
+				["gh", "api", "endpoint", "--method", "POST", "--input", "-"],
+				command.call_args.args[0],
+			)
+
+	def test_graphql_errors_are_rejected_even_with_successful_http_status(self):
+		with (
+			patch.object(
+				subprocess,
+				"run",
+				return_value=subprocess.CompletedProcess(
+					[], 0, stdout='{"errors":[{"message":"denied"}]}'
+				),
+			),
+			self.assertRaisesRegex(ValueError, "denied"),
+		):
+			_ = monitor.post_json(Path("."), "graphql", {})
+
+
 @unittest.skipUnless(
 	shutil.which("git"), "Git is required for local branch orchestration tests"
 )
@@ -307,10 +344,15 @@ class TrackingTests(unittest.TestCase):
 		_ = monitor.run(self.root, "git", "add", ".")
 		_ = monitor.run(self.root, "git", "commit", "-m", "Initial")
 		_ = monitor.run(self.root, "git", "remote", "add", "origin", str(self.origin))
+		_ = monitor.run(self.root, "git", "push", "origin", "main")
 		self.real_run: Callable[..., str] = monitor.run
 		self.gh_calls: list[tuple[str, ...]] = []
 		self.existing: list[dict[str, object]] = []
 		self.fail_creation: bool = False
+		self.fail_linking: bool = False
+		self.lose_link_response: bool = False
+		self.posts: list[tuple[str, dict[str, object]]] = []
+		self.tree_files: dict[str, str] = {}
 		self.candidate: monitor.Candidate = monitor.Candidate(
 			"retail", "12.1.5", 101, "12.1.0"
 		)
@@ -320,6 +362,17 @@ class TrackingTests(unittest.TestCase):
 			return self.real_run(root, *command)
 		self.gh_calls.append(command)
 		if command[1] == "api":
+			if "/git/commits/" in command[2]:
+				sha = command[2].rsplit("/", 1)[-1]
+				return json.dumps(
+					{
+						"tree": {
+							"sha": self.real_run(
+								root, "git", "show", "-s", "--format=%T", sha
+							)
+						}
+					}
+				)
 			self.assertIn("--paginate", command)
 			self.assertIn("--slurp", command)
 			return json.dumps(
@@ -330,11 +383,85 @@ class TrackingTests(unittest.TestCase):
 				raise subprocess.CalledProcessError(
 					1, command, stderr="simulated API failure"
 				)
-			return "https://github.invalid/issues/1"
+			number = len(self.existing) + 1
+			self.existing.append(
+				{
+					"number": number,
+					"state": "open",
+					"body": command[command.index("--body") + 1],
+				}
+			)
+			return f"https://github.invalid/issues/{number}"
+		if command[1:3] == ("issue", "view"):
+			return f"I_{command[3]}"
 		self.fail(f"Unexpected GitHub call: {command}")
 
+	def fake_post(
+		self, root: Path, endpoint: str, payload: dict[str, object]
+	) -> dict[str, object]:
+		self.posts.append((endpoint, payload))
+		if endpoint.endswith("/git/trees"):
+			entries = cast(list[dict[str, object]], payload["tree"])
+			self.tree_files = {
+				cast(str, entry["path"]): cast(str, entry["content"])
+				for entry in entries
+			}
+			return {"sha": "candidate-tree"}
+		if endpoint.endswith("/git/commits"):
+			parent = cast(list[str], payload["parents"])[0]
+			_ = self.real_run(root, "git", "switch", "--detach", parent)
+			try:
+				for name, content in self.tree_files.items():
+					_ = (root / name).write_text(content, encoding="utf-8")
+				_ = self.real_run(root, "git", "add", ".")
+				_ = self.real_run(
+					root, "git", "commit", "-m", cast(str, payload["message"])
+				)
+				return {"sha": self.real_run(root, "git", "rev-parse", "HEAD")}
+			finally:
+				_ = self.real_run(root, "git", "switch", "main")
+		if endpoint == "graphql":
+			if self.fail_linking:
+				raise subprocess.CalledProcessError(
+					1, "gh", stderr="simulated linking failure"
+				)
+			variables = cast(dict[str, str], payload["variables"])
+			branch, sha = variables["name"], variables["oid"]
+			self.assertEqual(
+				"",
+				self.real_run(
+					root,
+					"git",
+					"ls-remote",
+					"--heads",
+					"origin",
+					f"refs/heads/{branch}",
+				),
+			)
+			_ = self.real_run(
+				root, "git", "push", "origin", f"{sha}:refs/heads/{branch}"
+			)
+			_ = self.real_run(root, "git", "branch", "-f", branch, sha)
+			if self.lose_link_response:
+				raise subprocess.CalledProcessError(
+					1, "gh", stderr="simulated lost response"
+				)
+			return {
+				"data": {
+					"createLinkedBranch": {
+						"linkedBranch": {
+							"ref": {"name": branch, "target": {"oid": sha}}
+						}
+					}
+				}
+			}
+		self.fail(f"Unexpected JSON API call: {endpoint}")
+
 	def track(self, candidates: list[monitor.Candidate] | None = None):
-		with patch.object(monitor, "run", side_effect=self.fake_gh):
+		with (
+			patch.object(monitor, "run", side_effect=self.fake_gh),
+			patch.object(monitor, "post_json", side_effect=self.fake_post),
+		):
 			monitor.track_candidates(
 				self.root,
 				[self.candidate] if candidates is None else candidates,
@@ -367,26 +494,67 @@ class TrackingTests(unittest.TestCase):
 			"120105, 16001",
 			self.real_run(self.root, "git", "show", f"{branch}:{monitor.TOC}"),
 		)
-		create = self.gh_calls[-1]
+		create = next(
+			call for call in self.gh_calls if call[1:3] == ("issue", "create")
+		)
 		self.assertEqual("adampoit", create[create.index("--assignee") + 1])
 		self.assertIn("@adampoit", create[create.index("--body") + 1])
+		self.assertEqual("graphql", self.posts[-1][0])
+		self.assertIn("createLinkedBranch", cast(str, self.posts[-1][1]["query"]))
+		self.assertEqual(
+			"I_1", cast(dict[str, str], self.posts[-1][1]["variables"])["issue"]
+		)
 
-	def test_existing_issue_in_any_state_prevents_push_and_new_notification(self):
-		for state in ("open", "closed"):
-			with self.subTest(state=state):
-				self.existing = [
-					{
-						"number": 42,
-						"state": state,
-						"body": monitor.issue_marker(self.candidate.branch),
-					}
-				]
-				self.track()
-				self.assertEqual(
-					"",
-					self.real_run(self.root, "git", "ls-remote", "--heads", "origin"),
-				)
-		self.assertEqual(2, len(self.gh_calls))
+	def test_closed_issue_does_not_recreate_a_deleted_branch(self):
+		self.existing = [
+			{
+				"number": 42,
+				"state": "closed",
+				"body": monitor.issue_marker(self.candidate.branch),
+			}
+		]
+		self.track()
+		self.assertEqual(1, len(self.gh_calls))
+		self.assertEqual([], self.posts)
+		self.assertEqual(
+			"",
+			self.real_run(
+				self.root,
+				"git",
+				"ls-remote",
+				"--heads",
+				"origin",
+				f"refs/heads/{self.candidate.branch}",
+			),
+		)
+
+	def test_open_issue_recreates_missing_branch_without_duplicate_issue(self):
+		self.existing = [
+			{
+				"number": 42,
+				"state": "open",
+				"body": monitor.issue_marker(self.candidate.branch),
+			}
+		]
+		self.track()
+		self.assertFalse(
+			any(call[1:3] == ("issue", "create") for call in self.gh_calls)
+		)
+		self.assertEqual(
+			"I_42", cast(dict[str, str], self.posts[-1][1]["variables"])["issue"]
+		)
+
+	def test_repeated_detection_preserves_existing_branch_without_relinking(self):
+		self.track()
+		sha = self.real_run(self.root, "git", "rev-parse", self.candidate.branch)
+		self.posts.clear()
+		self.gh_calls.clear()
+		self.track()
+		self.assertEqual([], self.posts)
+		self.assertEqual(1, len(self.gh_calls))
+		self.assertEqual(
+			sha, self.real_run(self.root, "git", "rev-parse", self.candidate.branch)
+		)
 
 	def test_existing_latest_issue_does_not_fall_back_to_an_older_candidate(self):
 		self.existing = [
@@ -402,22 +570,58 @@ class TrackingTests(unittest.TestCase):
 		self.track(candidates)
 		self.assertEqual(1, len(self.gh_calls))
 		self.assertEqual(
-			"", self.real_run(self.root, "git", "ls-remote", "--heads", "origin")
+			"",
+			self.real_run(
+				self.root,
+				"git",
+				"ls-remote",
+				"--heads",
+				"origin",
+				"refs/heads/compatibility/*",
+			),
 		)
 
-	def test_recovers_push_after_failed_issue_creation_without_rewriting_branch(self):
+	def test_failed_issue_creation_does_not_leave_an_untracked_branch(self):
 		self.fail_creation = True
 		with self.assertRaises(subprocess.CalledProcessError):
 			self.track()
-		branch_sha = self.real_run(self.root, "git", "rev-parse", self.candidate.branch)
+		self.assertEqual([], self.posts)
 		self.fail_creation = False
 		self.track()
+		self.assertEqual(1, len(self.existing))
+
+	def test_failed_linking_is_retried_with_the_same_issue(self):
+		self.fail_linking = True
+		with self.assertRaises(subprocess.CalledProcessError):
+			self.track()
 		self.assertEqual(
-			branch_sha,
-			self.real_run(self.root, "git", "rev-parse", self.candidate.branch),
+			"",
+			self.real_run(
+				self.root,
+				"git",
+				"ls-remote",
+				"--heads",
+				"origin",
+				f"refs/heads/{self.candidate.branch}",
+			),
 		)
+		self.fail_linking = False
+		self.track()
+		self.assertEqual(1, len(self.existing))
 		self.assertEqual(
-			"main", self.real_run(self.root, "git", "branch", "--show-current")
+			1, sum(call[1:3] == ("issue", "create") for call in self.gh_calls)
+		)
+
+	def test_lost_link_response_is_recovered_without_rewriting_branch(self):
+		self.lose_link_response = True
+		with self.assertRaises(subprocess.CalledProcessError):
+			self.track()
+		sha = self.real_run(self.root, "git", "rev-parse", self.candidate.branch)
+		self.posts.clear()
+		self.track()
+		self.assertEqual([], self.posts)
+		self.assertEqual(
+			sha, self.real_run(self.root, "git", "rev-parse", self.candidate.branch)
 		)
 
 	def test_multiple_candidates_branch_from_baseline_not_each_other(self):
@@ -436,6 +640,89 @@ class TrackingTests(unittest.TestCase):
 			),
 		)
 		self.assertEqual(BASELINES | {"forever": "1.60.2"}, updated)
+
+	def test_deleted_branch_is_recreated_from_latest_main_with_same_issue(self):
+		self.track()
+		branch = self.candidate.branch
+		_ = self.real_run(self.root, "git", "push", "origin", "--delete", branch)
+		_ = (self.root / "New.lua").write_text(
+			"-- new main runtime\n", encoding="utf-8"
+		)
+		toc = (self.root / monitor.TOC).read_text().replace(
+			"0.1.7", "0.1.8"
+		) + "New.lua\n"
+		_ = (self.root / monitor.TOC).write_text(toc, encoding="utf-8")
+		_ = self.real_run(self.root, "git", "add", ".")
+		_ = self.real_run(self.root, "git", "commit", "-m", "Advance main")
+		_ = self.real_run(self.root, "git", "push", "origin", "main")
+		self.track()
+		self.assertEqual(1, len(self.existing))
+		self.assertEqual(
+			self.real_run(self.root, "git", "rev-parse", "main"),
+			self.real_run(self.root, "git", "rev-parse", f"{branch}^"),
+		)
+		self.assertIn(
+			"## Version: 0.1.8",
+			self.real_run(self.root, "git", "show", f"{branch}:{monitor.TOC}"),
+		)
+		self.assertEqual(
+			"-- new main runtime",
+			self.real_run(self.root, "git", "show", f"{branch}:New.lua"),
+		)
+		self.assertEqual("", self.real_run(self.root, "git", "status", "--porcelain"))
+
+	def test_missing_older_open_branch_recovers_even_when_catalog_has_newer_candidate(
+		self,
+	):
+		self.existing = [
+			{
+				"number": 42,
+				"state": "open",
+				"body": monitor.issue_marker(self.candidate.branch),
+			}
+		]
+		self.track([monitor.Candidate("retail", "12.1.7", 102, "12.1.0")])
+		linked = [
+			cast(dict[str, str], payload["variables"])["name"]
+			for endpoint, payload in self.posts
+			if endpoint == "graphql"
+		]
+		self.assertEqual([self.candidate.branch, "compatibility/retail-12.1.7"], linked)
+		self.assertEqual(2, len(self.existing))
+
+	def test_open_issue_for_live_target_does_not_recreate_a_branch(self):
+		self.existing = [
+			{
+				"number": 42,
+				"state": "open",
+				"body": monitor.issue_marker("compatibility/retail-12.1.0"),
+			}
+		]
+		self.track([])
+		self.assertEqual([], self.posts)
+
+	def test_existing_legacy_branch_is_not_recreated_or_modified(self):
+		branch = self.candidate.branch
+		_ = self.real_run(
+			self.root, "git", "push", "origin", f"main:refs/heads/{branch}"
+		)
+		before = self.real_run(
+			self.root, "git", "ls-remote", "--heads", "origin", f"refs/heads/{branch}"
+		)
+		self.track()
+		self.assertEqual([], self.posts)
+		self.assertEqual(
+			before,
+			self.real_run(
+				self.root,
+				"git",
+				"ls-remote",
+				"--heads",
+				"origin",
+				f"refs/heads/{branch}",
+			),
+		)
+		self.assertEqual(1, len(self.existing))
 
 	def test_dirty_checkout_is_rejected_before_github_access(self):
 		_ = (self.root / "untracked.txt").write_text(

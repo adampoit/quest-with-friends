@@ -274,6 +274,100 @@ def proposed_toc(toc: str, baselines: dict[str, str], candidate: Candidate) -> s
 	return toc[: match.start(1)] + ", ".join(values) + toc[match.end(1) :]
 
 
+def post_json(
+	root: Path, endpoint: str, payload: dict[str, object]
+) -> dict[str, object]:
+	result = subprocess.run(
+		["gh", "api", endpoint, "--method", "POST", "--input", "-"],
+		cwd=root,
+		input=json.dumps(payload),
+		check=True,
+		capture_output=True,
+		text=True,
+	)
+	data = json_object(cast(object, json.loads(result.stdout)))
+	if data.get("errors"):
+		raise ValueError(f"GitHub API errors: {data['errors']}")
+	return data
+
+
+def create_linked_branch(root: Path, branch: str, base: str, issue_number: int) -> None:
+	client, version = branch_target(branch)
+	baselines = read_baselines(root)
+	candidate = Candidate(client, version, 0, baselines[client])
+	base_sha = run(root, "git", "rev-parse", "--verify", f"{base}^{{commit}}")
+	commit = json_object(
+		cast(
+			object, json.loads(run(root, "gh", "api", f"{API}/git/commits/{base_sha}"))
+		)
+	)
+	base_tree = json_object(commit.get("tree")).get("sha")
+	if not isinstance(base_tree, str):
+		raise TypeError("GitHub base commit is missing its tree SHA")
+	files = {
+		TOC: proposed_toc(
+			(root / TOC).read_text(encoding="utf-8"), baselines, candidate
+		),
+		BASELINES: json.dumps(baselines | {client: version}, indent=2) + "\n",
+	}
+	# Upload complete objects before creating the ref: a failed request cannot leave
+	# a visible branch that lacks its compatibility metadata.
+	tree = post_json(
+		root,
+		f"{API}/git/trees",
+		{
+			"base_tree": base_tree,
+			"tree": [
+				{
+					"path": path.as_posix(),
+					"mode": "100644",
+					"type": "blob",
+					"content": content,
+				}
+				for path, content in files.items()
+			],
+		},
+	)
+	if not isinstance(tree.get("sha"), str):
+		raise TypeError("GitHub did not return the candidate tree SHA")
+	created = post_json(
+		root,
+		f"{API}/git/commits",
+		{
+			"message": candidate.title,
+			"tree": tree["sha"],
+			"parents": [base_sha],
+			"author": {
+				"name": "not-adam[bot]",
+				"email": "not-adam[bot]@users.noreply.github.com",
+			},
+		},
+	)
+	sha = created.get("sha")
+	if not isinstance(sha, str):
+		raise TypeError("GitHub did not return the candidate commit SHA")
+	issue_id = run(
+		root, "gh", "issue", "view", str(issue_number), "--json", "id", "--jq", ".id"
+	)
+	result = post_json(
+		root,
+		"graphql",
+		{
+			"query": "mutation($issue: ID!, $oid: GitObjectID!, $name: String!) { createLinkedBranch(input: {issueId: $issue, oid: $oid, name: $name}) { linkedBranch { ref { name target { oid } } } } }",
+			"variables": {"issue": issue_id, "oid": sha, "name": branch},
+		},
+	)
+	linked = json_object(
+		json_object(json_object(result.get("data")).get("createLinkedBranch")).get(
+			"linkedBranch"
+		)
+	)
+	ref = json_object(linked.get("ref"))
+	if ref.get("name") != branch or json_object(ref.get("target")).get("oid") != sha:
+		raise ValueError("GitHub did not create the expected linked branch")
+	print(f"Created {branch} linked to issue #{issue_number} at {sha}")
+
+
 def track_candidates(
 	root: Path, candidates: list[Candidate], base: str, reviewer: str
 ) -> None:
@@ -281,57 +375,44 @@ def track_candidates(
 		raise ValueError("Reviewer must be a GitHub user login")
 	if run(root, "git", "status", "--porcelain"):
 		raise ValueError("Branch creation requires a clean CI checkout")
-	tracked = {issue.branch for issue in tracking_issues(root)}
-	baselines = read_baselines(root)
-	toc = (root / TOC).read_text(encoding="utf-8")
+	tracked = {issue.branch: issue for issue in tracking_issues(root)}
 	for candidate in candidates:
-		# Closed issues are intentional dismissals, even if their branches were deleted.
 		if candidate.branch in tracked:
-			print(f"Already tracked: {candidate.branch}")
 			continue
-		try:
-			remote = run(
-				root,
-				"git",
-				"ls-remote",
-				"--heads",
-				"origin",
-				f"refs/heads/{candidate.branch}",
-			)
-			if not remote:
-				_ = run(root, "git", "switch", "-c", candidate.branch, base)
-				_ = (root / TOC).write_text(
-					proposed_toc(toc, baselines, candidate), encoding="utf-8"
-				)
-				_ = (root / BASELINES).write_text(
-					json.dumps(
-						baselines | {candidate.client: candidate.version}, indent=2
-					)
-					+ "\n",
-					encoding="utf-8",
-				)
-				_ = run(root, "git", "add", str(TOC), str(BASELINES))
-				_ = run(root, "git", "commit", "-m", candidate.title)
-				_ = run(
-					root, "git", "push", "--set-upstream", "origin", candidate.branch
-				)
-			# Reuse branches left by an earlier run or the old PR monitor; never reset them.
-			print(
-				run(
-					root,
-					"gh",
-					"issue",
-					"create",
-					"--title",
-					candidate.title,
-					"--body",
-					candidate.body(reviewer),
-					"--assignee",
-					reviewer,
-				)
-			)
-		finally:
-			_ = run(root, "git", "switch", base)
+		url = run(
+			root,
+			"gh",
+			"issue",
+			"create",
+			"--title",
+			candidate.title,
+			"--body",
+			candidate.body(reviewer),
+			"--assignee",
+			reviewer,
+		)
+		match = re.search(r"/issues/([1-9][0-9]*)$", url)
+		if match is None:
+			raise ValueError(f"GitHub did not return a tracking issue URL: {url}")
+		tracked[candidate.branch] = TrackingIssue(
+			int(match[1]), candidate.branch, "open"
+		)
+		print(url)
+	baselines = read_baselines(root)
+	for issue in tracked.values():
+		client, version = branch_target(issue.branch)
+		# Closed issues remain tombstones; only active, upcoming targets can recover.
+		if issue.state != "open" or version_tuple(version) <= version_tuple(
+			baselines[client]
+		):
+			continue
+		remote = run(
+			root, "git", "ls-remote", "--heads", "origin", f"refs/heads/{issue.branch}"
+		)
+		if remote:
+			print(f"Keeping existing branch unchanged: {issue.branch}")
+			continue
+		create_linked_branch(root, issue.branch, base, issue.number)
 
 
 def main() -> None:

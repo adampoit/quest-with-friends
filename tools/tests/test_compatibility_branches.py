@@ -397,6 +397,31 @@ class WorkflowTests(unittest.TestCase):
 			2, self.workflow("test.yml").count("ref: ${{ inputs.ref || github.sha }}")
 		)
 
+	def test_api_created_compatibility_branches_have_an_explicit_test_trigger(self):
+		workflow = self.workflow("test.yml")
+		self.assertIn("  create:\n", workflow)
+		self.assertEqual(
+			2,
+			workflow.count(
+				"if: github.event_name != 'create' || (github.event.ref_type == 'branch' && startsWith(github.event.ref, 'compatibility/'))"
+			),
+		)
+		self.assertIn(
+			"github.event.workflow_run.event == 'create'",
+			self.workflow("compatibility-sync.yml"),
+		)
+
+	def test_detection_syncs_branches_immediately_after_tracking(self):
+		workflow = self.workflow("compatibility.yml")
+		self.assertIn(
+			'python3 tools/compatibility_branches.py sync --base "$BASE_BRANCH"',
+			workflow,
+		)
+		self.assertLess(
+			workflow.index("--create-tracking"),
+			workflow.index("compatibility_branches.py sync"),
+		)
+
 	def test_stable_preparation_is_default_branch_only(self):
 		self.assertIn(
 			"if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
