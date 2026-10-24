@@ -1,0 +1,61 @@
+name: Maintain compatibility branches
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "43 8 * * *"
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: ["compatibility/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-version-check
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Authenticate as not-adam
+        id: not-adam
+        uses: adampoit/not-adam@v1
+        with:
+          private-key: ${{ secrets.NOT_ADAM_APP_PRIVATE_KEY }}
+
+      # Never execute compatibility-branch code with the App token.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Sync active branches
+        if: github.event_name != 'workflow_run'
+        env:
+          GH_TOKEN: ${{ steps.not-adam.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python3 tools/compatibility_branches.py sync --base "$BASE_BRANCH"
+
+      - name: Report failing branch tests
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ steps.not-adam.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          python3 tools/compatibility_branches.py report-test-failure \
+            --branch "$BRANCH" --sha "$SHA" --url "$RUN_URL"

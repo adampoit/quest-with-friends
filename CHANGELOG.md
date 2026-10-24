@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add optional GitHub-only PTR compatibility previews; CurseForge and Wago remain stable-only.
+
 ## 0.1.9
 
 - Update Retail compatibility metadata for 12.1.5.

@@ -249,6 +249,32 @@ class BundleTests(unittest.TestCase):
 		output = bundle(self.root, tag="v0.1.0-rc.1")
 		self.assertEqual("QuestWithFriends-0.1.0-rc.1.zip", output.name)
 
+	def test_preview_version_changes_only_the_packaged_toc(self):
+		source = self.root / "QuestWithFriends.toc"
+		original = source.read_bytes()
+		version = "0.1.0-ptr.retail.12.1.7.123.1"
+		output = bundle(self.root, preview_version=version, tag=f"v{version}")
+		self.assertEqual(f"QuestWithFriends-{version}.zip", output.name)
+		self.assertEqual(original, source.read_bytes())
+		with ZipFile(output) as archive:
+			toc = archive.read("QuestWithFriends/QuestWithFriends.toc").decode()
+			self.assertIn(f"## Version: {version}", toc)
+			self.assertNotIn("QuestWithFriendsDev/", "\n".join(archive.namelist()))
+
+	def test_preview_version_must_be_a_safe_prerelease_and_not_a_dev_build(self):
+		for version in ("0.1.0", "../preview", "0.1.0-beta/1", "0.1.0-beta.1\n", ""):
+			with (
+				self.subTest(version=version),
+				self.assertRaisesRegex(ValueError, "Preview version"),
+			):
+				_ = bundle(self.root, preview_version=version)
+		with self.assertRaisesRegex(ValueError, "Preview version"):
+			_ = bundle(self.root, development=True, preview_version="0.1.0-beta.1")
+
+	def test_preview_tag_must_match_the_packaged_version(self):
+		with self.assertRaisesRegex(ValueError, "Release tag must be v0.1.0-beta.1"):
+			_ = bundle(self.root, preview_version="0.1.0-beta.1", tag="v0.1.0")
+
 	def test_nested_windows_paths_and_duplicate_entries(self):
 		(self.root / "assets").mkdir()
 		_ = (self.root / "assets/icon.blp").write_bytes(b"texture")
@@ -332,16 +358,18 @@ class BundleTests(unittest.TestCase):
 				self.assertEqual(previous, output.read_bytes())
 
 	def test_checkout_release_bundle_contains_all_shared_runtime_files(self):
-		with tempfile.TemporaryDirectory() as temp:
-			with ZipFile(bundle(ADDON_ROOT, Path(temp) / "release.zip")) as archive:
-				for source in (ADDON_ROOT / "src").rglob("*"):
-					if source.is_file():
-						name = source.relative_to(ADDON_ROOT).as_posix()
-						self.assertEqual(
-							source.read_bytes(),
-							archive.read(f"QuestWithFriends/{name}"),
-						)
-				self.assertFalse(any("/dev/" in name for name in archive.namelist()))
+		with (
+			tempfile.TemporaryDirectory() as temp,
+			ZipFile(bundle(ADDON_ROOT, Path(temp) / "release.zip")) as archive,
+		):
+			for source in (ADDON_ROOT / "src").rglob("*"):
+				if source.is_file():
+					name = source.relative_to(ADDON_ROOT).as_posix()
+					self.assertEqual(
+						source.read_bytes(),
+						archive.read(f"QuestWithFriends/{name}"),
+					)
+			self.assertFalse(any("/dev/" in name for name in archive.namelist()))
 
 	def test_cannot_overwrite_runtime_file(self):
 		with self.assertRaisesRegex(ValueError, "overwrite"):

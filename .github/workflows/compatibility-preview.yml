@@ -1,0 +1,116 @@
+name: Publish compatibility preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Integration branch, e.g. compatibility/retail-12.1.7
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: compatibility-preview-${{ inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      issue: ${{ steps.plan.outputs.issue }}
+      client: ${{ steps.plan.outputs.client }}
+      game_version: ${{ steps.plan.outputs.game_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin and validate preview source
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          BRANCH: ${{ inputs.branch }}
+          SEQUENCE: ${{ github.run_id }}.${{ github.run_attempt }}
+        run: |
+          python3 tools/compatibility_branches.py plan-preview \
+            --base "$BASE_BRANCH" --branch "$BRANCH" --sequence "$SEQUENCE" > plan.json
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' plan.json >> "$GITHUB_OUTPUT"
+
+  tests:
+    needs: validate
+    uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
+
+  publish:
+    needs: [validate, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BASE_BRANCH: ${{ github.event.repository.default_branch }}
+      BRANCH: ${{ inputs.branch }}
+      SEQUENCE: ${{ github.run_id }}.${{ github.run_attempt }}
+      SOURCE_SHA: ${{ needs.validate.outputs.sha }}
+      PREVIEW_TAG: ${{ needs.validate.outputs.tag }}
+      PREVIEW_VERSION: ${{ needs.validate.outputs.version }}
+      TRACKING_ISSUE: ${{ needs.validate.outputs.issue }}
+      CLIENT: ${{ needs.validate.outputs.client }}
+      GAME_VERSION: ${{ needs.validate.outputs.game_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: automation
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
+          path: candidate
+      - name: Build normal-installation preview ZIP
+        run: |
+          python3 automation/tools/compatibility_branches.py build-preview candidate \
+            --version "$PREVIEW_VERSION" --tag "$PREVIEW_TAG"
+      - name: Recheck branch readiness and prepare notes
+        run: |
+          python3 automation/tools/compatibility_branches.py plan-preview \
+            --base "$BASE_BRANCH" --branch "$BRANCH" --sequence "$SEQUENCE" > plan.json
+          jq -e --arg sha "$SOURCE_SHA" --arg tag "$PREVIEW_TAG" \
+            --arg issue "$TRACKING_ISSUE" \
+            '.sha == $sha and .tag == $tag and .issue == $issue' plan.json >/dev/null
+          cat > notes.md <<EOF
+          Compatibility preview for **$CLIENT $GAME_VERSION**.
+
+          Experimental GitHub-only download, not a stable release. Install in the
+          matching PTR/beta client's Interface/AddOns directory as QuestWithFriends.
+          This uses the normal addon identity and settings; do not enable it alongside
+          another QuestWithFriends copy in that client.
+
+          - Source branch: \`$BRANCH\`
+          - Tested source revision (automated suites): \`$SOURCE_SHA\`
+          - In-game build/interface validation and known issues: #$TRACKING_ISSUE
+
+          Passing automated tests does not certify in-game compatibility. Confirm the
+          actual client build and interface against the tracking issue before testing.
+          This preview is not uploaded to CurseForge or Wago.
+          EOF
+      - name: Publish GitHub prerelease
+        run: |
+          gh release create "$PREVIEW_TAG" \
+            "candidate/dist/QuestWithFriends-$PREVIEW_VERSION.zip" \
+            --target "$SOURCE_SHA" --prerelease --latest=false \
+            --title "PTR preview: $CLIENT $GAME_VERSION ($PREVIEW_VERSION)" \
+            --notes-file notes.md

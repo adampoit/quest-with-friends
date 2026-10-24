@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   upload:
+    if: github.event.release.prerelease == false && !contains(github.event.release.tag_name, '-')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -30,7 +31,7 @@ jobs:
 
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > release.json
           jq -e --arg tag "$RELEASE_TAG" '
-            .draft == false and .tag_name == $tag
+            .draft == false and .prerelease == false and .tag_name == $tag
           ' release.json >/dev/null
 
       - name: Download published release asset

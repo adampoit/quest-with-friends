@@ -48,6 +48,7 @@ def bundle(
 	*,
 	tag: str | None = None,
 	development: bool = False,
+	preview_version: str | None = None,
 ) -> Path:
 	root = root.resolve()
 	if development and tag is not None:
@@ -60,6 +61,25 @@ def bundle(
 	version_match = re.search(r"^##\s*Version:\s*(\S+)\s*$", toc, re.MULTILINE)
 	if not version_match or not re.fullmatch(r"[A-Za-z0-9._-]+", version_match[1]):
 		raise ValueError("TOC must contain a filename-safe Version")
+
+	if preview_version is not None:
+		if (
+			development
+			or re.fullmatch(
+				r"[0-9]+\.[0-9]+\.[0-9]+-[A-Za-z0-9][A-Za-z0-9.-]*", preview_version
+			)
+			is None
+		):
+			raise ValueError(
+				"Preview version must be a filename-safe prerelease for the release identity"
+			)
+		toc = (
+			toc[: version_match.start(1)]
+			+ preview_version
+			+ toc[version_match.end(1) :]
+		)
+		version_match = re.search(r"^##\s*Version:\s*(\S+)\s*$", toc, re.MULTILINE)
+		assert version_match is not None
 
 	if tag is not None and tag != f"v{version_match[1]}":
 		raise ValueError(f"Release tag must be v{version_match[1]}, got {tag}")
@@ -149,6 +169,10 @@ def main() -> None:
 	_ = parser.add_argument(
 		"--tag", help="require a release tag matching v<TOC version>"
 	)
+	_ = parser.add_argument(
+		"--preview-version",
+		help="override only the packaged TOC with a prerelease version",
+	)
 	mode = parser.add_mutually_exclusive_group()
 	_ = mode.add_argument(
 		"--dev", action="store_true", help="build a separate development addon ZIP"
@@ -163,8 +187,11 @@ def main() -> None:
 	tag = cast(str | None, args.tag)
 	development = cast(bool, args.dev)
 	dev_toc = cast(bool, args.dev_toc)
-	if dev_toc and (requested_output or tag):
-		parser.error("--dev-toc cannot be combined with an output path or release tag")
+	preview_version = cast(str | None, args.preview_version)
+	if dev_toc and (requested_output or tag or preview_version):
+		parser.error(
+			"--dev-toc cannot be combined with an output path, release tag, or preview version"
+		)
 	try:
 		if dev_toc:
 			print(f"Created {write_development_toc(ADDON_ROOT)}")
@@ -174,6 +201,7 @@ def main() -> None:
 			requested_output,
 			tag=tag,
 			development=development,
+			preview_version=preview_version,
 		)
 	except (OSError, ValueError) as error:
 		parser.exit(1, f"Bundle failed: {error}\n")

@@ -1,4 +1,4 @@
-"""Compatibility detection and PR orchestration stay network-free in tests."""
+"""Compatibility detection and branch/issue orchestration stay network-free."""
 
 import json
 import shutil
@@ -161,7 +161,9 @@ class CandidateTests(unittest.TestCase):
 			"120105",
 			"`101`",
 			"GetBuildInfo()",
-			"gh pr checkout compatibility/retail-12.1.5",
+			"compatibility/retail-12.1.5@origin",
+			"Publish compatibility preview",
+			monitor.issue_marker(candidate.branch),
 		):
 			self.assertIn(text, body)
 
@@ -264,7 +266,7 @@ class CandidateTests(unittest.TestCase):
 
 	def test_cli_requires_explicit_mutation_options(self):
 		result = subprocess.run(
-			[sys.executable, str(SCRIPT), "missing.json", "--create-prs"],
+			[sys.executable, str(SCRIPT), "missing.json", "--create-tracking"],
 			capture_output=True,
 			text=True,
 			check=False,
@@ -274,9 +276,9 @@ class CandidateTests(unittest.TestCase):
 
 
 @unittest.skipUnless(
-	shutil.which("git"), "Git is required for local PR orchestration tests"
+	shutil.which("git"), "Git is required for local branch orchestration tests"
 )
-class PullRequestTests(unittest.TestCase):
+class TrackingTests(unittest.TestCase):
 	root: Path
 	origin: Path
 
@@ -307,7 +309,7 @@ class PullRequestTests(unittest.TestCase):
 		_ = monitor.run(self.root, "git", "remote", "add", "origin", str(self.origin))
 		self.real_run: Callable[..., str] = monitor.run
 		self.gh_calls: list[tuple[str, ...]] = []
-		self.existing: list[dict[str, int]] = []
+		self.existing: list[dict[str, object]] = []
 		self.fail_creation: bool = False
 		self.candidate: monitor.Candidate = monitor.Candidate(
 			"retail", "12.1.5", 101, "12.1.0"
@@ -317,28 +319,31 @@ class PullRequestTests(unittest.TestCase):
 		if command[0] != "gh":
 			return self.real_run(root, *command)
 		self.gh_calls.append(command)
-		if command[1:3] == ("pr", "list"):
-			self.assertIn("all", command)
-			return json.dumps(self.existing)
-		if command[1:3] == ("pr", "create"):
+		if command[1] == "api":
+			self.assertIn("--paginate", command)
+			self.assertIn("--slurp", command)
+			return json.dumps(
+				[[issue | {"author_association": "OWNER"} for issue in self.existing]]
+			)
+		if command[1:3] == ("issue", "create"):
 			if self.fail_creation:
 				raise subprocess.CalledProcessError(
 					1, command, stderr="simulated API failure"
 				)
-			return "https://github.invalid/pull/1"
+			return "https://github.invalid/issues/1"
 		self.fail(f"Unexpected GitHub call: {command}")
 
-	def open_prs(self, candidates: list[monitor.Candidate] | None = None):
+	def track(self, candidates: list[monitor.Candidate] | None = None):
 		with patch.object(monitor, "run", side_effect=self.fake_gh):
-			monitor.open_prs(
+			monitor.track_candidates(
 				self.root,
 				[self.candidate] if candidates is None else candidates,
 				"main",
 				"adampoit",
 			)
 
-	def test_creates_isolated_branch_commit_and_review_request(self):
-		self.open_prs()
+	def test_creates_isolated_branch_commit_and_assigned_issue(self):
+		self.track()
 		self.assertEqual(
 			"main", self.real_run(self.root, "git", "branch", "--show-current")
 		)
@@ -363,36 +368,50 @@ class PullRequestTests(unittest.TestCase):
 			self.real_run(self.root, "git", "show", f"{branch}:{monitor.TOC}"),
 		)
 		create = self.gh_calls[-1]
-		self.assertEqual("adampoit", create[create.index("--reviewer") + 1])
+		self.assertEqual("adampoit", create[create.index("--assignee") + 1])
 		self.assertIn("@adampoit", create[create.index("--body") + 1])
 
-	def test_existing_pr_in_any_state_prevents_push_and_new_notification(self):
-		self.existing = [{"number": 42}]
-		self.open_prs()
-		self.assertEqual(1, len(self.gh_calls))
-		self.assertEqual(
-			"", self.real_run(self.root, "git", "ls-remote", "--heads", "origin")
-		)
+	def test_existing_issue_in_any_state_prevents_push_and_new_notification(self):
+		for state in ("open", "closed"):
+			with self.subTest(state=state):
+				self.existing = [
+					{
+						"number": 42,
+						"state": state,
+						"body": monitor.issue_marker(self.candidate.branch),
+					}
+				]
+				self.track()
+				self.assertEqual(
+					"",
+					self.real_run(self.root, "git", "ls-remote", "--heads", "origin"),
+				)
+		self.assertEqual(2, len(self.gh_calls))
 
-	def test_existing_latest_pr_does_not_fall_back_to_an_older_candidate(self):
-		self.existing = [{"number": 2}]
+	def test_existing_latest_issue_does_not_fall_back_to_an_older_candidate(self):
+		self.existing = [
+			{
+				"number": 2,
+				"state": "closed",
+				"body": monitor.issue_marker("compatibility/retail-12.1.7"),
+			}
+		]
 		candidates = monitor.find_candidates(
 			catalog() + [entry("12.1.5", 101), entry("12.1.7", 102)], BASELINES
 		)
-		self.open_prs(candidates)
+		self.track(candidates)
 		self.assertEqual(1, len(self.gh_calls))
-		self.assertIn("compatibility/retail-12.1.7", self.gh_calls[0])
 		self.assertEqual(
 			"", self.real_run(self.root, "git", "ls-remote", "--heads", "origin")
 		)
 
-	def test_recovers_push_after_failed_pr_creation_without_rewriting_branch(self):
+	def test_recovers_push_after_failed_issue_creation_without_rewriting_branch(self):
 		self.fail_creation = True
 		with self.assertRaises(subprocess.CalledProcessError):
-			self.open_prs()
+			self.track()
 		branch_sha = self.real_run(self.root, "git", "rev-parse", self.candidate.branch)
 		self.fail_creation = False
-		self.open_prs()
+		self.track()
 		self.assertEqual(
 			branch_sha,
 			self.real_run(self.root, "git", "rev-parse", self.candidate.branch),
@@ -402,7 +421,7 @@ class PullRequestTests(unittest.TestCase):
 		)
 
 	def test_multiple_candidates_branch_from_baseline_not_each_other(self):
-		self.open_prs(
+		self.track(
 			[self.candidate, monitor.Candidate("forever", "1.60.2", 201, "1.60.1")]
 		)
 		updated = cast(
@@ -423,12 +442,14 @@ class PullRequestTests(unittest.TestCase):
 			"do not commit me", encoding="utf-8"
 		)
 		with self.assertRaisesRegex(ValueError, "clean CI checkout"):
-			self.open_prs()
+			self.track()
 		self.assertEqual([], self.gh_calls)
 
 	def test_invalid_reviewer_is_rejected_before_github_access(self):
 		with self.assertRaisesRegex(ValueError, "GitHub user login"):
-			monitor.open_prs(self.root, [self.candidate], "main", "@not-a-login")
+			monitor.track_candidates(
+				self.root, [self.candidate], "main", "@not-a-login"
+			)
 		self.assertEqual([], self.gh_calls)
 
 

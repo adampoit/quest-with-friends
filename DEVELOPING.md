@@ -213,33 +213,87 @@ CI exercises synthetic source imports and review policies. Shipped tables are re
 python3 tools/bundle_addon.py
 ```
 
-The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files (including XML `Script` and `Include` dependencies), assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Unlisted files are not bundled, even under `src/`. Release manifests cannot reference `dev/`, `Development.lua` or `InGameTests.lua`, even through XML; the bundler rejects them. `--dev` derives a separate manifest and adds those files, without distribution-site project IDs. `--tag` is reserved for release packages. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
+The TOC version determines `dist/QuestWithFriends-<version>.zip`. Packaging uses an allowlist: the TOC, its listed runtime files (including XML `Script` and `Include` dependencies), assets in `tools/bundle_addon.py`'s `RUNTIME_ASSETS`, `README.md`, and `LICENSE`. Unlisted files are not bundled, even under `src/`. Release manifests cannot reference `dev/`, `Development.lua` or `InGameTests.lua`, even through XML; the bundler rejects them. `--dev` derives a separate manifest and adds those files, without distribution-site project IDs. `--preview-version <version>` overrides only the packaged release TOC with a filename-safe prerelease version, leaving the source unchanged; it cannot be used with development builds. `--tag` is reserved for release-identity packages. Tests, tools, caches, previews, version-control metadata, and game assets are excluded. The script works from any directory; an optional positional argument selects a different output ZIP. Failed packaging leaves any previous ZIP intact.
 
 To validate a proposed release tag, pass it to the bundler with `--tag`. The tag must equal `v` followed by the TOC version; a mismatch fails before writing a ZIP.
 
-## Upcoming-client compatibility reviews
+## Upcoming-client compatibility branches
 
-`.github/workflows/compatibility.yml` checks CurseForge's game-version catalog daily at 08:23 UTC (GitHub may delay scheduled runs), or on manual dispatch from the default branch. It considers only numeric `major.minor.patch` versions in the supported Retail and Forever version types. CurseForge listings are distribution metadata: they do not guarantee PTR availability or advance notice before a patch launches. Labeled beta/PTR entries are not converted into guessed interface numbers.
+`main` stays compatible with supported live clients and is the source of stable releases. Each upcoming game version gets a long-lived integration branch and an assigned tracking issue, not a long-lived PR:
 
-`tools/compatibility_versions.json` records reviewed baselines and must stay aligned with the TOC. Only the newest numeric catalog version per client is selected. Each affected client gets an independent `compatibility/<client>-<version>` branch and PR proposing the baseline and TOC update; intermediate versions do not generate extra PRs. Version comparisons are numeric, not based on catalog IDs. The PR mentions and requests review from `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner, and includes checkout instructions and a two-client smoke-test checklist. For organization-owned repositories, set the variable to a user login.
+```text
+main                          -> stable ZIPs on GitHub, CurseForge, and Wago
+  + compatibility/retail-12.1.7 -> optional GitHub-only preview ZIPs
+      ^ focused PRs target this branch; main is merged in automatically
+```
 
-Before enabling the workflow:
+### Detection and tracking
 
-- Install the **not-adam** GitHub App on this repository with **Contents: write** and **Pull requests: write** access.
-- Add repository secret `NOT_ADAM_APP_PRIVATE_KEY`; authentication uses `adampoit/not-adam@v1`.
-- Keep `CURSEFORGE_API_TOKEN` configured, as for publication.
+`.github/workflows/compatibility.yml` checks CurseForge's catalog daily at 08:23 UTC (GitHub may delay scheduled runs), or on manual dispatch from the default branch. It selects only the newest numeric `major.minor.patch` candidate per supported client (Retail and Forever), using numeric comparisons rather than catalog IDs. Intermediate versions do not generate extra branches.
 
-Branches and PRs use the App token so the existing push/PR test workflow runs normally, unlike PRs created with `GITHUB_TOKEN`. The monitor does not merge PRs, tag releases, or upload packages. A TOC bump is only a proposal: confirm the actual interface with `/dump GetBuildInfo()`, test the matching PTR/beta or live client, record the client build and addon revision, and fix regressions before merging. Merging marks the new baseline as reviewed; prepare a release separately. The pinned simulator and mocked tests do not certify new-client compatibility.
+Catalog entries are distribution metadata: they do not prove that a PTR exists, that a version is live, or that an inferred interface number is correct. Labeled beta/PTR entries are not converted into guessed interface numbers. The new branch proposes a TOC bump; confirm the actual interface with `/dump GetBuildInfo()` before claiming support.
 
-Open, closed, and merged PRs all suppress further notifications for the same client/version. Close an unwanted or superseded PR to dismiss it, and reopen it to resume testing. Existing branches are never force-pushed; a branch left by a failed PR-creation attempt is reused on the next run. Multiple candidate PRs are independent: after merging one, rebase/reconcile the others against the new baseline and close older candidates rather than downgrading it.
+`tools/compatibility_versions.json` must match the TOC. On `main` it records supported live targets; on a compatibility branch it records prospective targets. Detection changes only the integration branch, never the live baseline on `main`.
 
-For a read-only local plan using a downloaded catalog:
+The issue is assigned to `COMPATIBILITY_REVIEWER` (repository variable), defaulting to the repository owner. For organization-owned repositories, set this to a user login. It contains the candidate's catalog details, checkout commands, testing checklist, preview instructions, and promotion checklist. Keep its `<!-- qwf-compatibility:... -->` marker intact: the tooling uses it to identify the branch. Only issues authored by `not-adam[bot]` or an owner, member, or collaborator are recognized; public issue bodies cannot register branches for privileged automation. Open and closed issues both suppress repeat detection. Closing an issue stops syncing and preview publication; reopening resumes them. A newer candidate does not retire older branches automatically: explicitly close superseded issues and delete unwanted branches.
+
+Before enabling these workflows:
+
+- Install the **not-adam** GitHub App with **Contents: write** and **Issues: write** access. Existing installations must approve the added Issues permission.
+- Configure `NOT_ADAM_APP_PRIVATE_KEY`; authentication uses `adampoit/not-adam@v1`.
+- Keep `CURSEFORGE_API_TOKEN` configured for catalog discovery and stable publication.
+
+Branch creation and upstream merges use the App token, so pushes trigger normal tests. No release is created by detection or syncing. Existing branches (including those created by the former PR monitor) are reused without resetting, rebasing, or force-pushing. If a push succeeds but issue creation fails, rerunning recovers it.
+
+### Working on a candidate
+
+For example, with Jujutsu:
+
+```sh
+jj git fetch
+jj new 'compatibility/retail-12.1.7@origin'
+python3 tools/bundle_addon.py --dev
+```
+
+Install the resulting development ZIP in the matching PTR client's AddOns directory. For a linked `QuestWithFriendsDev` checkout, use `--dev-toc` instead. Record the actual client build/interface and tested addon revision in the tracking issue. Target short-lived functionality and compatibility PRs at the integration branch. Shared changes may go to `main` first if they are safe for live clients.
+
+`.github/workflows/compatibility-sync.yml` automatically merges `main` into all open tracked branches after pushes to `main`, on manual dispatch, and daily at 08:43 UTC for retries. Server-side merges use a pinned source commit and the current destination tip; concurrent changes cannot be overwritten. Clean updates trigger the existing test workflow. Conflicts or missing branches are reported on the issue without altering history. Failures in push-triggered branch tests are also reported, ignoring obsolete revisions. Repeated reports for the same main commit/tested revision are deduplicated. Resolve conflicts with a normal merge, not a force push; preview publication requires the latest default-branch commit to be included and fresh tests to pass.
+
+### Optional GitHub previews
+
+Run **Publish compatibility preview** from the default branch, with the integration branch as its `branch` input:
+
+```sh
+gh workflow run compatibility-preview.yml --ref main \
+  -f branch=compatibility/retail-12.1.7
+```
+
+The workflow requires an open tracking issue, consistent branch target/TOC metadata, and an up-to-date branch. It pins the source SHA, runs the full reusable test suite against that SHA, and rechecks readiness before publication. If the branch or default branch moves incompatibly while tests run, rerun rather than publishing stale code.
+
+The generated prerelease version looks like `0.1.9-ptr.retail.12.1.7.<run-id>.<attempt>`. Its base is the stable addon version on `main`; it is a unique preview identifier, not a promise about the next stable addon version. Only the ZIP's TOC is overridden: no preview version is committed or later merged into `main`.
+
+Previews use the normal `QuestWithFriends` folder/settings identity, omit development tools, and are published directly as explicitly non-latest GitHub prereleases. Notes link the tracking issue and exact tested revision. Automated tests do not certify in-game compatibility. CurseForge and Wago publication explicitly skip prereleases and tags containing `-`; previews never require their version catalogs or upload tokens. No preview is published automatically on branch updates.
+
+### Promotion when the patch goes live
+
+1. Confirm the actual live client build/interface and rerun relevant in-game checks, including the other supported client after shared-code changes.
+2. Ensure the integration branch includes current `main`, then open a short-lived promotion PR targeting `main`.
+3. Review the complete diff, supported interfaces and baseline metadata; choose the next stable addon version and finalize the changelog. Include `Closes #<tracking-issue-number>` in the PR body.
+4. Merge, publish a stable release using the normal workflow, and delete the integration branch. The closed issue prevents its recreation.
+
+Promotion, branch deletion, and stable publication remain manual. Neither a catalog change nor a date automatically promotes a candidate. Candidates at or below the live baseline no longer sync or publish previews; close and clean them up explicitly.
+
+### Local tooling and migration
+
+For a read-only plan from a downloaded catalog:
 
 ```sh
 python3 tools/check_game_versions.py /path/to/curseforge-versions.json
 ```
 
-`--create-prs --base <default-branch> --reviewer <login>` is reserved for the workflow's clean Git checkout, not a local Jujutsu working copy. The tooling tests use temporary local Git repositories when Git is available and run the Lua suite against generated Retail, Forever, and combined TOC updates when Busted is available; no network or GitHub credentials are needed.
+`--create-tracking --base <default-branch> --reviewer <login>` is reserved for a clean CI Git checkout, not a local Jujutsu working copy. `tools/compatibility_branches.py sync` mutates GitHub branches/issues and is also CI-only. Network-free tests cover detection, temporary local Git branches, issue recovery, sync/reporting, preview gating, and packaging.
+
+After adopting this workflow, rerun detection to create tracking issues for existing candidate branches. Close the old compatibility PRs without merging, linking their replacement issues and copying any validation evidence. Reconcile old branches with current `main` before publishing; they are intentionally not rewritten by migration.
 
 ## CurseForge description
 
@@ -259,6 +313,6 @@ The exporter expects exactly one screenshot block in the README's current HTML f
 
 Add player-facing changes to the **Unreleased** section of `CHANGELOG.md`. Before a release, update `## Version` in `QuestWithFriends.toc`, finalize the changelog, run the suites, and repeat relevant live-client checks.
 
-Maintainers manually dispatch `.github/workflows/release.yml` to prepare a release. It derives the `v<TOC version>` tag, validates packaging, and runs the complete test workflow before creating the tag and a draft GitHub Release titled `v<version>`, with the installable ZIP and generated notes. The workflow creates the tag; contributors do not need to create or push it. Existing tags are never overwritten.
+Maintainers manually dispatch `.github/workflows/release.yml` from the default branch to prepare a stable release. It requires a stable numeric TOC version, derives the `v<TOC version>` tag, validates packaging, and runs the complete test workflow before creating the tag and a draft GitHub Release titled `v<version>`, with the installable ZIP and generated notes. The workflow creates the tag; contributors do not need to create or push it. Existing tags are never overwritten. Use the separate compatibility preview workflow for upcoming-client builds.
 
-After a maintainer reviews and publishes the draft, `.github/workflows/curseforge.yml` and `.github/workflows/wago.yml` independently upload the attached ZIP and reviewed release notes without rebuilding. Supported Retail and Forever versions are resolved from every TOC interface number in the ZIP against each site's version catalog; Wago's project ID also comes from the ZIP's `X-Wago-ID` field. Unmatched or ambiguous versions fail publication rather than selecting a newer version or silently omitting a client. Versions containing `-` are GitHub prereleases; tags containing `alpha` upload as alpha, other prereleases as beta, and stable releases as release (CurseForge) or stable (Wago).
+After a maintainer reviews and publishes the stable draft, `.github/workflows/curseforge.yml` and `.github/workflows/wago.yml` independently upload the attached ZIP and reviewed release notes without rebuilding. Both skip GitHub prereleases and tags containing `-`. Supported Retail and Forever versions are resolved from every TOC interface number in the ZIP against each site's version catalog; Wago's project ID also comes from the ZIP's `X-Wago-ID` field. Unmatched or ambiguous versions fail publication rather than selecting a newer version or silently omitting a client. Stable releases upload as release (CurseForge) or stable (Wago).
