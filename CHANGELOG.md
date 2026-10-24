@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.1.9
+
+- Update Retail compatibility metadata for 12.1.5.
 - Skip already-outdated routine snapshots before their first successful chunk, avoiding unnecessary full updates for brief item locks and other transient changes. Preserve explicit refresh/recovery requests and finish transfers already underway.
 - Add Debug-mode snapshot fingerprints, encoded-content change summaries, coalesced event/force reasons, queue/assembly timing, and deduplicated suppression/cancellation evidence to trace redundant sync traffic without logging raw payloads or changing the protocol.
 - Keep routine quest updates quiet: retain the last-known comparison with a muted Updating indicator instead of repeatedly showing incomplete-party warnings and moving quest rows. Initial loading, explicit refreshes and genuine recovery remain clearly signaled.

@@ -1,7 +1,7 @@
 ## Interface: 120105, 16001
 ## Title: Quest With Friends
 ## Notes: Shows actionable quest differences in your party
-## Version: 0.1.8
+## Version: 0.1.9
 ## X-Wago-ID: 4N2bO9NL
 ## OptionalDeps: AddonKit
 ## SavedVariables: QuestWithFriendsDB
