@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Right-click an abandonable quest heading and choose **Abandon quest…** to open WoW's normal confirmation, including quest-item removal warnings when applicable. Left-click still expands or collapses details. Abandonment uses your actual logged quest variant, rechecks eligibility when chosen, and is unavailable for preview or screenshot samples.
+
 ## 0.1.8
 
 - Show finished members' identifiable tradeable item objectives while someone still needs them, with capped progress and positive surplus such as **10/10 · 2 spare**. Count only unbound, unlocked carried stacks after reserving logged quest requirements, including filtered quests; uncertain matches retain the normal display. Protocol 1.1 shares optional item stock while preserving baseline comparisons with 1.0 peers. Preview includes spare-item examples.
