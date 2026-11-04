@@ -81,9 +81,28 @@ local function initializeSettings()
 end
 initializeSettings()
 
-local function applyDebugMode()
+local debugLoggingWarningShown = false
+local function debugLoggingAvailable()
+	return AddonKit
+		and type(AddonKit.RegisterAddon) == "function"
+		and type(AddonKit.SetLogLevel) == "function"
+		and type(AddonKit.Log) == "function"
+end
+
+local function applyDebugMode(notifyUnavailable)
 	if AddonKit and AddonKit.SetLogLevel then
 		AddonKit.SetLogLevel(addonName, QWF.db.debugMode and "DEBUG" or "INFO")
+	end
+	if not QWF.db.debugMode or debugLoggingAvailable() then
+		debugLoggingWarningShown = false
+	elseif notifyUnavailable and not debugLoggingWarningShown then
+		debugLoggingWarningShown = true
+		print(
+			"|cffff6060"
+				.. (QWF.title or "Quest With Friends")
+				.. ": Debug logging unavailable.|r Debug mode is on, but no logs are being recorded. "
+				.. "Install or enable AddonKit, then /reload."
+		)
 	end
 end
 
@@ -1601,7 +1620,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		if ... == addonName then
 			-- SavedVariables are restored after the TOC's Lua files execute.
 			initializeSettings()
-			applyDebugMode()
+			applyDebugMode(true)
 		end
 	elseif event == "CHAT_MSG_ADDON" then
 		local prefix, message, channel, sender = ...
@@ -1682,7 +1701,7 @@ local function setDebugMode(enabled)
 		end
 	end
 	QWF.db.debugMode = enabled == true
-	applyDebugMode()
+	applyDebugMode(true)
 end
 
 if AddonKit and AddonKit.RegisterAddon then
@@ -1794,13 +1813,11 @@ SlashCmdList.QUESTWITHFRIENDS = function(command)
 		else
 			setDebugMode(enabled)
 		end
-		print("Quest With Friends: Debug logging " .. (enabled and "enabled" or "disabled") .. ". Setting saved.")
-		if enabled then
-			if not AddonKit or not AddonKit.SetLogLevel then
-				print("Quest With Friends: Enable AddonKit for debug logging.")
-			else
-				updateRoster(true, "debug_enabled")
-			end
+		if not enabled or debugLoggingAvailable() then
+			print("Quest With Friends: Debug logging " .. (enabled and "enabled" or "disabled") .. ". Setting saved.")
+		end
+		if enabled and debugLoggingAvailable() then
+			updateRoster(true, "debug_enabled")
 		end
 		return
 	end
