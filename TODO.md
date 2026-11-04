@@ -19,3 +19,7 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Redundant counts in the UI**
 - [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.
 - [ ] **Recheck Recipe of the Kaldorei in game.** Confirm x/x counts and spare spider legs before and after turn-in. Post-turn-in stock and targeted Debug-mode diagnostics are implemented; capture `item_stock` entries if counts are still missing.
+- [ ] Issue with delve companion being a party member. Lots of repeated "You aren't in a party" messages in delves
+- [ ] Shaman quest appears shareable
+- [ ] View option for always showing individual progress
+- [ ] View option for showing group progress
