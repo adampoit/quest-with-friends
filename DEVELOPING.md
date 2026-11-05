@@ -49,7 +49,7 @@ Entries include the triggering event/action and session uptime. When the clock a
 
 Repeated renders, duplicate chunks and retries without a displayed status change do not produce more `ui` entries. Objective and collapse evidence is recorded separately under `item_stock`, below; layout changes are not logged. Sample modes are explicitly labeled and never report live peer recovery. Debug mode also adds detailed transport logs. UI status logging is disabled in normal mode; existing sync warnings remain available.
 
-To reproduce, keep AddonKit enabled and use `/qwf debug on` (or enable **Debug mode** in settings) before reproducing. Use `/qwf debug off` afterward to return to normal logging. Log out or `/reload` afterward to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Logs contain player identities; share only redacted relevant entries, not full SavedVariables.
+To reproduce, keep AddonKit enabled and use `/qwf debug on` (or enable **Debug mode** in settings) before reproducing. If AddonKit is missing or its logging API is incomplete, QWF shows a chat warning when Debug mode is enabled or restored at login/reload: the preference remains on, but no diagnostics are recorded. Install or enable AddonKit and reload before reproducing. Use `/qwf debug off` afterward to return to normal logging. Log out or `/reload` afterward to persist diagnostics in the active client's `WTF/Account/<account>/SavedVariables/AddonKit.lua`. Logs contain player identities; share only redacted relevant entries, not full SavedVariables.
 
 ## Snapshot traffic diagnostics
 

@@ -5,7 +5,7 @@ describe("Quest With Friends party sync", function()
 	local abandonable, disabledQuests, abandonRequests
 	local originalSettings, originalSettingsPanel, originalSettingsInbound, originalHeaderInitializer, originalButtonInitializer
 	local captureSettings
-	local registeredEvents, originalDiagnostics
+	local registeredEvents, originalDiagnostics, originalPrint
 	local diagnosticGlobals = {
 		"QuestMapQuestOptions_AbandonQuest",
 		"GetTime",
@@ -21,6 +21,7 @@ describe("Quest With Friends party sync", function()
 		"NUM_BAG_SLOTS",
 	}
 	before_each(function()
+		originalPrint = _G.print
 		registeredEvents, originalDiagnostics = {}, {}
 		for _, name in ipairs(diagnosticGlobals) do
 			originalDiagnostics[name] = _G[name]
@@ -211,6 +212,7 @@ describe("Quest With Friends party sync", function()
 	end)
 
 	after_each(function()
+		_G.print = originalPrint
 		for _, name in ipairs(diagnosticGlobals) do
 			rawset(_G, name, originalDiagnostics[name])
 		end
@@ -1928,7 +1930,89 @@ describe("Quest With Friends party sync", function()
 		assert.is_true(QuestWithFriendsDB.panelLocked)
 	end)
 
+	for _, missingAPI in ipairs({ "RegisterAddon", "SetLogLevel", "Log" }) do
+		it("warns when AddonKit lacks " .. missingAPI, function()
+			local notices = {}
+			_G.print = function(message)
+				notices[#notices + 1] = message
+			end
+			_G.AddonKit = {
+				RegisterAddon = function() end,
+				SetLogLevel = function() end,
+				Log = function() end,
+			}
+			AddonKit[missingAPI] = nil
+			assert(loadfile("src/QuestWithFriends.lua"))()
+			SlashCmdList.QUESTWITHFRIENDS("debug on")
+			assert.are.equal(1, #notices)
+			assert.matches("Debug logging unavailable", notices[1], 1, true)
+		end)
+	end
+
+	it("does not warn when AddonKit logging is available", function()
+		local notices = {}
+		_G.print = function(message)
+			notices[#notices + 1] = message
+		end
+		captureLogs()
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		_G.QuestWithFriendsDB = { debugMode = true }
+		fire("ADDON_LOADED", "QuestWithFriends")
+		assert.same({}, notices)
+		SlashCmdList.QUESTWITHFRIENDS("debug on")
+		assert.are.equal(1, #notices)
+		assert.matches("Debug logging enabled", notices[1], 1, true)
+	end)
+
 	for _, game in ipairs({ "retail", "forever" }) do
+		it("warns once after saved debug mode loads without AddonKit on " .. game, function()
+			QuestWithFriends.QuestEquivalencesGame = game
+			local notices = {}
+			_G.print = function(message)
+				notices[#notices + 1] = message
+			end
+			assert(loadfile("src/QuestWithFriends.lua"))()
+			assert.same({}, notices)
+			_G.QuestWithFriendsDB = { debugMode = true }
+			fire("ADDON_LOADED", "OtherAddon")
+			assert.same({}, notices)
+			fire("ADDON_LOADED", "QuestWithFriends")
+			assert.are.equal(1, #notices)
+			assert.matches("Debug logging unavailable", notices[1], 1, true)
+			assert.matches("no logs are being recorded", notices[1], 1, true)
+			assert.matches("Install or enable AddonKit, then /reload.", notices[1], 1, true)
+			assert.is_true(QuestWithFriendsDB.debugMode)
+			fire("ADDON_LOADED", "QuestWithFriends")
+			fire("PLAYER_ENTERING_WORLD")
+			flush()
+			assert.are.equal(1, #notices)
+		end)
+
+		it("warns from settings and slash commands without claiming logging works on " .. game, function()
+			QuestWithFriends.QuestEquivalencesGame = game
+			local notices = {}
+			_G.print = function(message)
+				notices[#notices + 1] = message
+			end
+			local settings = captureSettings()
+			assert(loadfile("src/QuestWithFriends.lua"))()
+			fire("ADDON_LOADED", "QuestWithFriends")
+			assert.same({}, notices)
+			settings.setting:SetValue(true)
+			assert.are.equal(1, #notices)
+			assert.matches("Debug logging unavailable", notices[1], 1, true)
+			SlashCmdList.QUESTWITHFRIENDS("debug on")
+			assert.are.equal(1, #notices)
+			settings.setting:SetValue(false)
+			SlashCmdList.QUESTWITHFRIENDS("debug on")
+			assert.are.equal(2, #notices)
+			assert.are.equal(notices[1], notices[2])
+			assert.is_true(QuestWithFriendsDB.debugMode)
+			SlashCmdList.QUESTWITHFRIENDS("debug off")
+			assert.is_false(QuestWithFriendsDB.debugMode)
+			assert.matches("Debug logging disabled", notices[3], 1, true)
+		end)
+
 		it("restores debug logging when SavedVariables arrive after Lua files on " .. game, function()
 			QuestWithFriends.QuestEquivalencesGame = game
 			local records = captureLogs(true)

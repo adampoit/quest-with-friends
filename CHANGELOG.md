@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Warn when Debug mode is enabled or restored at login/reload without a usable AddonKit logger, rather than silently dropping diagnostics or claiming logging is enabled.
 - Add optional GitHub-only PTR compatibility previews; CurseForge and Wago remain stable-only.
 
 ## 0.1.9
