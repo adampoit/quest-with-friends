@@ -58,6 +58,16 @@ The same dropdown has a **Sort by** section with two radio choices:
 
 Smart activity comes from actual pickups, objective changes, readiness, completion or abandonment by you or a party member, not refreshes or unchanged snapshots. Initial snapshots establish a baseline. Activity is session-only and tracked even for filtered or currently synchronized quests. Equal or unknown activity uses title and quest ID as tie-breakers. The sort choice persists across sessions; preview demonstrates the same choices using fixed sample activity.
 
+### Ignore existing differences for a party session
+
+When you join a party or a new member joins, offer a native **Start fresh together?** popup after the available initial snapshots settle. **Ignore quests** suppresses existing missing-quest rows across all zones and quest categories, regardless of current filters; **Keep showing** leaves them visible. Preserve shared objective and readiness rows. Only missing quests newly introduced by that group change are offered, not previously tracked mismatches. Initial local data and each new member's first snapshot establish the baseline; later pickups do not enter the offer. Wait at most eight seconds for initial data and combine simultaneous joins; unknown members never imply missing quests. Refreshes, reconnects and reloads do not repeat the offer.
+
+A native setting, **Existing quests when the party changes**, selects **Ask what to ignore** (default), **Automatically ignore existing missing quests**, or **Keep showing all differences**. Automatic ignores use exactly the same baseline and never continuously ignore new pickups.
+
+Right-click live quest headings for **Ignore quest**, which hides the whole quest comparison. **View → Ignore current missing quests** manually suppresses all currently known missing rows, across filters. Every ignore is personal and lasts only for the current party session. Save session state separately per character so reloads and disconnects retain it; other members leaving or reconnecting do not reset it. Clear it when the local player leaves the group. If an originally missing player picks up an ignored quest, restore its comparison automatically. Whole-quest ignores without missing players remain until restored or the session ends. Sample views never offer ignore actions or alter session state.
+
+**View → Ignored quests (N)** opens a separate all-zone, all-category list with **Restore** beside each quest and **Restore all** above the list. Empty lists say **No ignored quests**, not Party in sync. Live scope text includes the ignored count, and a pinned **Undo** action reverses the latest ignore batch without affecting earlier ignores. Restoring quests does not re-trigger join offers. Party status reflects only visible, non-ignored differences.
+
 ### Make differences actionable
 
 Compare missing, active, ready-to-turn-in and known-completed states across all known party snapshots, including differences between friends when you are missing or still working on a quest. Highlight objective progress when any comparable party member has finished and another still needs it. When a player is ready to turn in or has already completed a quest, show unfinished players' remaining objectives alongside that readiness or completion status. Fall back to quest states when no usable remaining objective counts are available or variant comparisons are state-only. Deduplicate each player's status and objective rows, preserve objective order, and keep related differences together under the same quest heading. Unknown members receive connection notices, not assumed quest differences; cached snapshots remain comparable with their connection status.
@@ -86,6 +96,6 @@ Party changes and quest events drive updates. Paced messages, coalesced changes,
 
 ## Future opportunities
 
-[TODO.md](TODO.md) tracks catch-up explanations, quest-chain relationships, per-quest filters and compact panel options. An optional secondary line in Blizzard's tracker could surface a friend's remaining progress beside a tracked quest.
+[TODO.md](TODO.md) tracks catch-up explanations, quest-chain relationships and compact panel options. An optional secondary line in Blizzard's tracker could surface a friend's remaining progress beside a tracked quest.
 
 [README.md](./README.md) describes the shipped experience; this brief guides future design decisions.

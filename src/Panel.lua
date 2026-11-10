@@ -40,6 +40,39 @@ local moving = false
 local onLock
 local groupOffsets = {}
 local reflow
+local ignoreActions = {}
+local ignoredView = false
+local ignorePopupName = (QWF.name or "QuestWithFriends") .. "_IGNORE_QUESTS"
+
+function QWF.Panel.promptIgnore(count, accept, cancel)
+	if not _G.StaticPopupDialogs or not _G.StaticPopup_Show then
+		return
+	end
+	_G.StaticPopupDialogs[ignorePopupName] = {
+		text = "Start fresh together?\n\n%s Ignore these missing-quest differences?\n\nIncludes all zones and quest types. Shared progress and new pickups will still appear. Ignores last until you leave the party.",
+		button1 = "Ignore quests",
+		button2 = "Keep showing",
+		OnAccept = function(_, data)
+			data.accept()
+		end,
+		OnCancel = function(_, data)
+			data.cancel()
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+	local summary = count == 1 and "1 existing quest isn't shared by everyone."
+		or (count .. " existing quests aren't shared by everyone.")
+	_G.StaticPopup_Show(ignorePopupName, summary, nil, { accept = accept, cancel = cancel })
+end
+
+function QWF.Panel.hideIgnorePrompt()
+	if _G.StaticPopup_Hide then
+		_G.StaticPopup_Hide(ignorePopupName)
+	end
+end
 
 local function finite(value)
 	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
@@ -94,6 +127,9 @@ local styles = {
 }
 
 local function scopeText()
+	if ignoredView then
+		return "All zones · All quest types · This party session"
+	end
 	local categories = "Standard quests"
 	if questFilters.professions and questFilters.classes then
 		categories = "All quest types"
@@ -102,10 +138,31 @@ local function scopeText()
 	elseif questFilters.classes then
 		categories = "Includes class quests"
 	end
-	return (currentZoneOnly and "Current zone" or "All zones") .. " · " .. categories
+	return (currentZoneOnly and "Current zone" or "All zones")
+		.. " · "
+		.. categories
+		.. ((ignoreActions.ignoredCount or 0) > 0 and (" · " .. ignoreActions.ignoredCount .. " ignored") or "")
 end
 
 local function generateFilterMenu(_, root)
+	if ignoreActions.onView then
+		root:CreateTitle("View")
+		for _, option in ipairs({
+			{ false, "Quest differences" },
+			{ true, "Ignored quests (" .. (ignoreActions.ignoredCount or 0) .. ")" },
+		}) do
+			local ignored, label = option[1], option[2]
+			root:CreateRadio(label, function()
+				return ignoredView == ignored
+			end, function()
+				ignoreActions.onView(ignored)
+			end)
+		end
+		if ignoredView then
+			return
+		end
+		root:CreateDivider()
+	end
 	root:CreateTitle("Show")
 	root:CreateCheckbox("Current zone only", function()
 		return currentZoneOnly
@@ -139,6 +196,12 @@ local function generateFilterMenu(_, root)
 				selectSort(mode)
 			end
 		end):SetEnabled(selectSort ~= nil)
+	end
+	if ignoreActions.onIgnoreMissing then
+		root:CreateDivider()
+		root:CreateButton("Ignore current missing quests (" .. (ignoreActions.missingCount or 0) .. ")", function()
+			ignoreActions.onIgnoreMissing()
+		end):SetEnabled((ignoreActions.missingCount or 0) > 0)
 	end
 end
 
@@ -382,27 +445,51 @@ local function setQuestHeading(row, group, collapsed, y, width)
 		button:SetScript("OnClick", function(self, mouseButton)
 			if mouseButton == "RightButton" then
 				local id = not isPreview and getAbandonQuestID and row.groupID and getAbandonQuestID(row.groupID)
-				if id and abandonQuest then
+				local onIgnore = not isPreview and ignoreActions.onIgnore
+				local onRestore = not isPreview and ignoredView and ignoreActions.onRestore
+				if (id and abandonQuest) or onIgnore or onRestore then
 					hideTooltip(self)
-					local groupID, onAbandon = row.groupID, abandonQuest
+					local groupID, onAbandon, session = row.groupID, abandonQuest, ignoreActions.ignoreSession
 					MenuUtil.CreateContextMenu(self, function(_, root)
 						root:CreateTitle(row.title)
-						root:CreateButton("Abandon quest…", function()
-							if
-								not isPreview
+						local function valid()
+							return not isPreview
 								and panel:IsShown()
 								and self:IsShown()
 								and row.groupID == groupID
-								and abandonQuest == onAbandon
-							then
-								onAbandon(id)
-							end
-						end)
+								and ignoreActions.ignoreSession == session
+						end
+						if onRestore then
+							root:CreateButton("Restore quest", function()
+								if valid() and ignoredView and ignoreActions.onRestore then
+									ignoreActions.onRestore(groupID)
+								end
+							end)
+						elseif onIgnore then
+							root:CreateButton("Ignore quest", function()
+								if valid() and not ignoredView and ignoreActions.onIgnore then
+									ignoreActions.onIgnore(groupID)
+								end
+							end)
+						end
+						if id and onAbandon then
+							root:CreateButton("Abandon quest…", function()
+								if
+									not isPreview
+									and panel:IsShown()
+									and self:IsShown()
+									and row.groupID == groupID
+									and abandonQuest == onAbandon
+								then
+									onAbandon(id)
+								end
+							end)
+						end
 					end)
 				end
 				return
 			end
-			if row.groupID then
+			if row.groupID and not ignoredView then
 				local saved = collapsedQuests
 				saved[row.groupID] = saved[row.groupID] ~= true or nil
 				redraw()
@@ -412,8 +499,22 @@ local function setQuestHeading(row, group, collapsed, y, width)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:SetText(row.title)
 			GameTooltip:AddLine(row.summaryText, 1, 1, 1, true)
-			GameTooltip:AddLine(row.collapsed and "Click to expand" or "Click to collapse", 1, 1, 1, true)
-			if not isPreview and abandonQuest and getAbandonQuestID and getAbandonQuestID(row.groupID) then
+			GameTooltip:AddLine(
+				ignoredView and "Ignored until restored or you leave the party"
+					or (row.collapsed and "Click to expand" or "Click to collapse"),
+				1,
+				1,
+				1,
+				true
+			)
+			if
+				not isPreview
+				and (
+					ignoreActions.onIgnore
+					or ignoreActions.onRestore
+					or (abandonQuest and getAbandonQuestID and getAbandonQuestID(row.groupID))
+				)
+			then
 				GameTooltip:AddLine("Right-click for quest actions", 1, 1, 1, true)
 			end
 			GameTooltip:Show()
@@ -424,13 +525,14 @@ local function setQuestHeading(row, group, collapsed, y, width)
 	local button = row.toggleButton
 	row.groupID, row.title, row.collapsed = group.questID, group.title, collapsed
 	local summary, color = collapsedSummary(group)
-	row.summaryText = summary
+	row.summaryText = group.ignored and "Hidden from your quest comparisons" or summary
 	button:ClearAllPoints()
 	if button:GetParent() ~= row:GetParent() then
 		button:SetParent(row:GetParent())
 	end
 	button:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 15, -y)
 	button:SetSize(width + 16, 20)
+	button.indicator:SetShown(not ignoredView)
 	button.indicator:SetRotation(collapsed and 0 or -math.pi / 2)
 	local summaryWidth = 0
 	if collapsed then
@@ -460,21 +562,25 @@ local function addRow(text, y, kind, questID, group, collapsed, parent, availabl
 		row:SetParent(parent)
 	end
 	row.questID = questID
+	row.restoreID = group and group.ignored and group.questID or nil
 	if questID and not row.shareButton then
 		row.shareButton = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 		row.shareButton:SetSize(52, 20)
 		row.shareButton:SetText("Share")
 		row.shareButton:RegisterForClicks("LeftButtonUp")
 		row.shareButton:SetScript("OnClick", function()
-			if row.questID and shareQuest and not isPreview then
+			if row.restoreID and ignoreActions.onRestore and not isPreview then
+				ignoreActions.onRestore(row.restoreID)
+			elseif row.questID and shareQuest and not isPreview then
 				shareQuest(row.questID)
 			end
 		end)
 		row.shareButton:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:SetText("Share quest")
+			GameTooltip:SetText(row.restoreID and "Restore quest" or "Share quest")
 			GameTooltip:AddLine(
-				isPreview and not isScreenshot and "Sample quest only. Sharing is disabled in preview."
+				row.restoreID and "Include this quest in comparisons again."
+					or isPreview and not isScreenshot and "Sample quest only. Sharing is disabled in preview."
 					or "Offers this quest to the party. WoW determines who can accept it.",
 				1,
 				1,
@@ -509,7 +615,7 @@ local function addRow(text, y, kind, questID, group, collapsed, parent, availabl
 		row.icon:Show()
 	end
 	local x = group and 31 or (style and DETAIL_X or 15)
-	local width = availableWidth - x - 15 - (questID and 60 or 0)
+	local width = availableWidth - x - 15 - (row.restoreID and 72 or (questID and 60 or 0))
 	row:SetWidth(width)
 	row:SetWordWrap(not group)
 	if questID then
@@ -519,6 +625,8 @@ local function addRow(text, y, kind, questID, group, collapsed, parent, availabl
 		row.shareButton:ClearAllPoints()
 		row.shareButton:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -15, -y)
 		-- Screenshot controls look live, but the click handler still rejects sample quests.
+		row.shareButton:SetText(row.restoreID and "Restore" or "Share")
+		row.shareButton:SetSize(row.restoreID and 60 or 52, 20)
 		row.shareButton:SetEnabled(not isPreview or isScreenshot)
 		row.shareButton:Show()
 	end
@@ -576,6 +684,9 @@ end
 
 function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices, filters, presentation)
 	presentation = presentation or {}
+	local viewChanged = ignoredView ~= (presentation.ignoredView == true)
+	ignoredView = presentation.ignoredView == true
+	ignoreActions = presentation
 	local previewChanged = isPreview ~= (presentation.preview == true)
 		or isScreenshot ~= (presentation.screenshot == true)
 		or previewScenario ~= presentation.scenario
@@ -599,7 +710,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		createPanel()
 	end
 	panel.heading:SetText(isScreenshot and "Quest With Friends" or QWF.title or "Quest With Friends")
-	if previewChanged then
+	if previewChanged or viewChanged then
 		panel.scroll:SetVerticalScroll(0)
 		groupOffsets = {}
 	end
@@ -611,7 +722,10 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	panel.filter:GenerateMenu()
 	panel.status:SetFontObject(showPreviewNotice and "GameFontHighlightSmall" or "GameFontHighlight")
 	panel.status:SetJustifyH("LEFT")
-	if showPreviewNotice then
+	if ignoredView then
+		panel.status:SetText("Ignored quests (" .. #groups .. ")")
+		panel.status:SetTextColor(0.72, 0.78, 0.85)
+	elseif showPreviewNotice then
 		panel.status:SetText("Preview · Sample party data")
 		panel.status:SetTextColor(0.72, 0.78, 0.85)
 	elseif #groups == 0 and comparisonKnown then
@@ -622,6 +736,32 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.status:SetTextColor(0.98, 0.73, 0.40)
 	end
 	onLock = presentation.onLock
+	local showSessionAction = not isPreview
+		and ((ignoredView and #groups > 0) or (not ignoredView and (presentation.undoCount or 0) > 0))
+	if showSessionAction and not panel.sessionAction then
+		panel.sessionAction = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+		panel.sessionAction:SetSize(85, 22)
+		panel.sessionAction:SetScript("OnClick", function()
+			if ignoredView and ignoreActions.onRestore then
+				ignoreActions.onRestore()
+			elseif ignoreActions.onUndo then
+				ignoreActions.onUndo()
+			end
+		end)
+		panel.sessionText = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		panel.sessionText:SetJustifyH("LEFT")
+		panel.sessionText:SetTextColor(0.72, 0.78, 0.85)
+	end
+	if panel.sessionAction then
+		panel.sessionAction:SetShown(showSessionAction)
+		panel.sessionText:SetShown(showSessionAction)
+		panel.sessionAction:SetText(ignoredView and "Restore all" or "Undo")
+		local undoCount = presentation.undoCount or 0
+		panel.sessionText:SetText(
+			ignoredView and "Ignored only for you"
+				or (undoCount .. (undoCount == 1 and " quest difference ignored" or " quest differences ignored"))
+		)
+	end
 	if showPreviewNotice and stopPreview then
 		if not panel.stopPreview then
 			panel.stopPreview = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
@@ -687,6 +827,14 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.updating:ClearAllPoints()
 		panel.updating:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PANEL_INSET, -scopeY)
 		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + HEADER_BODY_GAP
+		if showSessionAction then
+			panel.sessionText:ClearAllPoints()
+			panel.sessionText:SetPoint("TOPLEFT", PANEL_INSET, -headerHeight - 4)
+			panel.sessionText:SetWidth(width - 2 * PANEL_INSET - 93)
+			panel.sessionAction:ClearAllPoints()
+			panel.sessionAction:SetPoint("TOPRIGHT", -PANEL_INSET, -headerHeight)
+			headerHeight = headerHeight + math.max(22, panel.sessionText:GetStringHeight() + 4) + 6
+		end
 		panel.lock:Show()
 		panel.lock.icon:SetTexCoord(unlocked and 0.5 or 0, unlocked and 1 or 0.5, 0, 1)
 		if unlocked then
@@ -731,11 +879,14 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 				pinned = pinned + 3
 			end
 			local y = 0
+			if ignoredView and #groups == 0 then
+				y = addRow("No ignored quests.", y, "muted", nil, nil, nil, panel.content, bodyWidth)
+			end
 			groupOffsets = {}
 			for _, group in ipairs(groups) do
 				groupOffsets[#groupOffsets + 1] = { id = group.questID, y = y }
-				local collapsed = collapsedQuests[group.questID] == true
-				local questID = (onShare or isPreview) and group.shareQuestID
+				local collapsed = not group.ignored and collapsedQuests[group.questID] == true
+				local questID = group.ignored and group.questID or ((onShare or isPreview) and group.shareQuestID)
 				y = addRow(group.title, y, "quest", questID, group, collapsed, panel.content, bodyWidth)
 				if not collapsed then
 					for _, difference in ipairs(group.differences) do

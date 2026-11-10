@@ -154,6 +154,7 @@ local function network(game, size, minorVersions)
 			"src/Client.lua",
 			"src/QuestCategories.lua",
 			"src/Core.lua",
+			"src/QuestIgnores.lua",
 			"src/ItemStock.lua",
 			"src/QuestWithFriends.lua",
 		}) do
@@ -1394,6 +1395,96 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.are.equal(requests, a:count("1.1:H"))
 			assert.are.equal("offline", a.view.notices[1].reason)
 			assert.is_false(a.view.complete)
+		end)
+
+		it("offers only newly introduced missing quests when another member joins", function()
+			local n = network(game, 3)
+			local a, b, c = unpack(n.clients)
+			a.units, b.units, c.units, c.party = { 2 }, { 1 }, {}, false
+			a.quests[42], b.quests[43], c.quests[44] = quest("First"), quest("Second"), quest("New member")
+			local prompts = {}
+			rawset(a.env.QuestWithFriends.Panel, "promptIgnore", function(count, accept, cancel)
+				prompts[#prompts + 1] = { count = count, accept = accept, cancel = cancel }
+			end)
+			n:join()
+			n:advance(5)
+			assert.are.equal(1, #prompts)
+			assert.are.equal(2, prompts[1].count)
+			prompts[1].cancel()
+			a.units, b.units, c.units, c.party = { 2, 3 }, { 1, 3 }, { 1, 2 }, true
+			for _, client in ipairs(n.clients) do
+				client:fire("GROUP_ROSTER_UPDATE")
+			end
+			n:advance(5)
+			assert.are.equal(2, #prompts)
+			assert.are.equal(1, prompts[2].count)
+			prompts[2].accept()
+			local key = a.sender .. (game == "forever" and "@Realm" or "")
+			local session = a.env.QuestWithFriendsDB.partySessions[key]
+			assert.is_not_nil(session.ignored[44])
+			assert.is_nil(session.ignored[42])
+			assert.is_nil(session.ignored[43])
+			a.offline[3] = true
+			a:fire("UNIT_CONNECTION", "party2")
+			n:advance(20)
+			a.offline[3] = false
+			a:fire("UNIT_CONNECTION", "party2")
+			n:advance(5)
+			assert.are.equal(2, #prompts)
+			assert.is_not_nil(session.ignored[44])
+		end)
+
+		it("combines an unanswered popup with a subsequent member's join offer", function()
+			local n = network(game, 3)
+			local a, b, c = unpack(n.clients)
+			a.units, b.units, c.units, c.party = { 2 }, { 1 }, {}, false
+			a.quests[42], b.quests[43], c.quests[44] = quest("First"), quest("Second"), quest("New member")
+			local prompts = {}
+			rawset(a.env.QuestWithFriends.Panel, "promptIgnore", function(count, accept)
+				prompts[#prompts + 1] = { count = count, accept = accept }
+			end)
+			n:join()
+			n:advance(5)
+			assert.are.equal(2, prompts[1].count)
+			a.units, b.units, c.units, c.party = { 2, 3 }, { 1, 3 }, { 1, 2 }, true
+			for _, client in ipairs(n.clients) do
+				client:fire("GROUP_ROSTER_UPDATE")
+			end
+			n:advance(5)
+			assert.are.equal(2, #prompts)
+			assert.are.equal(3, prompts[2].count)
+			prompts[1].accept()
+			assert.are.equal(3, #a.view.groups)
+			prompts[2].accept()
+			assert.same({}, a.view.groups)
+		end)
+
+		it("settles available join data once without treating unknown members as missing", function()
+			local n = network(game, 3)
+			local a, b, c = unpack(n.clients)
+			a.quests[42], b.quests[43], c.quests[44] = quest("First"), quest("Second"), quest("Unknown")
+			n.deliver = function(sender, recipient)
+				return sender ~= c or recipient ~= a
+			end
+			local prompts = {}
+			rawset(a.env.QuestWithFriends.Panel, "promptIgnore", function(count, accept)
+				prompts[#prompts + 1] = { count = count, accept = accept }
+			end)
+			n:join()
+			n:advance(7)
+			assert.are.equal(0, #prompts)
+			n:advance(2)
+			assert.are.equal(1, #prompts)
+			assert.are.equal(2, prompts[1].count)
+			prompts[1].accept()
+			local key = a.sender .. (game == "forever" and "@Realm" or "")
+			local session = a.env.QuestWithFriendsDB.partySessions[key]
+			assert.is_nil(session.ignored[44])
+			n.deliver = nil
+			c.env.SlashCmdList.QUESTWITHFRIENDS("")
+			n:advance(10)
+			assert.are.equal(1, #prompts)
+			assert.is_nil(session.ignored[44])
 		end)
 
 		it("stops queued sends when the party becomes a raid", function()

@@ -312,6 +312,168 @@ describe("Quest With Friends panel", function()
 		_G.MenuUtil = originalMenuUtil
 	end)
 
+	it("offers personal ignore actions alongside abandonment and guards retained callbacks", function()
+		loadPanel()
+		local ignored
+		local presentation = {
+			onIgnore = function(id)
+				ignored = id
+			end,
+			getAbandonQuestID = function()
+				return 42
+			end,
+			onAbandon = function() end,
+		}
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, presentation)
+		local heading = fontStrings[4].toggleButton
+		heading.OnClick(heading, "RightButton")
+		assert.are.equal("Ignore quest", contextMenu.entries[1].text)
+		assert.are.equal("Abandon quest…", contextMenu.entries[2].text)
+		local old = contextMenu.entries[1].responder
+		old()
+		assert.are.equal(42, ignored)
+		ignored = nil
+		QuestWithFriends.Panel.show({ group(43) }, true, true, nil, nil, nil, nil, presentation)
+		old()
+		assert.is_nil(ignored)
+		presentation.preview = true
+		QuestWithFriends.Panel.show({ group(43) }, true, true, nil, nil, nil, nil, presentation)
+		contextMenu = nil
+		heading.OnClick(heading, "RightButton")
+		assert.is_nil(contextMenu)
+	end)
+
+	it("keeps ignore menus usable across refreshes but not across party sessions", function()
+		loadPanel()
+		local session, ignored = {}, false
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, {
+			ignoreSession = session,
+			onIgnore = function()
+				error("Old render callback must not run")
+			end,
+		})
+		local heading = fontStrings[4].toggleButton
+		heading.OnClick(heading, "RightButton")
+		local action = contextMenu.entries[1].responder
+		local current = {
+			ignoreSession = session,
+			onIgnore = function()
+				ignored = true
+			end,
+		}
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, current)
+		action()
+		assert.is_true(ignored)
+		ignored = false
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, {
+			ignoreSession = {},
+			onIgnore = current.onIgnore,
+		})
+		action()
+		assert.is_false(ignored)
+	end)
+
+	it("exposes a separate ignored view with restore actions and an honest empty state", function()
+		loadPanel()
+		local selected, restored
+		local presentation = {
+			ignoredView = true,
+			ignoredCount = 1,
+			onView = function(value)
+				selected = value
+			end,
+			onRestore = function(id)
+				restored = id or "all"
+			end,
+		}
+		QuestWithFriendsDB.collapsedQuests[42] = true
+		local ignored = { questID = 42, title = "Old quest", ignored = true, differences = {} }
+		QuestWithFriends.Panel.show({ ignored }, true, true, nil, nil, nil, nil, presentation)
+		assert.are.equal("Ignored quests (1)", panel.status.text)
+		assert.are.equal("All zones · All quest types · This party session", panel.scope.text)
+		assert.are.equal(2, #panel.filter.entries)
+		assert.are.equal("Ignored quests (1)", panel.filter.entries[2].text)
+		assert.is_true(panel.filter.entries[2].isSelected())
+		panel.filter.entries[1].responder()
+		assert.is_false(selected)
+		local row
+		for _, candidate in ipairs(fontStrings) do
+			if candidate.groupID == 42 then
+				row = candidate
+			end
+		end
+		assert.are.equal("Restore", row.shareButton.text)
+		assert.is_false(row.toggleButton.summary.shown)
+		assert.is_false(row.toggleButton.indicator.shown)
+		assert.are.equal("Hidden from your quest comparisons", row.summaryText)
+		row.shareButton.OnClick()
+		assert.are.equal(42, restored)
+		row.toggleButton.OnClick(row.toggleButton, "RightButton")
+		assert.are.equal("Restore quest", contextMenu.entries[1].text)
+		contextMenu.entries[1].responder()
+		assert.are.equal(42, restored)
+		panel.sessionAction.OnClick()
+		assert.are.equal("all", restored)
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		assert.are.equal("Ignored quests (0)", panel.status.text)
+		assert.is_false(panel.sessionAction.shown)
+		local empty
+		for _, candidate in ipairs(fontStrings) do
+			empty = empty or (candidate.shown and candidate.text == "No ignored quests.")
+		end
+		assert.is_true(empty)
+	end)
+
+	it("shows an immediate undo action without putting it inside the scrolling list", function()
+		loadPanel()
+		local undone = false
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, {
+			undoCount = 12,
+			onUndo = function()
+				undone = true
+			end,
+			ignoredCount = 12,
+		})
+		assert.are.equal("Undo", panel.sessionAction.text)
+		assert.are.equal("12 quest differences ignored", panel.sessionText.text)
+		assert.are.equal(panel, panel.sessionAction.parent)
+		panel.sessionAction.OnClick()
+		assert.is_true(undone)
+		assert.is_not_nil(panel.scope.text:find("12 ignored", 1, true))
+	end)
+
+	it("uses a native popup whose accept and cancel callbacks carry their own data", function()
+		loadPanel()
+		local oldDialogs, oldShow, oldHide = _G.StaticPopupDialogs, _G.StaticPopup_Show, _G.StaticPopup_Hide
+		local shown, hidden, accepted, cancelled
+		_G.StaticPopupDialogs = {}
+		_G.StaticPopup_Show = function(name, count, _, data)
+			shown = { name = name, count = count, data = data, dialog = _G.StaticPopupDialogs[name] }
+		end
+		_G.StaticPopup_Hide = function(name)
+			hidden = name
+		end
+		local ok, err = pcall(function()
+			QuestWithFriends.Panel.promptIgnore(12, function()
+				accepted = true
+			end, function()
+				cancelled = true
+			end)
+			assert.are.equal("12 existing quests aren't shared by everyone.", shown.count)
+			assert.are.equal("Ignore quests", shown.dialog.button1)
+			assert.are.equal("Keep showing", shown.dialog.button2)
+			assert.is_true(shown.dialog.hideOnEscape)
+			shown.dialog.OnAccept(nil, shown.data)
+			shown.dialog.OnCancel(nil, shown.data)
+			assert.is_true(accepted)
+			assert.is_true(cancelled)
+			QuestWithFriends.Panel.hideIgnorePrompt()
+			assert.are.equal(shown.name, hidden)
+		end)
+		_G.StaticPopupDialogs, _G.StaticPopup_Show, _G.StaticPopup_Hide = oldDialogs, oldShow, oldHide
+		assert(ok, err)
+	end)
+
 	it("offers abandonment in a right-click menu without changing collapse or Share", function()
 		loadPanel()
 		local requested, shared

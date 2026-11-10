@@ -99,6 +99,7 @@ describe("Quest With Friends two Forever clients", function()
 				"src/Client.lua",
 				"src/QuestCategories.lua",
 				"src/Core.lua",
+				"src/QuestIgnores.lua",
 				"src/ItemStock.lua",
 				"src/QuestWithFriends.lua",
 			}) do
