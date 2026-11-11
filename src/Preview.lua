@@ -22,6 +22,7 @@ local mine = {
 	[-2] = quest("Gnoll Hunt", "active", {
 		{ text = "Gnolls slain", have = 8, need = 8 },
 		{ text = "Linen Cloth", have = 10, need = 10, itemID = 2589, spare = 2 },
+		{ text = "Gnoll camps cleared", have = 1, need = 4 },
 	}),
 	[-3] = quest("The Missing Scout", "active", {
 		{ text = "Scouts rescued", have = 0, need = 1 },
@@ -37,6 +38,7 @@ local members = {
 			[-2] = quest("Gnoll Hunt", "active", {
 				{ text = "Gnolls slain", have = 5, need = 8 },
 				{ text = "Linen Cloth", have = 3, need = 10 },
+				{ text = "Gnoll camps cleared", have = 2, need = 4 },
 			}),
 			[-3] = quest("The Missing Scout", "ready", {
 				{ text = "Scouts rescued", have = 1, need = 1 },
@@ -59,9 +61,9 @@ local members = {
 }
 local syncedMembers = { { name = "Alex", quests = mine }, { name = "Sam", quests = mine } }
 
-function QWF.Preview.compare(zoneFilter, professions, classes, scenario)
+function QWF.Preview.compare(zoneFilter, professions, classes, scenario, progressMode)
 	local roster = scenario == "synced" and syncedMembers or members
-	local groups, complete, notices = QWF.Core.compare(mine, roster, zoneFilter and 1 or nil)
+	local groups, complete, notices = QWF.Core.compare(mine, roster, zoneFilter and 1 or nil, progressMode)
 	local visible = {}
 	for _, group in ipairs(groups) do
 		local category = mine[group.questID] and mine[group.questID].category

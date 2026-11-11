@@ -43,8 +43,11 @@ Open **View** in the panel header to choose:
 - **Current zone only** — on by default.
 - **Show profession quests** and **Show class quests** — off by default.
 - **Smart** sorting — missing quests first, then most recent quest activity within each group — or **Title A–Z**.
+- **Objective progress:** **When anyone finishes** (default), **When I finish**, or **Always**.
 
-**Party in sync** reflects these filters and your quest ignores. Click a quest heading to collapse or expand its details; collapsed quests still count toward party status. Long lists scroll.
+**When I finish** shows objective counts, including your own, only after you finish that particular objective; missing/readiness/completion notices stay visible. Before then, hide those objective rows entirely rather than substituting **Still in progress**. **Always** shows everyone's known counts on shared objectives while anyone still needs progress, even when nobody has finished or everyone has equal counts. Fully finished objectives stay quiet.
+
+**Party in sync** reflects your filters, quest ignores and selected objective-progress mode. Informational counts in Always do not create differences. In When I finish, hidden objective rows do not count toward party status; independent quest-state differences still do. Click a quest heading to collapse or expand its details; collapsed quests still count toward party status. Long lists scroll.
 
 ### Start fresh with a party
 
@@ -56,7 +59,7 @@ Ignores affect only your view and last until **you leave the party**. They survi
 
 ### Arrange the panel
 
-Click the lock icon beside **View** to unlock the panel. Drag the header to move it and the bottom-right corner to resize it, then lock it again. The locked panel shrinks to fit its content, scrolling when needed. Layout, filters, sorting, and collapse choices are saved across reloads and characters.
+Click the lock icon beside **View** to unlock the panel. Drag the header to move it and the bottom-right corner to resize it, then lock it again. The locked panel shrinks to fit its content, scrolling when needed. Layout, filters, sorting, objective-progress mode, and collapse choices are saved across reloads and characters.
 
 The panel hides when you leave the party. Use `/qwf` to request a fresh party comparison if something looks out of date. **Party status incomplete** means a member is offline or the addon is waiting for fresh, compatible data—not that everyone is caught up.
 

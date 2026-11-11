@@ -349,8 +349,19 @@ function Core.sortGroups(groups, mode, activity)
 	end)
 end
 
--- Returns quest groups, snapshot completeness, connection notices, and each difference's roster index (0 is You).
-function Core.compare(localQuests, members, zoneID)
+function Core.hasDifferences(groups)
+	for _, group in ipairs(groups) do
+		for _, difference in ipairs(group.differences) do
+			if not difference.informational then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- Informational progress rows do not affect party status. Roster index 0 identifies You.
+function Core.compare(localQuests, members, zoneID, progressMode)
 	local groups, notices, playerIndices = {}, {}, {}
 	local complete = true
 	local snapshots = { [0] = localQuests }
@@ -399,17 +410,24 @@ function Core.compare(localQuests, members, zoneID)
 	for _, id in ipairs(ordered) do
 		local group = { questID = id, differences = {} }
 		local seen, playerOrder, objectiveOrder, hasObjectives = {}, {}, {}, {}
-		local function addDifference(playerIndex, kind, reason, objectiveIndex, objective)
+		local localQuest, localID = Core.matchQuest(localQuests, id)
+		local function addDifference(playerIndex, kind, reason, objectiveIndex, objective, informational)
 			local key = playerIndex .. ":" .. reason .. ":" .. (objectiveIndex or 0)
 			if seen[key] then
+				if not informational then
+					seen[key].informational = nil
+					seen[key].kind = kind
+				end
 				return
 			end
-			seen[key] = true
 			local difference = {
 				player = playerIndex == 0 and "You" or safeText(members[playerIndex].name),
 				kind = kind,
 				reason = reason,
 			}
+			if informational then
+				difference.informational = true
+			end
 			if objective then
 				difference.objective = {
 					text = safeText(objective.text),
@@ -418,6 +436,7 @@ function Core.compare(localQuests, members, zoneID)
 					spare = objective.spare,
 				}
 			end
+			seen[key] = difference
 			group.differences[#group.differences + 1] = difference
 			playerOrder[difference] = playerIndex
 			playerIndices[difference] = playerIndex
@@ -440,7 +459,6 @@ function Core.compare(localQuests, members, zoneID)
 				addDifference(playerIndex, quest.state == "active" and "needs" or "ahead", quest.state)
 			end
 		end
-		local localQuest = Core.matchQuest(localQuests, id)
 		local useLocalTitle = localQuest and localQuest.state ~= "completed"
 		if useLocalTitle then
 			group.title = safeText(localQuest.title)
@@ -517,6 +535,29 @@ function Core.compare(localQuests, members, zoneID)
 					end
 				end
 			end
+			if
+				progressMode == "always"
+				and first
+				and second
+				and (firstID == secondID or Core.questIDs(id).progress ~= "state")
+			then
+				for index, objective in ipairs(first.objectives) do
+					local other = second.objectives[index]
+					if
+						other
+						and objective.need > 0
+						and other.need == objective.need
+						and (
+							(first.state == "active" and objective.have < objective.need)
+							or (second.state == "active" and other.have < other.need)
+						)
+					then
+						-- Existing actionable rows win deduplication, regardless of pair order.
+						addDifference(firstIndex, "progress", "objective", index, objective, true)
+						addDifference(secondIndex, "progress", "objective", index, other, true)
+					end
+				end
+			end
 		end
 		for firstIndex = 0, #members do
 			if snapshots[firstIndex] then
@@ -524,6 +565,43 @@ function Core.compare(localQuests, members, zoneID)
 					if snapshots[secondIndex] then
 						comparePair(firstIndex, secondIndex)
 					end
+				end
+			end
+		end
+		if progressMode == "self" then
+			for index = #group.differences, 1, -1 do
+				local difference = group.differences[index]
+				local playerIndex = playerOrder[difference]
+				if difference.objective then
+					local _, sourceID = Core.matchQuest(snapshots[playerIndex], id)
+					local objective = localQuest and localQuest.objectives[objectiveOrder[difference]]
+					local comparable = localQuest
+						and (
+							localID == sourceID
+							or (
+								Core.questIDs(id).progress ~= "state"
+								and (localQuest.state ~= "completed" or Core.questIDs(id).history ~= false)
+							)
+						)
+					local finished = comparable
+						and (
+							localQuest.state ~= "active"
+							or (
+								objective
+								and objective.need == difference.objective.need
+								and objective.have >= objective.need
+							)
+						)
+					if not finished then
+						table.remove(group.differences, index)
+						hasObjectives[playerIndex] = nil
+					end
+				end
+			end
+			-- A player may have both hidden and visible objectives.
+			for _, difference in ipairs(group.differences) do
+				if difference.objective then
+					hasObjectives[playerOrder[difference]] = true
 				end
 			end
 		end

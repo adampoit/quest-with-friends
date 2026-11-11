@@ -122,6 +122,7 @@ end
 local styles = {
 	missing = { color = { 0.98, 0.73, 0.40 }, icon = "Interface\\GossipFrame\\AvailableQuestIcon" },
 	needs = { color = { 0.57, 0.78, 1.00 }, icon = "Interface\\QuestFrame\\UI-Quest-BulletPoint" },
+	progress = { color = { 0.72, 0.78, 0.85 }, icon = "Interface\\QuestFrame\\UI-Quest-BulletPoint" },
 	ahead = { color = { 0.52, 0.87, 0.62 }, icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
 	unknown = { color = { 0.72, 0.78, 0.85 }, icon = "Interface\\GossipFrame\\ActiveQuestIcon" },
 }
@@ -196,6 +197,35 @@ local function generateFilterMenu(_, root)
 				selectSort(mode)
 			end
 		end):SetEnabled(selectSort ~= nil)
+	end
+	root:CreateDivider()
+	root:CreateTitle("Objective progress")
+	for _, option in ipairs({
+		{ "anyone", "When anyone finishes", "Show remaining counts when any party member finishes an objective." },
+		{
+			"self",
+			"When I finish",
+			"Hide objective rows, including your own, until you finish that objective. Missing-quest and readiness/completion notices stay visible.",
+		},
+		{
+			"always",
+			"Always",
+			"Show everyone's counts on shared objectives while anyone still needs progress, even when nobody has finished.",
+		},
+	}) do
+		local mode, label, description = option[1], option[2], option[3]
+		local entry = root:CreateRadio(label, function()
+			return (ignoreActions.objectiveProgress or "anyone") == mode
+		end, function()
+			if ignoreActions.onObjectiveProgress then
+				ignoreActions.onObjectiveProgress(mode)
+			end
+		end)
+		entry:SetEnabled(ignoreActions.onObjectiveProgress ~= nil)
+		entry:SetTooltip(function(tooltip)
+			tooltip:SetText(label)
+			tooltip:AddLine(description, 1, 1, 1, true)
+		end)
 	end
 	if ignoreActions.onIgnoreMissing then
 		root:CreateDivider()
@@ -407,15 +437,28 @@ local function hideTooltip(self)
 end
 
 local function collapsedSummary(group)
-	local players, count, reason = {}, 0, group.differences[1] and group.differences[1].reason
+	local players, count, reason = {}, 0, nil
+	local tracked = {}
 	for _, difference in ipairs(group.differences) do
-		if not players[difference.player] then
-			players[difference.player] = true
+		tracked[difference.player] = true
+		if not difference.informational then
+			if not players[difference.player] then
+				players[difference.player] = true
+				count = count + 1
+			end
+			if reason == nil then
+				reason = difference.reason
+			end
+			if difference.reason ~= reason or difference.kind == "ahead" then
+				reason = false
+			end
+		end
+	end
+	if count == 0 then
+		for _ in pairs(tracked) do
 			count = count + 1
 		end
-		if difference.reason ~= reason or difference.kind == "ahead" then
-			reason = false
-		end
+		return count .. " tracking", styles.progress.color
 	end
 	if reason == "missing" then
 		return count .. " missing", styles.missing.color
@@ -718,6 +761,10 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	panel.scope:SetText(scopeText())
 	local updating = not isPreview and presentation.updating == true
 	local comparisonKnown = complete or (updating and #(notices or {}) == 0)
+	local hasDifferences = presentation.hasDifferences
+	if hasDifferences == nil then
+		hasDifferences = #groups > 0
+	end
 	panel.updating:SetShown(updating)
 	panel.filter:GenerateMenu()
 	panel.status:SetFontObject(showPreviewNotice and "GameFontHighlightSmall" or "GameFontHighlight")
@@ -728,7 +775,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	elseif showPreviewNotice then
 		panel.status:SetText("Preview · Sample party data")
 		panel.status:SetTextColor(0.72, 0.78, 0.85)
-	elseif #groups == 0 and comparisonKnown then
+	elseif not hasDifferences and comparisonKnown then
 		panel.status:SetText("Party in sync")
 		panel.status:SetTextColor(0.52, 0.87, 0.62)
 	else
