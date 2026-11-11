@@ -851,6 +851,34 @@ partyTest("panel bounds long lists and hides reused rows when back in sync", fun
 	assertAlmostEquals(82, QuestWithFriendsPanel:GetHeight())
 end)
 
+partyTest("transient undo uses native focus checks and leaves permanent restore access", function()
+	local presentation = { undoBatch = {}, undoCount = 1, ignoredCount = 2, onView = function() end }
+	QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+	local panel = QuestWithFriendsPanel
+	assertTrue(panel.sessionAction:IsShown())
+	assertEquals("Undo", panel.sessionAction:GetText())
+	panel:GetScript("OnUpdate")(panel, 0)
+	assertTrue(panel.sessionAction:IsShown())
+	presentation.undoCount = 0
+	presentation.ignoredCount = 1
+	QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+	assertFalse(panel.sessionAction:IsShown())
+	assertFalse(panel.sessionText:IsShown())
+	assertNotNil(panel.scope:GetText():find("1 ignored", 1, true))
+	assertNotNil(filterChoice("Ignored quests (1)"))
+	panel.filter:CloseMenu()
+	presentation.ignoredView = true
+	local ignored = { questID = 42, title = "Ignored errand", ignored = true, differences = {} }
+	QuestWithFriends.Panel.show({ ignored }, true, true, nil, nil, nil, nil, presentation)
+	assertTrue(panel.sessionAction:IsShown())
+	assertEquals("Restore all", panel.sessionAction:GetText())
+	assertFalse(panel.scope:IsShown())
+	assertFalse(panel.sessionText:IsShown())
+	assertTrue(panel.status:GetRight() < panel.sessionAction:GetLeft())
+	assertTrue(panel.scroll:GetTop() < panel.sessionAction:GetBottom())
+	assertEquals(nil, panel:GetScript("OnUpdate"))
+end)
+
 partyTest("status icons render once per detail and hide when rows are reused", function(quests)
 	local groups, complete, notices = QuestWithFriends.Core.compare({
 		[1] = { title = "Local", state = "active", objectives = {} },

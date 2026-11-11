@@ -53,7 +53,7 @@ Open **View** in the panel header to choose:
 
 When you join a party or someone joins yours, a popup offers to ignore existing missing-quest differences once available quest data arrives. It includes **all zones and quest types**, even those hidden by your filters, but preserves objective and readiness comparisons on shared quests. New pickups still appear normally. Unknown members are never assumed to be missing quests.
 
-Right-click a heading and choose **Ignore quest** to hide that quest's differences, or use **View → Ignore current missing quests** for a bulk action. **Undo** reverses the latest ignore action. Open **View → Ignored quests** to restore individual quests or **Restore all**; this view always includes every zone and quest type.
+Right-click a heading and choose **Ignore quest** to hide that quest's differences, or use **View → Ignore current missing quests** for a bulk action. **Undo** reverses the latest ignore action and stays visible for 15 seconds, pausing while its button is hovered or focused. Another ignore restarts the timer. Open **View → Ignored quests** anytime to restore individual quests or **Restore all**; this view always includes every zone and quest type.
 
 Ignores affect only your view and last until **you leave the party**. They survive UI reloads, disconnects, and other members leaving. A quest resurfaces if an originally missing player picks it up. Ignores for shared progress stay until restored or you leave. In addon settings, **Existing quests when the party changes** lets you choose **Ask what to ignore** (default), **Automatically ignore existing missing quests**, or **Keep showing all differences**. Automatic ignoring applies only to the group-change baseline, not to later pickups.
 
