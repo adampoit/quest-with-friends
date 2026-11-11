@@ -54,6 +54,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/Client.lua"))()
 		assert(loadfile("src/QuestCategories.lua"))()
 		assert(loadfile("src/Core.lua"))()
+		assert(loadfile("src/QuestIgnores.lua"))()
 		assert(loadfile("src/ItemStock.lua"))()
 		assert(loadfile("src/Preview.lua"))()
 		timers, messages, objectives, entries = {}, {}, {}, {}
@@ -1770,7 +1771,7 @@ describe("Quest With Friends party sync", function()
 			end,
 		}
 		_G.Settings = {
-			VarType = { Boolean = "boolean" },
+			VarType = { Boolean = "boolean", String = "string" },
 			RegisterVerticalLayoutCategory = function(name)
 				captured.category = { name = name }
 				return captured.category, captured.layout
@@ -1804,6 +1805,24 @@ describe("Quest With Friends party sync", function()
 				assert.is_true(found)
 				if setting == captured.setting then
 					captured.tooltip = tooltip
+				end
+			end,
+			CreateControlTextContainer = function()
+				local options = {}
+				return {
+					Add = function(_, value, text)
+						options[#options + 1] = { value = value, text = text }
+					end,
+					GetData = function()
+						return options
+					end,
+				}
+			end,
+			CreateDropdown = function(_, setting, generator, tooltip)
+				for _, record in pairs(captured.settings) do
+					if record.setting == setting then
+						record.options, record.tooltip = generator(), tooltip
+					end
 				end
 			end,
 			RegisterAddOnCategory = function(category)
@@ -1846,6 +1865,7 @@ describe("Quest With Friends party sync", function()
 			"src/Client.lua",
 			"src/QuestCategories.lua",
 			"src/Core.lua",
+			"src/QuestIgnores.lua",
 			"src/ItemStock.lua",
 			"src/Preview.lua",
 			"dev/Development.lua",
@@ -3155,6 +3175,224 @@ describe("Quest With Friends party sync", function()
 		flush()
 		assert.are.equal(sent + 1, #messages)
 		assert.is_not_nil(messages[#messages]:match("^1%.1:D:"))
+	end)
+
+	it("saves all three native join-behavior choices and validates restored settings", function()
+		local settings = captureSettings()
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		local record = settings.settings.QuestWithFriendsJoinQuestBehavior
+		assert.are.equal("string", record.varType)
+		assert.are.equal("ask", record.default)
+		assert.same({
+			{ value = "ask", text = "Ask what to ignore" },
+			{ value = "auto", text = "Automatically ignore existing missing quests" },
+			{ value = "keep", text = "Keep showing all differences" },
+		}, record.options)
+		record.setting:SetValue("auto")
+		assert.are.equal("auto", QuestWithFriendsDB.joinQuestBehavior)
+		fire("ADDON_LOADED", "QuestWithFriends")
+		assert.are.equal("auto", record.setting:GetValue())
+		record.setting:SetValue("keep")
+		assert.are.equal("keep", record.setting:GetValue())
+		record.setting:SetValue("invalid")
+		assert.are.equal("ask", record.setting:GetValue())
+	end)
+
+	local function captureIgnorePrompts()
+		local prompts = {}
+		rawset(QuestWithFriends.Panel, "promptIgnore", function(count, accept, cancel)
+			prompts[#prompts + 1] = { count = count, accept = accept, cancel = cancel }
+		end)
+		return prompts
+	end
+
+	it("offers all existing missing quests across filters and keeps new pickups visible", function()
+		local prompts = captureIgnorePrompts()
+		entries = { { questID = 42, title = "Shared quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({
+			[42] = { title = "Shared quest", state = "active", objectives = {} },
+			[43] = {
+				title = "Old profession quest",
+				state = "active",
+				objectives = {},
+				mapID = 202,
+				category = "profession",
+			},
+		}, 1)
+		flush()
+		assert.are.equal(1, #prompts)
+		assert.are.equal(1, prompts[1].count)
+		assert.same({}, view.groups)
+		prompts[1].accept()
+		assert.are.equal(1, view.presentation.ignoredCount)
+		assert.are.equal(1, view.presentation.undoCount)
+		view.toggle()
+		view.filters.toggleProfessions()
+		assert.same({}, view.groups)
+		receiveSnapshot({
+			[42] = { title = "Shared quest", state = "active", objectives = {} },
+			[43] = {
+				title = "Old profession quest",
+				state = "active",
+				objectives = {},
+				mapID = 202,
+				category = "profession",
+			},
+			[44] = { title = "New pickup", state = "active", objectives = {} },
+		}, 2)
+		assert.are.equal(44, view.groups[1].questID)
+		assert.are.equal(1, #prompts)
+		view.presentation.onView(true)
+		assert.is_true(view.presentation.ignoredView)
+		assert.are.equal(43, view.groups[1].questID)
+		view.presentation.onRestore(43)
+		assert.same({}, view.groups)
+		view.presentation.onView(false)
+		assert.are.equal(2, #view.groups)
+	end)
+
+	it("automatically ignores only the join baseline and supports immediate undo", function()
+		local prompts = captureIgnorePrompts()
+		QuestWithFriendsDB.joinQuestBehavior = "auto"
+		entries = { { questID = 42, title = "Old quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		flush()
+		assert.same({}, prompts)
+		assert.same({}, view.groups)
+		assert.are.equal(1, view.presentation.ignoredCount)
+		entries[2] = { questID = 43, title = "New pickup" }
+		fire("QUEST_LOG_UPDATE")
+		assert.are.equal(43, view.groups[1].questID)
+		view.presentation.onUndo()
+		assert.are.equal(2, #view.groups)
+		assert.are.equal(0, view.presentation.ignoredCount)
+		flush()
+		assert.are.equal(2, #view.groups)
+	end)
+
+	it("keeps showing differences without prompting when configured", function()
+		local prompts = captureIgnorePrompts()
+		QuestWithFriendsDB.joinQuestBehavior = "keep"
+		entries = { { questID = 42, title = "Old quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		flush()
+		assert.same({}, prompts)
+		assert.are.equal(1, #view.groups)
+		view.presentation.onIgnoreMissing()
+		assert.same({}, view.groups)
+	end)
+
+	it("persists personal ignores across reloads and reconnects, clearing only on leaving", function()
+		local prompts = captureIgnorePrompts()
+		entries = { { questID = 42, title = "Old quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		flush()
+		prompts[1].cancel()
+		view.presentation.onIgnore(42)
+		assert.same({}, view.groups)
+		local session = QuestWithFriendsDB.partySessions["Adam-Realm"]
+		assert.is_not_nil(session.ignored[42])
+		rawset(_G, "UnitIsConnected", function()
+			return false
+		end)
+		fire("UNIT_CONNECTION", "party1")
+		flush()
+		assert.is_not_nil(session.ignored[42])
+		rawset(_G, "UnitIsConnected", function()
+			return true
+		end)
+		fire("UNIT_CONNECTION", "party1")
+		flush()
+		assert.are.equal(1, #prompts)
+		timers = {}
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.are.equal(session, QuestWithFriendsDB.partySessions["Adam-Realm"])
+		party = true
+		rawset(_G, "UnitExists", function()
+			return false
+		end)
+		fire("PLAYER_ENTERING_WORLD")
+		rawset(_G, "UnitExists", function(unit)
+			return unit == "party1"
+		end)
+		fire("GROUP_ROSTER_UPDATE")
+		receiveSnapshot({}, 1)
+		flush()
+		assert.same({}, view.groups)
+		assert.are.equal(1, view.presentation.ignoredCount)
+		assert.are.equal(1, #prompts)
+		party = false
+		fire("PLAYER_ENTERING_WORLD")
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		receiveSnapshot({}, 1)
+		flush()
+		assert.are.equal(1, view.presentation.ignoredCount)
+		assert.are.equal(1, #prompts)
+		_G.UnitExists = function()
+			return false
+		end
+		fire("GROUP_ROSTER_UPDATE")
+		flush()
+		assert.is_not_nil(session.ignored[42])
+		party = false
+		fire("GROUP_LEFT")
+		assert.is_nil(QuestWithFriendsDB.partySessions["Adam-Realm"])
+	end)
+
+	it("isolates saved party ignores by character", function()
+		entries = { { questID = 42, title = "Old quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		flush()
+		view.presentation.onIgnore(42)
+		local session = QuestWithFriendsDB.partySessions["Adam-Realm"]
+		timers = {}
+		rawset(_G, "UnitFullName", function(unit)
+			return unit == "player" and "Eve" or "Julia", "Realm"
+		end)
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		flush()
+		assert.are.equal(0, view.presentation.ignoredCount)
+		assert.are.equal(1, #view.groups)
+		assert.are.equal(session, QuestWithFriendsDB.partySessions["Adam-Realm"])
+		assert.is_not_nil(session.ignored[42])
+		assert.is_nil(QuestWithFriendsDB.partySessions["Eve-Realm"].ignored[42])
+	end)
+
+	it("revalidates open join prompts and never ignores a later pickup", function()
+		local prompts = captureIgnorePrompts()
+		entries = { { questID = 42, title = "Old quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		flush()
+		entries[2] = { questID = 43, title = "Later pickup" }
+		fire("QUEST_LOG_UPDATE")
+		receiveSnapshot({ [42] = { title = "Old quest", state = "active", objectives = {} } }, 2)
+		prompts[1].accept()
+		assert.are.equal(0, view.presentation.ignoredCount)
+		assert.are.equal(43, view.groups[1].questID)
+	end)
+
+	it("does not manufacture missing quests or repeat a prompt for late unknown snapshots", function()
+		local prompts = captureIgnorePrompts()
+		entries = { { questID = 42, title = "Old quest" } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.same({}, prompts)
+		assert.same({}, view.groups)
+		receiveSnapshot({}, 1)
+		flush()
+		assert.are.equal(1, #view.groups)
+		assert.same({}, prompts)
 	end)
 
 	it("debounces log updates and clears old party data when leaving", function()

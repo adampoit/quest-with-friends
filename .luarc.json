@@ -22,6 +22,8 @@
     "GameTooltip",
     "MenuUtil",
     "Menu",
+    "StaticPopupDialogs",
+    "StaticPopup_Show",
     "StaticPopup_FindVisible",
     "StaticPopup_Hide",
     "QuestLogPushQuest",

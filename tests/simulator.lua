@@ -237,6 +237,7 @@ local function partyTest(name, callback)
 				local ok, err = pcall(check)
 				observer:SetScript("OnUpdate", nil)
 				A_Admin.SetPartySize(0)
+				A_Admin.FireEvent("GROUP_LEFT")
 				C_ChatInfo.SendAddonMessage = originalSend
 				C_Timer.After = originalAfter
 				if not ok then
@@ -261,6 +262,7 @@ local function partyTest(name, callback)
 		end
 		local ok, err = pcall(function()
 			A_Admin.SetPartySize(0)
+			A_Admin.FireEvent("GROUP_LEFT")
 			QuestWithFriendsDB.zoneFilter = true
 			QuestWithFriendsDB.showProfessionQuests = false
 			QuestWithFriendsDB.showClassQuests = false
@@ -418,14 +420,14 @@ if QuestWithFriends.isDevelopment then
 		local header = screenshotControl("Screenshot tools")
 		assertFalse(header:ShouldShow())
 		local provider = SettingsPanel:GetSettingsList().ScrollBox:GetDataProvider()
-		assertEquals(3, provider:GetSize())
+		assertEquals(4, provider:GetSize())
 		SlashCmdList.QUESTWITHFRIENDS("screenshot")
 		assertTrue(header:ShouldShow())
-		assertEquals(8, provider:GetSize())
+		assertEquals(9, provider:GetSize())
 		assertFalse(QuestWithFriendsPanel:IsShown())
 		SlashCmdList.QUESTWITHFRIENDS("screenshot")
 		assertFalse(header:ShouldShow())
-		assertEquals(3, provider:GetSize())
+		assertEquals(4, provider:GetSize())
 		assertTrue(SettingsPanel:IsShown())
 		SettingsPanel:Hide()
 	end)
@@ -512,7 +514,7 @@ if QuestWithFriends.isDevelopment then
 else
 	test("release settings omit screenshot tools", function()
 		local _, layout = screenshotSettings()
-		assertEquals(3, #layout:GetInitializers())
+		assertEquals(4, #layout:GetInitializers())
 		assertEquals(nil, QuestWithFriends.Development)
 	end)
 end
@@ -565,6 +567,41 @@ test("preview footer stays left while scroll controls align right at different s
 	if not ok then
 		error(err)
 	end
+end)
+
+test("native join-behavior setting saves ask, automatic and keep choices", function()
+	local setting = Settings.GetSetting(QuestWithFriends.name .. "JoinQuestBehavior")
+	assertNotNil(setting)
+	local previous = setting:GetValue()
+	for _, value in ipairs({ "auto", "keep", "ask" }) do
+		setting:SetValue(value)
+		assertEquals(value, QuestWithFriendsDB.joinQuestBehavior)
+	end
+	setting:SetValue(previous)
+end)
+
+test("native join popup accepts or keeps existing quest differences", function()
+	local name = QuestWithFriends.name .. "_IGNORE_QUESTS"
+	local accepted, cancelled = false, false
+	QuestWithFriends.Panel.promptIgnore(12, function()
+		accepted = true
+	end, function()
+		cancelled = true
+	end)
+	local dialog = StaticPopup_FindVisible(name)
+	assertNotNil(dialog)
+	assertTrue(dialog:GetButton1():IsShown())
+	assertEquals("Ignore quests", dialog:GetButton1():GetText())
+	assertEquals("Keep showing", dialog:GetButton2():GetText())
+	dialog:GetButton2():Click()
+	assertTrue(cancelled)
+	assertFalse(accepted)
+	QuestWithFriends.Panel.promptIgnore(12, function()
+		accepted = true
+	end, function() end)
+	StaticPopup_FindVisible(name):GetButton1():Click()
+	assertTrue(accepted)
+	QuestWithFriends.Panel.hideIgnorePrompt()
 end)
 
 partyTest("joining warns about unknown members and leaving hides the panel", function(_, messages)
@@ -1068,6 +1105,76 @@ partyTest("drag-stop saves real frame coordinates relative to UIParent", functio
 	assertAlmostEquals(140, x)
 	assertAlmostEquals(-280, y)
 	QuestWithFriends.Panel.setLocked(true)
+end)
+
+partyTest("native quest menu ignores and the ignored view restores individually or in bulk", function()
+	sendSnapshot({})
+	chooseFilter("Current zone only")
+	chooseFilter("Show profession quests")
+	chooseFilter("Show class quests")
+	local row
+	for _, region in ipairs(panelRegions()) do
+		if region:IsShown() and region.groupID then
+			row = region
+			break
+		end
+	end
+	assertNotNil(row)
+	local title = row.title
+	rightClickHeading(row)
+	local menu = Menu.GetManager():GetOpenMenu()
+	local ignored = false
+	for _, child in ipairs({ menu:GetChildren() }) do
+		local description = child.GetElementDescription and child:GetElementDescription()
+		if description and MenuUtil.GetElementText(description) == "Ignore quest" then
+			child:Click()
+			ignored = true
+			break
+		end
+	end
+	assertTrue(ignored)
+	assertTrue(QuestWithFriendsPanel.sessionAction:IsShown())
+	assertEquals("Undo", QuestWithFriendsPanel.sessionAction:GetText())
+	chooseFilter("Ignored quests (1)")
+	assertEquals("Ignored quests (1)", QuestWithFriendsPanel.status:GetText())
+	assertContains(panelTexts(), title)
+	local restored = false
+	for _, region in ipairs(panelRegions()) do
+		if region:IsShown() and region.groupID then
+			assertEquals("Restore", region.shareButton:GetText())
+			region.shareButton:Click()
+			restored = true
+			break
+		end
+	end
+	assertTrue(restored)
+	assertEquals("Ignored quests (0)", QuestWithFriendsPanel.status:GetText())
+	assertContains(panelTexts(), "No ignored quests.")
+	chooseFilter("Quest differences")
+	QuestWithFriendsPanel.filter:OpenMenu()
+	local bulk
+	for _, child in ipairs({ QuestWithFriendsPanel.filter.menu:GetChildren() }) do
+		local description = child.GetElementDescription and child:GetElementDescription()
+		local text = description and MenuUtil.GetElementText(description)
+		if text and text:find("Ignore current missing quests", 1, true) then
+			bulk = child
+			break
+		end
+	end
+	assertNotNil(bulk)
+	bulk:Click()
+	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
+	local name, realm = UnitFullName("player")
+	local key = name .. "-" .. (realm and realm ~= "" and realm or GetRealmName()):gsub("%s+", "")
+	local count = 0
+	for _ in pairs(QuestWithFriendsDB.partySessions[key].ignored) do
+		count = count + 1
+	end
+	assertTrue(count > 0)
+	chooseFilter("Ignored quests (" .. count .. ")")
+	assertEquals("Restore all", QuestWithFriendsPanel.sessionAction:GetText())
+	QuestWithFriendsPanel.sessionAction:Click()
+	assertEquals("Ignored quests (0)", QuestWithFriendsPanel.status:GetText())
 end)
 
 partyTest("header lock toggle and native settings stay in sync in both directions", function(quests)

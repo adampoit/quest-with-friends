@@ -42,7 +42,7 @@ Keep Busted specs in `tests/unit/` with the `_spec.lua` suffix. Simulator tests 
 With AddonKit installed and Debug mode enabled, DEBUG `ui` entries record the initial displayed state and subsequent transitions:
 
 - **Panel visibility changed** records show/hide changes.
-- **Panel status changed** records `in_sync`, `out_of_sync`, `incomplete`, `preview` or `hidden`, with live/preview/screenshot mode, screenshot scenario, visible quest-group/notice counts, quiet `updating` activity and active quest filters. During routine transfers the header describes the last-known comparison; `updating` means it is not yet fully current.
+- **Panel status changed** records `in_sync`, `out_of_sync`, `incomplete`, `ignored`, `preview` or `hidden`, with live/preview/screenshot mode, screenshot scenario, visible quest-group/notice counts, quiet `updating` activity and active quest filters. During routine transfers the header describes the last-known comparison; `updating` means it is not yet fully current.
 - **Displayed sync status changed** records each party member's previous/next displayed status, including `unknown`, `waiting`, `updating`, `refreshing`, `stale`, `offline`, `oversized`, `incompatible` and recovery to `healthy`. Routine `updating` activity uses a quiet indicator, not a warning row, and does not count toward recovery timing. Healthy means no pending transfer or connection notice, not that their quests match. `not_displayed` marks removal or hiding. Local oversized warnings use player **You**.
 
 Entries include the triggering event/action and session uptime. When the clock and a successful remote snapshot are available, peer entries include the last snapshot's age and revision, plus pending revision and chunk progress. `duration` measures time in the previous displayed state; `recoveryDuration` measures the continuous non-healthy displayed interval ending in recovery. Timing starts over after removal/hiding, reload or toggling Debug mode. Missing clock APIs omit timing fields. Snapshot age is diagnostic only: idle snapshots do not expire, and the recovery watchdog's lack of progress—not age alone—causes stale status.
@@ -73,7 +73,7 @@ With AddonKit and Debug mode enabled, DEBUG `item_stock` entries trace why a cou
 - **Quest objective scan changed:** quest ID/title/state, objective index, raw API text/type, normalized text, fulfilled/required counts, matching result, item ID and spare count. Matching inventory evidence includes total carried, tradeable available, reserved requirements, and counts with uncached/restricted binding, bound/locked stacks or unknown flags. These counts can overlap. Only objective-related aggregates are logged, not a bag dump.
 - **Submitted objective stock changed:** objective data decoded from the actual fully submitted payload, with revision and protocol. This exposes stock omitted by extension limits. Successful submission is not proof of delivery.
 - **Peer objective stock changed:** the peer's accepted snapshot counts and item metadata, including `no_stock_metadata` or `no_objectives`. It cannot establish why the sender omitted metadata.
-- **Quest comparison selection changed:** `included`, `zone_filter`, `profession_filter`, `class_filter` or `no_difference`. The last means no comparison group was produced, not that every peer has supplied a healthy snapshot.
+- **Quest comparison selection changed:** `included`, `zone_filter`, `profession_filter`, `class_filter`, `ignored` or `no_difference`. The last means no comparison group was produced, not that every peer has supplied a healthy snapshot.
 - **Objective row changed:** the exact formatted row text, player, counts and surplus, with `rendered` or `quest_collapsed`. Removed rows produce `removed`. `rendered` means the panel laid out the row, not proof that it was inside the scrolled viewport or unobscured on screen. Preview/screenshot rows are explicitly labeled; scan and transport evidence is live-only.
 
 Matching results distinguish `matched`, `not_item_objective`, `no_exact_name_match`, `ambiguous_item_name`, `progress_stock_mismatch`, `retained_identity_mismatch`, `non_counted_objective`, `no_tradeable_stock`, `inventory_api_unavailable`, `unnamed_bag_item`, and `completed_identity_unavailable`. For completed quests, retained identity is historical but inventory totals and reservations are fresh.
@@ -101,6 +101,19 @@ Unit tests verify eligibility, variant resolution, retained menu callbacks, prev
 - Open another quest or abandonment prompt while confirmation is pending; verify the displayed title and actual abandoned quest remain consistent. The native API's pending abandonment target is shared state.
 - Repeat with the quest log closed/open, in combat and out of combat, and with minimal/normal addon configurations; check for Lua and security errors. Include controller mode on Forever, whose native helper includes gamepad-specific handling.
 - Verify both party panels refresh after confirmed abandonment. Canceling must not change either quest log.
+
+## Party-session ignore validation
+
+`tests/unit/quest_ignores_spec.lua` covers personal whole-quest and missing-row ignores, baseline capture, canonical variants, pickup restoration, undo and restore. Runtime tests cover all-filter bulk actions, settings, saved sessions across reload/disconnect, and leaving. Clocked Retail/Forever tests cover multiple joins, combining an unanswered offer with a subsequent join, the eight-second unknown-member deadline and reconnect suppression. Simulator tests exercise the native setting, popup buttons, context menu and ignored-view restore controls.
+
+Before release, check on Retail and Forever:
+
+- Join friends with different quest logs and accept/cancel the offer. Confirm hidden-zone, class and profession quests are included, while shared progress remains visible.
+- Add another member, including one without the addon; expect one settled offer for new missing quests, not repeated refresh/reconnect prompts. Pick up new quests while waiting and after accepting.
+- Try all three join-behavior settings, manual bulk ignore, context-menu ignore, Undo, individual Restore and Restore all. Check long titles, a narrow panel, scrolling and empty ignored views.
+- Reload and disconnect/reconnect while still grouped. Ignores must survive; another member leaving must not clear them. Leave and rejoin to verify a fresh session. Switch characters to verify session isolation.
+- Pick up an ignored quest on the originally missing player, including reviewed variants; comparison should resume. A completed non-equivalent variant must not look like a pickup.
+- Check the popup alongside ordinary game dialogs and in combat, and verify native keyboard/controller behavior. Simulator screenshots may use fallback assets; they do not validate live fonts, textures or protected behavior.
 
 ## Simulator integration tests
 

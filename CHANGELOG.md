@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add personal party-session quest ignores: right-click **Ignore quest**, bulk-ignore missing differences across all filters, undo the latest batch, and restore quests individually or together in **View → Ignored quests**. Ignores survive reloads/disconnects and reset when you leave; an originally missing player's pickup restores the quest.
+- Offer to ignore existing missing quests when joining a party or when someone joins yours, preserving shared progress and later pickups. A native setting chooses asking, automatic ignoring, or keeping all differences. Wait for available initial data without assuming unknown members are missing quests; reconnects and routine refreshes do not repeat the offer.
 - Warn when Debug mode is enabled or restored at login/reload without a usable AddonKit logger, rather than silently dropping diagnostics or claiming logging is enabled.
 - Add optional GitHub-only PTR compatibility previews; CurseForge and Wago remain stable-only.
 

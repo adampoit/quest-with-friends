@@ -60,6 +60,9 @@ local resettingPreviewSetting = false
 local panelLockSetting
 local render
 local setPreviewMode
+local ignores, ignoreView, ignoreOffer, ignoreDialog
+local worldEntered = false
+local leaveCheck
 local frame = CreateFrame("Frame")
 local function initializeSettings()
 	local savedVariables = QWF.savedVariables or "QuestWithFriendsDB"
@@ -67,6 +70,10 @@ local function initializeSettings()
 	_G[savedVariables] = QWF.db
 	QWF.db.debugMode = QWF.db.debugMode == true
 	QWF.db.panelLocked = QWF.db.panelLocked ~= false
+	if QWF.db.joinQuestBehavior ~= "auto" and QWF.db.joinQuestBehavior ~= "keep" then
+		QWF.db.joinQuestBehavior = "ask"
+	end
+	QWF.db.partySessions = type(QWF.db.partySessions) == "table" and QWF.db.partySessions or {}
 	if QWF.db.sortMode ~= "title" then
 		QWF.db.sortMode = "smart"
 	end
@@ -686,6 +693,7 @@ local function recordUIState(visible, groups, complete, notices, trigger, updati
 	local mode = not visible and "hidden" or (screenshotMode and "screenshot" or (previewMode and "preview" or "live"))
 	local status = not visible and "hidden"
 		or (previewMode and not screenshotMode and "preview")
+		or (not previewMode and ignoreView and "ignored")
 		or (not complete and not (updating and #notices == 0) and "incomplete")
 		or (#groups == 0 and "in_sync" or "out_of_sync")
 	local scenario = screenshotMode and screenshotScenario or nil
@@ -782,6 +790,105 @@ local function recordUIState(visible, groups, complete, notices, trigger, updati
 	displayedPeers = nextDisplayed
 end
 
+local function entryCount(entries)
+	local count = 0
+	for _ in pairs(entries or {}) do
+		count = count + 1
+	end
+	return count
+end
+
+local function cancelIgnoreDialog()
+	ignoreDialog = nil
+	if QWF.Panel and QWF.Panel.hideIgnorePrompt then
+		QWF.Panel.hideIgnorePrompt()
+	end
+end
+
+local function ignoreSessionKey()
+	local key = identity("player")
+	return key and (isForever and (key .. "@" .. (GetRealmName() or "")) or key)
+end
+
+local function clearIgnoreSession()
+	local key = ignoreSessionKey()
+	if key then
+		QWF.db.partySessions[key] = nil
+	end
+	ignores, ignoreView, ignoreOffer, leaveCheck = nil, false, nil, nil
+	cancelIgnoreDialog()
+end
+
+local function ensureIgnoreSession()
+	local key = ignoreSessionKey()
+	if not key then
+		return
+	end
+	local saved = QWF.db.partySessions[key]
+	if not ignores or ignores.saved ~= saved then
+		ignores = QWF.QuestIgnores.new(saved)
+		QWF.db.partySessions[key] = ignores.saved
+	end
+	return ignores
+end
+
+local function finishIgnoreOffer(token)
+	if ignoreOffer ~= token or not inParty() or not ignores then
+		return
+	end
+	local session = ignores
+	local entries = session:candidates()
+	session:finishOffer()
+	ignoreOffer = nil
+	if not next(entries) or QWF.db.joinQuestBehavior == "keep" then
+		return
+	end
+	if QWF.db.joinQuestBehavior == "auto" then
+		session:ignore(entries)
+		render("quests_auto_ignored")
+	elseif QWF.Panel.promptIgnore then
+		local dialog = { entries = entries }
+		ignoreDialog = dialog
+		QWF.Panel.promptIgnore(entryCount(entries), function()
+			if ignoreDialog == dialog and ignores == session and inParty() then
+				ignoreDialog = nil
+				session:ignore(session:candidates(entries))
+				render("quests_bulk_ignored")
+			end
+		end, function()
+			if ignoreDialog == dialog then
+				ignoreDialog = nil
+			end
+		end)
+	end
+end
+
+local function beginIgnoreOffer()
+	local previous = ignoreDialog
+	cancelIgnoreDialog()
+	if previous then
+		for id, entry in pairs(previous.entries) do
+			ignores.saved.candidates[id] = entry
+		end
+	end
+	local token = {}
+	ignoreOffer = token
+	-- A member without the addon must not hold the offer open indefinitely.
+	C_Timer.After(8, function()
+		finishIgnoreOffer(token)
+	end)
+end
+
+local function settleIgnoreOffer()
+	local token = ignoreOffer
+	if token and not token.settling and not next(ignores.saved.pending) then
+		token.settling = true
+		C_Timer.After(1, function()
+			finishIgnoreOffer(token)
+		end)
+	end
+end
+
 local function showPanel(groups, complete, notices, trigger)
 	local updating, warnings = false, {}
 	for _, notice in ipairs(notices) do
@@ -792,7 +899,11 @@ local function showPanel(groups, complete, notices, trigger)
 		end
 	end
 	notices = warnings
-	Core.sortGroups(groups, QWF.db.sortMode, previewMode and QWF.Preview.activity or activity)
+	Core.sortGroups(
+		groups,
+		not previewMode and ignoreView and "title" or QWF.db.sortMode,
+		previewMode and QWF.Preview.activity or activity
+	)
 	QWF.Panel.show(
 		groups,
 		complete,
@@ -828,7 +939,32 @@ local function showPanel(groups, complete, notices, trigger)
 			end,
 		},
 		{
-			getAbandonQuestID = not previewMode and getAbandonQuestID or nil,
+			ignoreSession = not previewMode and ignores and ignores.saved or nil,
+			ignoredView = not previewMode and ignoreView == true,
+			ignoredCount = not previewMode and ignores and entryCount(ignores.saved.ignored) or 0,
+			onView = not previewMode and function(ignored)
+				ignoreView = ignored == true
+				render("ignore_view_changed")
+			end or nil,
+			onIgnore = not previewMode and ignores and function(id)
+				ignores:ignoreQuest(id)
+				render("quest_ignored")
+			end or nil,
+			onIgnoreMissing = not previewMode and ignores and function()
+				ignores:ignore(ignores:missingEntries())
+				render("quests_bulk_ignored")
+			end or nil,
+			missingCount = not previewMode and ignores and entryCount(ignores:missingEntries()) or 0,
+			onRestore = not previewMode and ignores and function(id)
+				ignores:restore(id)
+				render("quests_restored")
+			end or nil,
+			undoCount = not previewMode and ignores and entryCount(ignores.undoEntries) or 0,
+			onUndo = not previewMode and ignores and function()
+				ignores:undo()
+				render("ignore_undone")
+			end or nil,
+			getAbandonQuestID = not previewMode and not ignoreView and getAbandonQuestID or nil,
 			onAbandon = not previewMode and requestAbandonQuest or nil,
 			updating = updating,
 			onObjectiveRows = QWF.db.debugMode and function(rows)
@@ -896,6 +1032,7 @@ render = function(trigger)
 		return
 	end
 	if not inParty() then
+		cancelIgnoreDialog()
 		QWF.Panel.hide()
 		recordUIState(false, nil, nil, nil, trigger)
 		recordObjectiveDiagnostics("rows", {}, trigger)
@@ -913,6 +1050,7 @@ render = function(trigger)
 		local quests = peer and peer.quests
 		local status = peer and peerDisplayStatus(peer)
 		roster[#roster + 1] = {
+			key = member.key,
 			name = member.name,
 			quests = quests,
 			syncStatus = status ~= "healthy" and status or nil,
@@ -938,7 +1076,15 @@ render = function(trigger)
 			and C_Map.GetBestMapForUnit
 			and zoneMapID(C_Map.GetBestMapForUnit("player"))
 		or nil
-	local groups, complete, notices = Core.compare(localView, roster, zoneID)
+	local allGroups, complete, notices, allIndices = Core.compare(localView, roster)
+	local groups, indices = allGroups, allIndices
+	if zoneID then
+		groups, complete, notices, indices = Core.compare(localView, roster, zoneID)
+	end
+	if ignores and localSnapshotKnown then
+		ignores:observe(allGroups, allIndices, localView, roster, identity("player"))
+		settleIgnoreOffer()
+	end
 	local selectionDiagnostics = {}
 	if QWF.db.debugMode then
 		local function track(quests)
@@ -957,7 +1103,6 @@ render = function(trigger)
 		for _, member in ipairs(roster) do
 			track(member.quests or {})
 		end
-		local allGroups = zoneID and Core.compare(localView, roster) or groups
 		for _, group in ipairs(allGroups) do
 			selectionDiagnostics[group.questID].result = "zone_filter"
 		end
@@ -992,6 +1137,21 @@ render = function(trigger)
 			end
 		end
 		groups = visible
+	end
+	if ignores then
+		local visible = ignores:filter(groups, indices, roster, identity("player"))
+		if QWF.db.debugMode then
+			local included = {}
+			for _, group in ipairs(visible) do
+				included[group.questID] = true
+			end
+			for _, group in ipairs(groups) do
+				if not included[group.questID] then
+					selectionDiagnostics[group.questID].result = "ignored"
+				end
+			end
+		end
+		groups = ignoreView and ignores:list() or visible
 	end
 	recordObjectiveDiagnostics("selection", selectionDiagnostics, trigger)
 	for _, group in ipairs(groups) do
@@ -1334,6 +1494,7 @@ end
 local function updateRoster(force, trigger)
 	local party = inParty()
 	local nextPeers, nextMembers = {}, {}
+	local rosterPending = false
 	local changed = rosterInParty ~= party
 	if party then
 		local myself = identity("player")
@@ -1341,6 +1502,7 @@ local function updateRoster(force, trigger)
 			local unit = "party" .. index
 			if UnitExists(unit) then
 				local key = identity(unit)
+				rosterPending = rosterPending or not key
 				if key and key ~= myself then
 					local name = isForever and key or UnitName(unit) or key
 					nextMembers[#nextMembers + 1] = { key = key, name = name }
@@ -1366,6 +1528,34 @@ local function updateRoster(force, trigger)
 		end
 	end
 	peers, members = nextPeers, nextMembers
+	if party then
+		leaveCheck = nil
+		local session = ensureIgnoreSession()
+		if session then
+			local keys = {}
+			for _, member in ipairs(members) do
+				keys[member.key] = true
+			end
+			-- Transient empty/unnamed rosters on reload must not turn returning members into new joins.
+			if not rosterPending and #members > 0 then
+				if session:roster(keys) or (not ignoreOffer and next(session.saved.pending)) then
+					beginIgnoreOffer()
+				end
+			end
+		end
+	elseif not IsInGroup() and worldEntered and not leaveCheck then
+		local check = {}
+		leaveCheck = check
+		-- Group information can arrive after the first world/roster event following a reconnect.
+		C_Timer.After(2, function()
+			if leaveCheck == check then
+				leaveCheck = nil
+				if not IsInGroup() then
+					clearIgnoreSession()
+				end
+			end
+		end)
+	end
 	rosterInParty = party
 	if not changed and not force then
 		render(trigger)
@@ -1601,6 +1791,7 @@ frame:RegisterEvent("ADDON_ACTION_BLOCKED")
 frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GROUP_ROSTER_UPDATE")
+frame:RegisterEvent("GROUP_LEFT")
 frame:RegisterEvent("UNIT_CONNECTION")
 frame:RegisterEvent("QUEST_LOG_UPDATE")
 frame:RegisterEvent("BAG_UPDATE_DELAYED")
@@ -1641,7 +1832,15 @@ frame:SetScript("OnEvent", function(_, event, ...)
 				)
 			end
 		end
+	elseif event == "GROUP_LEFT" then
+		clearIgnoreSession()
+		if not IsInGroup() then
+			updateRoster(false, event)
+		end
 	elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
+		if event == "PLAYER_ENTERING_WORLD" then
+			worldEntered = true
+		end
 		updateRoster(event == "PLAYER_ENTERING_WORLD", event)
 	elseif event == "UNIT_CONNECTION" then
 		local unit = ...
@@ -1757,6 +1956,35 @@ then
 		"Uncheck to move and resize the panel. While unlocked, it shows its full maximum height. "
 			.. "The lock icon beside View also toggles this setting. Layout is shared across characters."
 	)
+	if Settings.CreateDropdown and Settings.CreateControlTextContainer then
+		local joinSetting = Settings.RegisterProxySetting(
+			category,
+			addonName .. "JoinQuestBehavior",
+			Settings.VarType.String,
+			"Existing quests when the party changes",
+			"ask",
+			function()
+				return QWF.db.joinQuestBehavior
+			end,
+			function(value)
+				QWF.db.joinQuestBehavior = (value == "auto" or value == "keep") and value or "ask"
+			end
+		)
+		Settings.CreateDropdown(
+			category,
+			joinSetting,
+			function()
+				local options = Settings.CreateControlTextContainer()
+				options:Add("ask", "Ask what to ignore")
+				options:Add("auto", "Automatically ignore existing missing quests")
+				options:Add("keep", "Keep showing all differences")
+				return options:GetData()
+			end,
+			"Applies when you join a party or someone joins. Includes all zones and quest types. "
+				.. "Only existing missing-quest differences are ignored; new pickups and shared progress still appear. "
+				.. "Ignores last until you leave the party and can be restored through View → Ignored quests."
+		)
+	end
 	previewSetting = Settings.RegisterProxySetting(
 		category,
 		addonName .. "PreviewMode",

@@ -7,7 +7,7 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Group related differences by quest.** List affected members beneath a single quest rather than repeating the quest for each member.
 - [ ] **Catch-up explanations.** For missing quests, show whether they can be shared, where to pick them up when known, and any known prerequisites. Explain why sharing is unavailable rather than only omitting the button.
 - [ ] **Quest-chain mismatch detection.** Show when someone is ahead or behind in the same chain instead of reporting unrelated missing quests. Use reliable chain data and handle branches conservatively; this is already envisioned in `PRODUCT.md`.
-- [ ] **Ignore unrelated quests.** Hide individual quests from comparisons temporarily or persistently, reducing noise from profession quests, old campaigns, and solo objectives.
+- [x] **Ignore unrelated quests.** Personal, party-session quest ignores with context-menu and bulk actions, a join-time offer, optional automatic ignoring, undo, and a separate ignored-quests view with individual/bulk restore. Survive reloads/disconnects; reset when you leave the party.
 - [ ] **Subtle transition notifications.** Offer optional alerts for meaningful changes, such as everyone finishing a quest or someone accepting a quest another member is missing. Avoid alerts for every objective update.
 - [x] **Clear connection health.** Distinguish addon not detected, waiting, refreshing, and stale data. Keep cached comparisons visible with their connection status while fresh data arrives; `/qwf` requests a refresh.
 - [x] **Exclude class and profession quests**
@@ -19,3 +19,7 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Redundant counts in the UI**
 - [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.
 - [ ] **Recheck Recipe of the Kaldorei in game.** Confirm x/x counts and spare spider legs before and after turn-in. Post-turn-in stock and targeted Debug-mode diagnostics are implemented; capture `item_stock` entries if counts are still missing.
+- [ ] Issue with delve companion being a party member. Lots of repeated "You aren't in a party" messages in delves
+- [ ] Shaman quest appears shareable
+- [ ] View option for always showing individual progress
+- [ ] View option for showing group progress

@@ -349,9 +349,9 @@ function Core.sortGroups(groups, mode, activity)
 	end)
 end
 
--- Returns quest groups, snapshot completeness, and connection notices outside the quest groups.
+-- Returns quest groups, snapshot completeness, connection notices, and each difference's roster index (0 is You).
 function Core.compare(localQuests, members, zoneID)
-	local groups, notices = {}, {}
+	local groups, notices, playerIndices = {}, {}, {}
 	local complete = true
 	local snapshots = { [0] = localQuests }
 	local reasonOrder = { missing = 1, active = 2, objective = 3, ready = 4, completed = 5 }
@@ -420,6 +420,7 @@ function Core.compare(localQuests, members, zoneID)
 			end
 			group.differences[#group.differences + 1] = difference
 			playerOrder[difference] = playerIndex
+			playerIndices[difference] = playerIndex
 			objectiveOrder[difference] = objectiveIndex or 0
 			if objective then
 				hasObjectives[playerIndex] = true
@@ -550,5 +551,5 @@ function Core.compare(localQuests, members, zoneID)
 		end
 	end
 	Core.sortGroups(groups)
-	return groups, complete, notices
+	return groups, complete, notices, playerIndices
 end
