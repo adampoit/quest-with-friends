@@ -364,8 +364,21 @@ local function snapshotObjectiveDiagnostics(records, quests, sender)
 	end
 end
 
+local function isPlayerPartyMember(unit)
+	return UnitExists(unit) and UnitIsPlayer(unit)
+end
+
 local function inParty()
-	return IsInGroup() and not IsInRaid()
+	if not IsInGroup() or IsInRaid() then
+		return false
+	end
+	-- Delve companions can create a group without a usable PARTY chat channel.
+	for index = 1, 4 do
+		if isPlayerPartyMember("party" .. index) then
+			return true
+		end
+	end
+	return false
 end
 
 local function identity(unit)
@@ -1511,7 +1524,7 @@ local function updateRoster(force, trigger)
 		local myself = identity("player")
 		for index = 1, 4 do
 			local unit = "party" .. index
-			if UnitExists(unit) then
+			if isPlayerPartyMember(unit) then
 				local key = identity(unit)
 				rosterPending = rosterPending or not key
 				if key and key ~= myself then
@@ -1845,7 +1858,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 	elseif event == "GROUP_LEFT" then
 		clearIgnoreSession()
-		if not IsInGroup() then
+		if not inParty() then
 			updateRoster(false, event)
 		end
 	elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then

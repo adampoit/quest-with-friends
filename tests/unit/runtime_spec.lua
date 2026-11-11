@@ -7,6 +7,7 @@ describe("Quest With Friends party sync", function()
 	local captureSettings
 	local registeredEvents, originalDiagnostics, originalPrint
 	local diagnosticGlobals = {
+		"UnitIsPlayer",
 		"QuestMapQuestOptions_AbandonQuest",
 		"GetTime",
 		"InCombatLockdown",
@@ -200,6 +201,9 @@ describe("Quest With Friends party sync", function()
 		end
 		_G.UnitExists = function(unit)
 			return unit == "party1"
+		end
+		_G.UnitIsPlayer = function(unit)
+			return unit == "player" or UnitExists(unit)
 		end
 		_G.UnitName = function(_)
 			return "Julia"

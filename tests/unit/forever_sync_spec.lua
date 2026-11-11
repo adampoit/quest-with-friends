@@ -32,6 +32,7 @@ describe("Quest With Friends two Forever clients", function()
 			env.UnitExists = function(unit)
 				return unit == "player" or unit == "party1"
 			end
+			env.UnitIsPlayer = env.UnitExists
 			env.UnitIsConnected = function()
 				return true
 			end
