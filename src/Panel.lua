@@ -42,6 +42,9 @@ local groupOffsets = {}
 local reflow
 local ignoreActions = {}
 local ignoredView = false
+local UNDO_DURATION = 15
+local undoBatch
+local undoExpiresAt
 local ignorePopupName = (QWF.name or "QuestWithFriends") .. "_IGNORE_QUESTS"
 
 function QWF.Panel.promptIgnore(count, accept, cancel)
@@ -128,9 +131,6 @@ local styles = {
 }
 
 local function scopeText()
-	if ignoredView then
-		return "All zones · All quest types · This party session"
-	end
 	local categories = "Standard quests"
 	if questFilters.professions and questFilters.classes then
 		categories = "All quest types"
@@ -758,8 +758,9 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		groupOffsets = {}
 	end
 	collapsedQuests = presentation.collapsedQuests or QWF.db.collapsedQuests
-	panel.scope:SetText(scopeText())
-	local updating = not isPreview and presentation.updating == true
+	panel.scope:SetShown(not ignoredView)
+	panel.scope:SetText(ignoredView and "" or scopeText())
+	local updating = not isPreview and not ignoredView and presentation.updating == true
 	local comparisonKnown = complete or (updating and #(notices or {}) == 0)
 	local hasDifferences = presentation.hasDifferences
 	if hasDifferences == nil then
@@ -783,8 +784,32 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.status:SetTextColor(0.98, 0.73, 0.40)
 	end
 	onLock = presentation.onLock
+	if not isPreview then
+		-- Batch identity distinguishes another ignore from a routine comparison refresh.
+		if undoBatch ~= presentation.undoBatch then
+			undoBatch = presentation.undoBatch
+			undoExpiresAt = undoBatch and (GetTime() + UNDO_DURATION) or nil
+		end
+		if (presentation.undoCount or 0) == 0 then
+			undoExpiresAt = nil
+		end
+	end
+	if undoExpiresAt and GetTime() >= undoExpiresAt then
+		undoExpiresAt = nil
+	end
+	panel:SetScript("OnUpdate", undoExpiresAt and function(_, elapsed)
+		local action = panel.sessionAction
+		if not isPreview and not ignoredView and action and action:IsShown() and action:IsMouseMotionFocus() then
+			undoExpiresAt = undoExpiresAt + elapsed
+		end
+		if GetTime() >= undoExpiresAt then
+			undoExpiresAt = nil
+			panel:SetScript("OnUpdate", nil)
+			redraw()
+		end
+	end or nil)
 	local showSessionAction = not isPreview
-		and ((ignoredView and #groups > 0) or (not ignoredView and (presentation.undoCount or 0) > 0))
+		and ((ignoredView and #groups > 0) or (not ignoredView and undoExpiresAt ~= nil))
 	if showSessionAction and not panel.sessionAction then
 		panel.sessionAction = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 		panel.sessionAction:SetSize(85, 22)
@@ -801,12 +826,11 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 	end
 	if panel.sessionAction then
 		panel.sessionAction:SetShown(showSessionAction)
-		panel.sessionText:SetShown(showSessionAction)
+		panel.sessionText:SetShown(showSessionAction and not ignoredView)
 		panel.sessionAction:SetText(ignoredView and "Restore all" or "Undo")
 		local undoCount = presentation.undoCount or 0
 		panel.sessionText:SetText(
-			ignoredView and "Ignored only for you"
-				or (undoCount .. (undoCount == 1 and " quest difference ignored" or " quest differences ignored"))
+			undoCount .. (undoCount == 1 and " quest difference ignored" or " quest differences ignored")
 		)
 	end
 	if showPreviewNotice and stopPreview then
@@ -863,7 +887,7 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 				panel.status:SetPoint("LEFT", panel, "BOTTOMLEFT", PANEL_INSET, footerCenter)
 			end
 		else
-			panel.status:SetWidth(width - 2 * PANEL_INSET)
+			panel.status:SetWidth(width - 2 * PANEL_INSET - (ignoredView and showSessionAction and 93 or 0))
 			panel.status:SetPoint("TOPLEFT", PANEL_INSET, -STATUS_Y)
 		end
 		-- Reserve activity space even when idle so routine updates never rewrap the scope or move quest rows.
@@ -873,8 +897,14 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		panel.scope:SetPoint("TOPLEFT", PANEL_INSET, -scopeY)
 		panel.updating:ClearAllPoints()
 		panel.updating:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PANEL_INSET, -scopeY)
-		local headerHeight = scopeY + math.max(15, panel.scope:GetStringHeight()) + HEADER_BODY_GAP
-		if showSessionAction then
+		local headerHeight = scopeY
+			+ (ignoredView and 0 or math.max(15, panel.scope:GetStringHeight()))
+			+ HEADER_BODY_GAP
+		if showSessionAction and ignoredView then
+			panel.sessionAction:ClearAllPoints()
+			panel.sessionAction:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PANEL_INSET, -STATUS_Y)
+			headerHeight = math.max(headerHeight, STATUS_Y + 22 + HEADER_BODY_GAP)
+		elseif showSessionAction then
 			panel.sessionText:ClearAllPoints()
 			panel.sessionText:SetPoint("TOPLEFT", PANEL_INSET, -headerHeight - 4)
 			panel.sessionText:SetWidth(width - 2 * PANEL_INSET - 93)

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Dismiss the main panel's ignore notice and **Undo** button after 15 seconds, pausing while hovered or focused and restarting for each new ignore batch. Keep the ignored count and **View → Ignored quests** restoration available without a time limit.
 - Ignore delve companions and other NPC party members when comparing quests and syncing. NPC-only groups no longer trigger repeated PARTY message attempts; real players in mixed groups continue syncing normally.
 - Add **View → Objective progress** choices: **When anyone finishes** (current default), **When I finish**, and **Always**. When I finish hides entire objective rows, including your own, until you finish that objective, without a Still in progress substitute; independent quest statuses stay visible. Always adds individual shared-objective counts even before anyone finishes. Save the choice across reloads and characters, apply it to preview, and keep informational counts independent of party-sync status.
 - Add personal party-session quest ignores: right-click **Ignore quest**, bulk-ignore missing differences across all filters, undo the latest batch, and restore quests individually or together in **View → Ignored quests**. Ignores survive reloads/disconnects and reset when you leave; an originally missing player's pickup restores the quest.

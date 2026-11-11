@@ -982,6 +982,7 @@ local function showPanel(groups, complete, notices, trigger)
 				ignores:restore(id)
 				render("quests_restored")
 			end or nil,
+			undoBatch = not previewMode and ignores and ignores.undoEntries or nil,
 			undoCount = not previewMode and ignores and entryCount(ignores.undoEntries) or 0,
 			onUndo = not previewMode and ignores and function()
 				ignores:undo()

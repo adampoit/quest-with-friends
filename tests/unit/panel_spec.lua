@@ -1,6 +1,7 @@
 describe("Quest With Friends panel", function()
 	local panel, buttons, fontStrings, textures, panelFontCount
 	local contextMenu, originalMenuUtil
+	local now, originalGetTime
 
 	local function widget()
 		local w = {}
@@ -69,6 +70,9 @@ describe("Quest With Friends panel", function()
 		end
 		function w:IsShown()
 			return self.shown == true
+		end
+		function w:IsMouseMotionFocus()
+			return self.motionFocus == true
 		end
 		function w:SetPoint(point, relativeTo, relativePoint, x, y)
 			self.point = { point, relativePoint, x, y }
@@ -259,7 +263,23 @@ describe("Quest With Friends panel", function()
 		}
 	end
 
+	local function advance(seconds)
+		now = now + seconds
+		if panel:IsShown() and panel.OnUpdate then
+			panel.OnUpdate(panel, seconds)
+		end
+	end
+
+	local function undoPresentation(onUndo)
+		return { undoBatch = {}, undoCount = 12, ignoredCount = 12, onUndo = onUndo }
+	end
+
 	before_each(function()
+		originalGetTime = _G.GetTime
+		now = 0
+		rawset(_G, "GetTime", function()
+			return now
+		end)
 		originalMenuUtil = _G.MenuUtil
 		contextMenu = nil
 		_G.MenuUtil = {
@@ -313,6 +333,7 @@ describe("Quest With Friends panel", function()
 
 	after_each(function()
 		_G.MenuUtil = originalMenuUtil
+		_G.GetTime = originalGetTime
 	end)
 
 	it("offers personal ignore actions alongside abandonment and guards retained callbacks", function()
@@ -393,7 +414,10 @@ describe("Quest With Friends panel", function()
 		local ignored = { questID = 42, title = "Old quest", ignored = true, differences = {} }
 		QuestWithFriends.Panel.show({ ignored }, true, true, nil, nil, nil, nil, presentation)
 		assert.are.equal("Ignored quests (1)", panel.status.text)
-		assert.are.equal("All zones · All quest types · This party session", panel.scope.text)
+		assert.is_false(panel.scope.shown)
+		assert.is_false(panel.sessionText.shown)
+		assert.are.equal("Restore all", panel.sessionAction.text)
+		assert.same({ "TOPRIGHT", "TOPRIGHT", -14, -36 }, panel.sessionAction.point)
 		assert.are.equal(2, #panel.filter.entries)
 		assert.are.equal("Ignored quests (1)", panel.filter.entries[2].text)
 		assert.is_true(panel.filter.entries[2].isSelected())
@@ -427,10 +451,45 @@ describe("Quest With Friends panel", function()
 		assert.is_true(empty)
 	end)
 
+	it("reclaims ignored-view labels and restores live scope and undo text when switching back", function()
+		loadPanel()
+		local presentation = undoPresentation()
+		presentation.updating = true
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, presentation)
+		local liveTop = panel.scroll.points.TOPLEFT[4]
+		assert.is_true(panel.scope.shown)
+		assert.is_true(panel.sessionText.shown)
+		assert.is_true(panel.updating.shown)
+
+		presentation.ignoredView = true
+		local ignored = { questID = 42, title = "Old quest", ignored = true, differences = {} }
+		QuestWithFriends.Panel.show({ ignored }, true, true, nil, nil, nil, nil, presentation)
+		assert.is_false(panel.scope.shown)
+		assert.is_false(panel.sessionText.shown)
+		assert.is_false(panel.updating.shown)
+		assert.is_true(panel.scroll.points.TOPLEFT[4] > liveTop)
+		local ignoredTop = panel.scroll.points.TOPLEFT[4]
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		assert.is_false(panel.scope.shown)
+		assert.is_false(panel.sessionText.shown)
+		assert.is_false(panel.sessionAction.shown)
+		assert.is_true(panel.scroll.points.TOPLEFT[4] >= ignoredTop)
+
+		presentation.ignoredView = false
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, presentation)
+		assert.is_true(panel.scope.shown)
+		assert.are.equal("Current zone · Standard quests · 12 ignored", panel.scope.text)
+		assert.is_true(panel.sessionText.shown)
+		assert.are.equal("12 quest differences ignored", panel.sessionText.text)
+		assert.are.equal("Undo", panel.sessionAction.text)
+		assert.are.equal(liveTop, panel.scroll.points.TOPLEFT[4])
+	end)
+
 	it("shows an immediate undo action without putting it inside the scrolling list", function()
 		loadPanel()
 		local undone = false
 		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, {
+			undoBatch = {},
 			undoCount = 12,
 			onUndo = function()
 				undone = true
@@ -443,6 +502,119 @@ describe("Quest With Friends panel", function()
 		panel.sessionAction.OnClick()
 		assert.is_true(undone)
 		assert.is_not_nil(panel.scope.text:find("12 ignored", 1, true))
+	end)
+
+	it("dismisses undo after 15 seconds and reclaims its space without removing restore access", function()
+		loadPanel()
+		local presentation = undoPresentation()
+		presentation.onView = function() end
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, presentation)
+		local pinned = panel.scroll.points.TOPLEFT[4]
+		advance(14)
+		assert.is_true(panel.sessionAction.shown)
+		advance(1)
+		assert.is_false(panel.sessionAction.shown)
+		assert.is_false(panel.sessionText.shown)
+		assert.is_nil(panel.OnUpdate)
+		assert.is_true(panel.scroll.points.TOPLEFT[4] > pinned)
+		assert.is_not_nil(panel.scope.text:find("12 ignored", 1, true))
+		assert.are.equal("Ignored quests (12)", panel.filter.entries[2].text)
+		QuestWithFriends.Panel.show({ group(42) }, true, true, nil, nil, nil, nil, presentation)
+		assert.is_false(panel.sessionAction.shown)
+	end)
+
+	it("does not restart undo on refresh or when part of the batch is restored", function()
+		loadPanel()
+		local presentation = undoPresentation()
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		advance(10)
+		local refreshed = {}
+		for key, value in pairs(presentation) do
+			refreshed[key] = value
+		end
+		refreshed.undoCount = 11
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, refreshed)
+		assert.are.equal("11 quest differences ignored", panel.sessionText.text)
+		advance(5)
+		assert.is_false(panel.sessionAction.shown)
+	end)
+
+	it("restarts undo for another batch of the same size and uses its current callback", function()
+		loadPanel()
+		local presentation = undoPresentation(function()
+			error("Must not undo an earlier batch")
+		end)
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		advance(14)
+		local undone = false
+		presentation = undoPresentation(function()
+			undone = true
+		end)
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		advance(1)
+		assert.is_true(panel.sessionAction.shown)
+		panel.sessionAction.OnClick()
+		assert.is_true(undone)
+		advance(14)
+		assert.is_false(panel.sessionAction.shown)
+	end)
+
+	it("pauses undo dismissal while the button is hovered or focused", function()
+		loadPanel()
+		local presentation = undoPresentation()
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		advance(14)
+		panel.sessionAction.motionFocus = true
+		advance(20)
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		assert.is_true(panel.sessionAction.shown)
+		panel.sessionAction.motionFocus = false
+		advance(1)
+		assert.is_false(panel.sessionAction.shown)
+	end)
+
+	it("never times out Restore all or revives undo after visiting the ignored view", function()
+		loadPanel()
+		local presentation = undoPresentation()
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		presentation.ignoredView = true
+		local ignored = { questID = 42, title = "Old quest", ignored = true, differences = {} }
+		QuestWithFriends.Panel.show({ ignored }, true, true, nil, nil, nil, nil, presentation)
+		panel.sessionAction.motionFocus = true
+		advance(20)
+		assert.is_true(panel.sessionAction.shown)
+		assert.are.equal("Restore all", panel.sessionAction.text)
+		presentation.ignoredView = false
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		assert.is_false(panel.sessionAction.shown)
+	end)
+
+	it("does not revive expired undo after hiding the panel or entering preview", function()
+		loadPanel()
+		local presentation = undoPresentation()
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		QuestWithFriends.Panel.hide()
+		advance(20)
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		assert.is_false(panel.sessionAction.shown)
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, { preview = true })
+		QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+		assert.is_false(panel.sessionAction.shown)
+	end)
+
+	it("clears undo when the batch is fully restored or the party session ends", function()
+		for _, endSession in ipairs({ false, true }) do
+			loadPanel()
+			local presentation = undoPresentation()
+			QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+			presentation.undoCount = 0
+			if endSession then
+				presentation.undoBatch = nil
+			end
+			QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, presentation)
+			assert.is_false(panel.sessionAction.shown)
+			assert.is_nil(panel.OnUpdate)
+		end
 	end)
 
 	it("uses a native popup whose accept and cancel callbacks carry their own data", function()
