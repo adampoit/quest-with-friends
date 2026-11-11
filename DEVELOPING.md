@@ -102,6 +102,18 @@ Unit tests verify eligibility, variant resolution, retained menu callbacks, prev
 - Repeat with the quest log closed/open, in combat and out of combat, and with minimal/normal addon configurations; check for Lua and security errors. Include controller mode on Forever, whose native helper includes gamepad-specific handling.
 - Verify both party panels refresh after confirmed abandonment. Canceling must not change either quest log.
 
+## Objective-progress view validation
+
+`tests/unit/objective_progress_spec.lua` covers the default comparison, informational counts, per-objective local completion, gating entire objective rows including your own, independent quest-state fallbacks, deduplication, unknown members, incompatible targets/variants, completion history, spare metadata, zones and ignores. Runtime and panel tests cover saved choices, invalid-value recovery, preview, category filters, collapse summaries and independent party status; the simulator exercises the native radios against preview samples.
+
+Before release, check **View → Objective progress** on Retail and Forever:
+
+- Start with nobody finished, then finish one objective on a friend and on yourself. Check all three modes, including multiple objectives with different completion states.
+- Verify **Always** can show equal unfinished counts alongside **Party in sync**, while **When I finish** hides objective rows entirely until you finish that objective, without adding **Still in progress**. With no other visible differences, it should show **Party in sync**. Missing quests and independent readiness/completion notices must remain visible.
+- Check ready/turned-in quests, spare items, missing quests, unknown/offline members and reviewed variants. Never invent unavailable counts.
+- Toggle zone/category filters, ignore/restore a quest, collapse headings, resize and scroll. Pure tracking headings should say **N tracking**; informational-only players must not inflate affected-player summaries.
+- Reload and switch characters to verify account-wide persistence. Test appearance preview and the synchronized screenshot scenario: informational rows may appear without changing its sync status.
+
 ## Party-session ignore validation
 
 `tests/unit/quest_ignores_spec.lua` covers personal whole-quest and missing-row ignores, baseline capture, canonical variants, pickup restoration, undo and restore. Runtime tests cover all-filter bulk actions, settings, saved sessions across reload/disconnect, and leaving. Clocked Retail/Forever tests cover multiple joins, combining an unanswered offer with a subsequent join, the eight-second unknown-member deadline and reconnect suppression. Simulator tests exercise the native setting, popup buttons, context menu and ignored-view restore controls.

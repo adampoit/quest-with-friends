@@ -18,8 +18,5 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Offline member handling.** Show a distinct Offline notice, retain cached comparisons, and resume syncing automatically on reconnection.
 - [x] **Redundant counts in the UI**
 - [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.
-- [ ] **Recheck Recipe of the Kaldorei in game.** Confirm x/x counts and spare spider legs before and after turn-in. Post-turn-in stock and targeted Debug-mode diagnostics are implemented; capture `item_stock` entries if counts are still missing.
 - [ ] Issue with delve companion being a party member. Lots of repeated "You aren't in a party" messages in delves
-- [ ] Shaman quest appears shareable
-- [ ] View option for always showing individual progress
-- [ ] View option for showing group progress
+- [x] **Objective progress views.** Choose When anyone finishes (default), When I finish, or Always. Preserve actionable party status independently of informational counts; persist the choice and support preview.

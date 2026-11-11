@@ -76,6 +76,21 @@ describe("Quest With Friends sample data", function()
 		}, groups[-4].differences)
 	end)
 
+	it("shows extra unfinished sample counts only in Always and preserves synced sample status", function()
+		local groups = Preview.compare(true, false, false, nil, "always")
+		local found = false
+		for _, group in ipairs(groups) do
+			for _, row in ipairs(group.differences) do
+				found = found or (row.objective and row.objective.text == "Gnoll camps cleared")
+			end
+		end
+		assert.is_true(found)
+		assert.is_true(QuestWithFriends.Core.hasDifferences(groups))
+		groups = Preview.compare(true, true, true, "synced", "always")
+		assert.is_true(#groups > 0)
+		assert.is_false(QuestWithFriends.Core.hasDifferences(groups))
+	end)
+
 	it("compares a truly synchronized sample party under every filter combination", function()
 		for _, zone in ipairs({ false, true }) do
 			for _, professions in ipairs({ false, true }) do

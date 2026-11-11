@@ -77,6 +77,9 @@ local function initializeSettings()
 	if QWF.db.sortMode ~= "title" then
 		QWF.db.sortMode = "smart"
 	end
+	if QWF.db.objectiveProgress ~= "self" and QWF.db.objectiveProgress ~= "always" then
+		QWF.db.objectiveProgress = "anyone"
+	end
 	if QWF.db.zoneFilter == nil then
 		QWF.db.zoneFilter = true
 	end
@@ -695,7 +698,7 @@ local function recordUIState(visible, groups, complete, notices, trigger, updati
 		or (previewMode and not screenshotMode and "preview")
 		or (not previewMode and ignoreView and "ignored")
 		or (not complete and not (updating and #notices == 0) and "incomplete")
-		or (#groups == 0 and "in_sync" or "out_of_sync")
+		or (not Core.hasDifferences(groups or {}) and "in_sync" or "out_of_sync")
 	local scenario = screenshotMode and screenshotScenario or nil
 	local previous = displayedPanel
 	if not previous or previous.visible ~= visible then
@@ -729,6 +732,7 @@ local function recordUIState(visible, groups, complete, notices, trigger, updati
 			zoneFilter = QWF.db.zoneFilter,
 			showProfessionQuests = QWF.db.showProfessionQuests,
 			showClassQuests = QWF.db.showClassQuests,
+			objectiveProgress = QWF.db.objectiveProgress,
 		})
 		displayedPanel =
 			{ visible = visible, status = status, mode = mode, scenario = scenario, since = now, updating = updating }
@@ -939,6 +943,12 @@ local function showPanel(groups, complete, notices, trigger)
 			end,
 		},
 		{
+			hasDifferences = Core.hasDifferences(groups),
+			objectiveProgress = QWF.db.objectiveProgress,
+			onObjectiveProgress = function(mode)
+				QWF.db.objectiveProgress = (mode == "self" or mode == "always") and mode or "anyone"
+				render("objective_progress_changed")
+			end,
 			ignoreSession = not previewMode and ignores and ignores.saved or nil,
 			ignoredView = not previewMode and ignoreView == true,
 			ignoredCount = not previewMode and ignores and entryCount(ignores.saved.ignored) or 0,
@@ -1026,7 +1036,8 @@ render = function(trigger)
 			QWF.db.zoneFilter,
 			QWF.db.showProfessionQuests,
 			QWF.db.showClassQuests,
-			screenshotMode and screenshotScenario or nil
+			screenshotMode and screenshotScenario or nil,
+			QWF.db.objectiveProgress
 		)
 		showPanel(groups, complete, notices, trigger)
 		return
@@ -1076,10 +1087,10 @@ render = function(trigger)
 			and C_Map.GetBestMapForUnit
 			and zoneMapID(C_Map.GetBestMapForUnit("player"))
 		or nil
-	local allGroups, complete, notices, allIndices = Core.compare(localView, roster)
+	local allGroups, complete, notices, allIndices = Core.compare(localView, roster, nil, QWF.db.objectiveProgress)
 	local groups, indices = allGroups, allIndices
 	if zoneID then
-		groups, complete, notices, indices = Core.compare(localView, roster, zoneID)
+		groups, complete, notices, indices = Core.compare(localView, roster, zoneID, QWF.db.objectiveProgress)
 	end
 	if ignores and localSnapshotKnown then
 		ignores:observe(allGroups, allIndices, localView, roster, identity("player"))

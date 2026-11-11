@@ -9,6 +9,7 @@ test("TOC loads the addon and registers its slash command", function()
 	assertFalse(QuestWithFriendsDB.showProfessionQuests)
 	assertFalse(QuestWithFriendsDB.showClassQuests)
 	assertEquals("smart", QuestWithFriendsDB.sortMode)
+	assertEquals("anyone", QuestWithFriendsDB.objectiveProgress)
 end)
 
 test("native debug setting shares the persistent slash-command preference", function()
@@ -663,6 +664,42 @@ partyTest("profession and class menu choices independently filter snapshot class
 	assertTrue(panel.filter:IsMenuOpen())
 	panel.filter:CloseMenu()
 	assertFalse(panel.filter:IsMenuOpen())
+end)
+
+test("native objective progress choices update preview counts and preserve quest statuses", function()
+	A_Admin.SetPartySize(0)
+	QuestWithFriendsDB.objectiveProgress = "anyone"
+	QuestWithFriendsDB.collapsedQuests = {}
+	SlashCmdList.QUESTWITHFRIENDS("preview on")
+	local ok, err = pcall(function()
+		local _, default = filterChoice("When anyone finishes")
+		assertTrue(default:IsSelected())
+		chooseFilter("Always")
+		assertEquals("always", QuestWithFriendsDB.objectiveProgress)
+		assertContains(panelTexts(), "You: Gnoll camps cleared 1/4")
+		assertContains(panelTexts(), "Alex: Gnoll camps cleared 2/4")
+		local _, always = filterChoice("Always")
+		assertTrue(always:IsSelected())
+		chooseFilter("When I finish")
+		assertEquals("self", QuestWithFriendsDB.objectiveProgress)
+		assertContains(panelTexts(), "Alex: Gnolls slain 5/8")
+		assertContains(panelTexts(), "Alex: Ready to turn in")
+		for _, text in ipairs(panelTexts()) do
+			assertFalse(text == "You: Still in progress")
+			assertFalse(text == "Sam: Still in progress")
+			assertFalse(text == "Sam: Scouts rescued 0/1")
+			assertFalse(text == "You: Scouts rescued 0/1")
+			assertFalse(text == "You: Gnoll camps cleared 1/4")
+		end
+		chooseFilter("When anyone finishes")
+		assertEquals("anyone", QuestWithFriendsDB.objectiveProgress)
+		assertContains(panelTexts(), "Sam: Scouts rescued 0/1")
+	end)
+	QuestWithFriendsDB.objectiveProgress = "anyone"
+	SlashCmdList.QUESTWITHFRIENDS("preview off")
+	if not ok then
+		error(err)
+	end
 end)
 
 partyTest("native sort radios switch between recent activity and alphabetical order", function(quests)

@@ -671,6 +671,92 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal("smart", view.presentation.sortMode)
 	end)
 
+	it("persists objective-progress choices across reloads and applies them to preview", function()
+		party = false
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("anyone", view.presentation.objectiveProgress)
+		view.presentation.onObjectiveProgress("always")
+		assert.are.equal("always", QuestWithFriendsDB.objectiveProgress)
+		local found = false
+		for _, group in ipairs(view.groups) do
+			for _, row in ipairs(group.differences) do
+				found = found or (row.objective and row.objective.text == "Gnoll camps cleared")
+			end
+		end
+		assert.is_true(found)
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("always", view.presentation.objectiveProgress)
+		view.presentation.onObjectiveProgress("self")
+		assert.are.equal("self", QuestWithFriendsDB.objectiveProgress)
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("self", view.presentation.objectiveProgress)
+		QuestWithFriendsDB.objectiveProgress = "invalid"
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		SlashCmdList.QUESTWITHFRIENDS("preview")
+		assert.are.equal("anyone", view.presentation.objectiveProgress)
+	end)
+
+	it("changes displayed counts without sending snapshots or inventing sync differences", function()
+		objectives[1] = { { text = "Gnolls", numFulfilled = 3, numRequired = 8 } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local remote = {
+			[1] = { title = "Quest 1", state = "active", objectives = { { text = "Gnolls", have = 5, need = 8 } } },
+		}
+		receiveSnapshot(remote, 1)
+		flush()
+		assert.same({}, view.groups)
+		local sent = #messages
+		view.presentation.onObjectiveProgress("always")
+		assert.are.equal(2, #view.groups[1].differences)
+		assert.is_false(view.presentation.hasDifferences)
+		flush()
+		assert.are.equal(sent, #messages)
+		remote[1].objectives[1].have = 8
+		receiveSnapshot(remote, 2)
+		assert.is_true(view.presentation.hasDifferences)
+		view.presentation.onObjectiveProgress("self")
+		assert.is_false(view.presentation.hasDifferences)
+		assert.same({}, view.groups)
+		view.presentation.onObjectiveProgress("anyone")
+		assert.are.equal(3, view.groups[1].differences[1].objective.have)
+		assert.are.equal("anyone", QuestWithFriendsDB.objectiveProgress)
+	end)
+
+	it("keeps informational progress subject to zone, category and whole-quest ignores", function()
+		objectives[1] = { { text = "Gnolls", numFulfilled = 3, numRequired = 8 } }
+		questMaps[1] = 202
+		tags[1] = { worldQuestType = 1 }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({
+			[1] = {
+				title = "Quest 1",
+				state = "active",
+				mapID = 202,
+				objectives = { { text = "Gnolls", have = 5, need = 8 } },
+			},
+		}, 1)
+		view.presentation.onObjectiveProgress("always")
+		assert.same({}, view.groups)
+		view.toggle()
+		assert.same({}, view.groups)
+		view.filters.toggleProfessions()
+		assert.are.equal(1, #view.groups)
+		assert.is_false(view.presentation.hasDifferences)
+		view.presentation.onIgnore(1)
+		assert.same({}, view.groups)
+		view.presentation.onView(true)
+		assert.are.equal(1, #view.groups)
+		assert.is_true(view.presentation.ignoredView)
+		view.presentation.onRestore(1)
+		view.presentation.onView(false)
+		assert.are.equal(1, #view.groups)
+		assert.is_false(view.presentation.hasDifferences)
+	end)
+
 	local function foreverNames(names)
 		rawset(_G, "UnitFullName", function(unit)
 			return unpack(names[unit] or {})

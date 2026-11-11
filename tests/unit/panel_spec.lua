@@ -190,6 +190,9 @@ describe("Quest With Friends panel", function()
 				function entry:SetEnabled(enabled)
 					self.enabled = enabled
 				end
+				function entry:SetTooltip(callback)
+					self.tooltip = callback
+				end
 				entries[#entries + 1] = entry
 				return entry
 			end
@@ -619,7 +622,7 @@ describe("Quest With Friends panel", function()
 		assert.are.equal("Party in sync", panel.status.text)
 		panel.filter:OpenMenu()
 		local entries = panel.filter.entries
-		assert.are.equal(5, #entries)
+		assert.are.equal(8, #entries)
 		assert.are.equal("Current zone only", entries[1].text)
 		assert.are.equal("Show profession quests", entries[2].text)
 		assert.are.equal("Show class quests", entries[3].text)
@@ -658,7 +661,7 @@ describe("Quest With Friends panel", function()
 		end
 		show()
 		panel.filter:OpenMenu()
-		assert.same({ "Show", "Sort by" }, panel.filter.menuTitles)
+		assert.same({ "Show", "Sort by", "Objective progress" }, panel.filter.menuTitles)
 		local smart, title = panel.filter.entries[4], panel.filter.entries[5]
 		assert.are.equal("Smart", smart.text)
 		assert.are.equal("Title A–Z", title.text)
@@ -674,6 +677,75 @@ describe("Quest With Friends panel", function()
 		panel.filter.entries[4].responder()
 		assert.are.equal("smart", mode)
 		assert.is_true(panel.filter.entries[4].isSelected())
+	end)
+
+	it("offers exclusive objective-progress radios with tooltips and redraws the selection", function()
+		loadPanel()
+		local mode = "anyone"
+		local function show()
+			QuestWithFriends.Panel.show({}, true, true, nil, nil, nil, nil, {
+				objectiveProgress = mode,
+				onObjectiveProgress = function(selected)
+					mode = selected
+					show()
+				end,
+			})
+		end
+		show()
+		panel.filter:OpenMenu()
+		for offset, label in ipairs({ "When anyone finishes", "When I finish", "Always" }) do
+			local entry = panel.filter.entries[5 + offset]
+			assert.are.equal(label, entry.text)
+			assert.are.equal("radio", entry.kind)
+			assert.is_true(entry.enabled)
+			assert.is_function(entry.tooltip)
+		end
+		assert.is_true(panel.filter.entries[6].isSelected())
+		for offset, expected in ipairs({ "self", "always", "anyone" }) do
+			local index = ({ 7, 8, 6 })[offset]
+			panel.filter.entries[index].responder()
+			assert.are.equal(expected, mode)
+			for other = 6, 8 do
+				assert.are.equal(other == index, panel.filter.entries[other].isSelected())
+			end
+		end
+	end)
+
+	it("renders informational counts without changing party status or collapsed affected counts", function()
+		loadPanel()
+		local tracking = group(42, {
+			{
+				player = "You",
+				kind = "progress",
+				reason = "objective",
+				informational = true,
+				objective = { text = "Gnolls", have = 3, need = 8 },
+			},
+			{
+				player = "Julia",
+				kind = "progress",
+				reason = "objective",
+				informational = true,
+				objective = { text = "Gnolls", have = 2, need = 8 },
+			},
+		})
+		QuestWithFriends.Panel.show({ tracking }, true, true, nil, nil, nil, nil, { hasDifferences = false })
+		assert.are.equal("Party in sync", panel.status.text)
+		local found = false
+		for _, text in ipairs(fontStrings) do
+			found = found or (text.shown and text.text == "You: Gnolls 3/8")
+		end
+		assert.is_true(found)
+		QuestWithFriendsDB.collapsedQuests[42] = true
+		QuestWithFriends.Panel.show({ tracking }, true, true, nil, nil, nil, nil, { hasDifferences = false })
+		assert.are.equal("2 tracking", fontStrings[4].toggleButton.summary.text)
+		tracking.differences[2].informational = nil
+		tracking.differences[2].kind = "needs"
+		QuestWithFriends.Panel.show({ tracking }, true, true, nil, nil, nil, nil, { hasDifferences = true })
+		assert.are.equal("Party out of sync", panel.status.text)
+		assert.are.equal("1 needs progress", fontStrings[4].toggleButton.summary.text)
+		QuestWithFriends.Panel.show({ tracking }, false, true, nil, nil, nil, nil, { hasDifferences = false })
+		assert.are.equal("Party status incomplete", panel.status.text)
 	end)
 
 	it("summarizes every zone and category combination without changing status", function()

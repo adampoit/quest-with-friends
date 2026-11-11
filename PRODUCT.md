@@ -56,6 +56,14 @@ The same dropdown has a **Sort by** section with two radio choices:
 - **Smart** (default): missing quests first, with most recently active quests first within both groups.
 - **Title A–Z**: alphabetical, without missing-first priority.
 
+An **Objective progress** section offers three radio choices, saved account-wide:
+
+- **When anyone finishes** (default): retain the actionable comparison described below.
+- **When I finish**: show objective counts, including your own, only after you finish that particular objective. Missing/readiness/completion notices remain visible. Ready-to-turn-in or known-completed local quests qualify where comparisons are reliable. Remove hidden objective rows entirely without substituting **Still in progress**. Omit empty quest groups; preserve independently generated quest-state notices and existing state-only fallbacks when usable counts are unavailable.
+- **Always**: add everyone's known counts on comparable shared objectives while anyone still needs them, including equal counts and objectives nobody has finished. Do not fabricate missing counts or compare state-only variants numerically. Keep fully finished objectives quiet.
+
+Extra tracking rows are informational, not actionable differences. Party status is computed from visible non-informational rows after the objective-progress rule, filters and ignores. Hidden objective rows in When I finish do not count toward status; independent quest-state differences remain actionable. Informational counts use muted styling. Collapsed headings count affected players without including informational-only participants; purely informational headings say **N tracking**. The progress choice applies to appearance preview and screenshot samples as well, with unfinished sample objectives demonstrating Always.
+
 Smart activity comes from actual pickups, objective changes, readiness, completion or abandonment by you or a party member, not refreshes or unchanged snapshots. Initial snapshots establish a baseline. Activity is session-only and tracked even for filtered or currently synchronized quests. Equal or unknown activity uses title and quest ID as tie-breakers. The sort choice persists across sessions; preview demonstrates the same choices using fixed sample activity.
 
 ### Ignore existing differences for a party session
