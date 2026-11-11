@@ -25,7 +25,7 @@ local function network(game, size, minorVersions)
 		error("Timer queue did not settle")
 	end
 	for index, name in ipairs(n.names) do
-		local c = { quests = {}, attempts = {}, logs = {}, party = true, units = {}, offline = {} }
+		local c = { quests = {}, attempts = {}, logs = {}, party = true, units = {}, offline = {}, companions = {} }
 		n.clients[index] = c
 		for peerIndex in ipairs(n.names) do
 			if peerIndex ~= index then
@@ -60,6 +60,9 @@ local function network(game, size, minorVersions)
 			return unit == "player" and index or c.units[tonumber(unit:match("^party(%d+)$"))]
 		end
 		env.UnitFullName = function(unit)
+			if c.companions[unit] then
+				return c.companions[unit]
+			end
 			local member = n.names[unitIndex(unit)]
 			if member then
 				return member.first, game == "forever" and member.last or "Realm"
@@ -67,7 +70,10 @@ local function network(game, size, minorVersions)
 		end
 		env.UnitName = env.UnitFullName
 		env.UnitExists = function(unit)
-			return unitIndex(unit) ~= nil
+			return c.companions[unit] ~= nil or unitIndex(unit) ~= nil
+		end
+		env.UnitIsPlayer = function(unit)
+			return not c.companions[unit] and unitIndex(unit) ~= nil
 		end
 		env.UnitIsConnected = function(unit)
 			return not c.offline[unitIndex(unit)]
@@ -304,6 +310,87 @@ end
 
 for _, game in ipairs({ "retail", "forever" }) do
 	describe("Quest With Friends reliable sync on " .. game, function()
+		it("does not send party messages or display NPC-only groups", function()
+			local n = network(game, 1)
+			local a = n.clients[1]
+			a.companions.party1 = "Delve Companion"
+			a.sendResult = function()
+				return 9
+			end
+			n:join()
+			for _ = 1, 3 do
+				a:fire("GROUP_ROSTER_UPDATE")
+				a:fire("QUEST_LOG_UPDATE")
+				a.env.SlashCmdList.QUESTWITHFRIENDS("")
+				n:advance(30)
+			end
+			assert.same({}, a.attempts)
+			assert.is_true(a.view.hidden)
+		end)
+
+		it("syncs real players without treating companions as addon peers", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.companions.party2 = "Delve Companion"
+			b.companions.party2 = "Delve Companion"
+			n:join()
+			n:advance(5)
+			assert.is_true(a.view.complete)
+			assert.is_true(b.view.complete)
+			assert.same({}, a.view.notices)
+			assert.same({}, b.view.notices)
+			local attempts = #a.attempts
+			a.companions.party2 = nil
+			a:fire("GROUP_ROSTER_UPDATE")
+			n:advance(5)
+			a.companions.party2 = "Delve Companion"
+			a:fire("GROUP_ROSTER_UPDATE")
+			n:advance(30)
+			assert.are.equal(attempts, #a.attempts)
+			assert.is_true(a.view.complete)
+		end)
+
+		it("rechecks player membership before queued sends and resumes when a player joins", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			n:join()
+			a.units = {}
+			a.companions.party1 = "Delve Companion"
+			b.party = false
+			-- The send timer can run before the next roster event.
+			n:advance(5)
+			assert.same({}, a.attempts)
+			a:fire("GROUP_ROSTER_UPDATE")
+			assert.is_true(a.view.hidden)
+			a.companions = {}
+			a.units = { 2 }
+			b.party = true
+			a:fire("GROUP_ROSTER_UPDATE")
+			b:fire("GROUP_ROSTER_UPDATE")
+			n:advance(5)
+			assert.is_true(#a.attempts > 0)
+			assert.is_true(a.view.complete)
+			assert.is_true(b.view.complete)
+		end)
+
+		it("stops failed-send retries when only a companion remains", function()
+			local n = network(game)
+			local a, b = unpack(n.clients)
+			a.sendResult = function()
+				return 9
+			end
+			n:join()
+			n:advance(0.5)
+			assert.are.equal(1, #a.attempts)
+			a.units = {}
+			a.companions.party1 = "Delve Companion"
+			b.party = false
+			a:fire("GROUP_LEFT")
+			n:advance(60)
+			assert.are.equal(1, #a.attempts)
+			assert.is_true(a.view.hidden)
+		end)
+
 		it("logs displayed unknown, waiting, incompatible and oversized transitions once", function()
 			local n = network(game)
 			local a, b = unpack(n.clients)
@@ -1374,8 +1461,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			assert.are.equal("offline", a.view.notices[1].reason)
 			a.units = {}
 			a:fire("GROUP_ROSTER_UPDATE")
-			assert.same({}, a.view.notices)
-			assert.is_true(a.view.complete)
+			assert.is_true(a.view.hidden)
 		end)
 
 		it("cancels stalled snapshot recovery when a peer goes offline", function()

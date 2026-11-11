@@ -18,5 +18,5 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Offline member handling.** Show a distinct Offline notice, retain cached comparisons, and resume syncing automatically on reconnection.
 - [x] **Redundant counts in the UI**
 - [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.
-- [ ] Issue with delve companion being a party member. Lots of repeated "You aren't in a party" messages in delves
+- [x] **Ignore delve companions.** Exclude NPC party members from comparisons and stop PARTY message attempts when no other players are grouped, preventing repeated "You aren't in a party" messages in solo delves.
 - [x] **Objective progress views.** Choose When anyone finishes (default), When I finish, or Always. Preserve actionable party status independently of informational counts; persist the choice and support preview.
