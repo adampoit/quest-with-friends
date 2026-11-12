@@ -90,9 +90,11 @@ Connection notices appear separately above quest groups. Distinguish offline mem
 
 ## Synchronization
 
-Addon-enabled members exchange complete quest snapshots through WoW's addon communication channel. Each snapshot carries actual quest IDs, titles, states, objective counts, locations and classifications. Filters apply to the local presentation.
+Addon-enabled members establish complete quest snapshots through WoW's addon communication channel. Each snapshot carries actual quest IDs, titles, states, objective counts, locations and classifications. Filters apply to the local presentation.
 
-Party changes and quest events drive updates. Paced messages, coalesced changes, automatic retries and stalled-transfer recovery keep synchronization responsive. Routine updates that become outdated before transmission are skipped in favor of the latest state, while explicit refreshes and transfers already underway remain protected. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
+When all connected members advertise support, routine changes send only added, replaced or removed quests. Session identities, exact-base checks and atomic result-digest validation prevent applying partial updates to the wrong state. Periodic state announcements detect missed final updates and stale connections; full snapshots repair gaps when needed rather than on a timer. Mixed-version or capability-unknown parties retain normal full-snapshot updates without removing newer optional data.
+
+Party changes and quest events drive updates. Paced messages, coalesced changes, automatic retries and stalled-transfer recovery keep synchronization responsive. Routine updates that become outdated before transmission are skipped in favor of the latest state, while explicit refreshes and transfers already underway remain protected. Small partial updates can overtake an ongoing full snapshot without older data rolling back the comparison. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 
 ## Design principles
 

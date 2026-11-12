@@ -100,11 +100,16 @@ describe("Quest With Friends two Forever clients", function()
 				"src/Client.lua",
 				"src/QuestCategories.lua",
 				"src/Core.lua",
+				"src/Sync.lua",
 				"src/QuestIgnores.lua",
 				"src/ItemStock.lua",
 				"src/QuestWithFriends.lua",
 			}) do
 				setfenv(assert(loadfile(path)), env)()
+				if path == "src/Core.lua" then
+					env.QuestWithFriends.Core.PROTOCOL_MINOR = 1
+					env.QuestWithFriends.Core.PROTOCOL_VERSION = "1.1"
+				end
 			end
 			env.QuestWithFriends.Panel = {
 				show = function(groups, complete, _, _, _, notices)

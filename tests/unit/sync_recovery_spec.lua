@@ -160,14 +160,15 @@ local function network(game, size, minorVersions)
 			"src/Client.lua",
 			"src/QuestCategories.lua",
 			"src/Core.lua",
+			"src/Sync.lua",
 			"src/QuestIgnores.lua",
 			"src/ItemStock.lua",
 			"src/QuestWithFriends.lua",
 		}) do
 			setfenv(assert(loadfile(path)), env)()
-			if path == "src/Core.lua" and minorVersions then
+			if path == "src/Core.lua" then
 				local core = env.QuestWithFriends.Core
-				core.PROTOCOL_MINOR = minorVersions[index] or 0
+				core.PROTOCOL_MINOR = minorVersions and (minorVersions[index] or 0) or 1
 				core.PROTOCOL_VERSION = core.PROTOCOL_MAJOR .. "." .. core.PROTOCOL_MINOR
 			end
 		end
@@ -1605,6 +1606,486 @@ for _, game in ipairs({ "retail", "forever" }) do
 			a:fire("GROUP_ROSTER_UPDATE")
 			n:advance(5)
 			assert.is_true(a.view.complete)
+		end)
+	end)
+end
+
+for _, game in ipairs({ "retail", "forever" }) do
+	describe("protocol 1.2 partial synchronization on " .. game, function()
+		local function modern(versions)
+			local n = network(game, versions and #versions or 2, versions or { 2, 2 })
+			local a, b = unpack(n.clients)
+			for id = 1, 12 do
+				a.quests[id] = quest("Quest " .. id .. string.rep("x", 100))
+			end
+			n:join()
+			n:advance(12)
+			assert.is_true(b.view.complete)
+			return n, a, b
+		end
+		local function title(client, id)
+			for _, group in ipairs(client.view.groups) do
+				if group.questID == id then
+					return group.title
+				end
+			end
+		end
+		local function replaceQuest(n, a, id, name, seconds)
+			a.quests[id] = quest(name)
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(seconds or 4)
+		end
+		local function wire(kind, sequence, data)
+			local messages = {}
+			local total = math.ceil(#data / 220)
+			for part = 1, total do
+				messages[#messages + 1] = "1.2:"
+					.. kind
+					.. ":"
+					.. sequence
+					.. ":"
+					.. part
+					.. ":"
+					.. total
+					.. ":"
+					.. data:sub((part - 1) * 220 + 1, part * 220)
+			end
+			return messages
+		end
+		it("sends a changed quest without retransmitting the log", function()
+			local n, a, b = modern()
+			local full = a:count("1.2:D:")
+			replaceQuest(n, a, 1, "Changed")
+			assert.is_true(a:count("1.2:P:") > 0)
+			assert.equal(full, a:count("1.2:D:"))
+			assert.equal("Changed", title(b, 1))
+			assert.is_true(b.view.complete)
+		end)
+		it("uses full snapshots for a mixed party without downgrading the sender", function()
+			local n, a, b = modern({ 2, 2, 1 })
+			local full = a:count("1.2:D:")
+			replaceQuest(n, a, 1, "Mixed")
+			n:advance(8)
+			assert.equal(0, a:count("1.2:P:"))
+			assert.is_true(a:count("1.2:D:") > full)
+			assert.equal("Mixed", title(b, 1))
+			assert.equal("Mixed", title(n.clients[3], 1))
+		end)
+		it("falls back while capability advertisements are entirely lost", function()
+			local n = network(game, 2, { 2, 2 })
+			local a, b = unpack(n.clients)
+			n.deliver = function(from, recipient, message)
+				if from == b and recipient == a then
+					return message:match(":H$") ~= nil
+				end
+				return true
+			end
+			for id = 1, 12 do
+				a.quests[id] = quest(string.rep("x", 100))
+			end
+			n:join()
+			n:advance(12)
+			replaceQuest(n, a, 1, "Unknown capability", 8)
+			assert.equal(0, a:count("1.2:P:"))
+			assert.equal("Unknown capability", title(b, 1))
+		end)
+		it("recovers a completely lost final update using a heartbeat after a long idle", function()
+			local n, a, b = modern()
+			n:advance(600)
+			local full, requests = a:count("1.2:D:"), b:count("1.2:H")
+			local dropped = 0
+			n.deliver = function(from, recipient, message)
+				if from == a and recipient == b and message:match("^1%.2:P:") then
+					dropped = dropped + 1
+					return false
+				end
+				return true
+			end
+			replaceQuest(n, a, 1, "Recovered final update")
+			assert.is_true(dropped > 0)
+			assert.is_not.equal("Recovered final update", title(b, 1))
+			n:advance(35)
+			assert.equal("Recovered final update", title(b, 1))
+			assert.is_true(b.view.complete)
+			assert.is_true(b:count("1.2:H") > requests)
+			assert.is_true(a:count("1.2:D:") > full)
+			assert.is_true(#syncLogs(b, "Partial synchronization requires full snapshot") > 0)
+		end)
+		it("rejects a subsequent patch when its base was missed", function()
+			local n, a, b = modern()
+			local drop = true
+			n.deliver = function(from, recipient, message)
+				return not (drop and from == a and recipient == b and message:match("^1%.2:P:"))
+			end
+			replaceQuest(n, a, 1, "Missed", 2)
+			drop = false
+			replaceQuest(n, a, 2, "Dependent", 2)
+			assert.is_true(#syncLogs(b, "Partial synchronization requires full snapshot") > 0)
+			n:advance(12)
+			assert.equal("Missed", title(b, 1))
+			assert.equal("Dependent", title(b, 2))
+			assert.is_true(b.view.complete)
+		end)
+		it("assembles reverse-order and duplicate fragments atomically", function()
+			local n, a, b = modern()
+			local messages = {}
+			n.deliver = function(from, recipient, message)
+				if from == a and recipient == b and message:match("^1%.2:P:") then
+					messages[#messages + 1] = message
+					return false
+				end
+				return true
+			end
+			replaceQuest(n, a, 1, string.rep("Changed", 40), 3)
+			assert.is_true(#messages > 1)
+			local old = title(b, 1)
+			b:receive(a.sender, messages[#messages])
+			b:receive(a.sender, messages[#messages])
+			assert.equal(old, title(b, 1))
+			assert.is_true(b.view.updating)
+			for i = #messages - 1, 1, -1 do
+				b:receive(a.sender, messages[i])
+			end
+			assert.equal(string.rep("Changed", 40), title(b, 1))
+			assert.is_true(b.view.complete)
+			for _, message in ipairs(messages) do
+				b:receive(a.sender, message)
+			end
+			assert.is_true(b.view.complete)
+		end)
+		it("detects silence and retains cached comparisons", function()
+			local n, a, b = modern()
+			local cached = title(b, 1)
+			n.deliver = function(from, recipient)
+				return not (from == a and recipient == b)
+			end
+			n:advance(65)
+			assert.is_false(b.view.complete)
+			assert.equal("stale", b.view.notices[1].reason)
+			assert.equal(cached, title(b, 1))
+			n.deliver = nil
+			-- Recovery may already be in the watchdog's 60-second backoff.
+			n:advance(120)
+			assert.is_true(b.view.complete)
+		end)
+		it("allows a new session to restart sequences and ignores retired snapshots", function()
+			local _, a, b = modern()
+			local sync, core = a.env.QuestWithFriends.Sync, a.env.QuestWithFriends.Core
+			local oldSession
+			for _, attempt in ipairs(a.attempts) do
+				oldSession = attempt.message:match("^1%.2:C:([0-9a-f]+):q1$") or oldSession
+			end
+			local newSession = string.rep("f", 32)
+			local _, data = sync.snapshot(core.encode({ [99] = quest("After reload") }), newSession, 1)
+			b:receive(a.sender, "1.2:C:" .. newSession .. ":q1")
+			for _, message in ipairs(wire("D", 1, data)) do
+				b:receive(a.sender, message)
+			end
+			assert.equal("After reload", title(b, 99))
+			b:receive(a.sender, "1.2:C:" .. oldSession .. ":q1")
+			local _, oldData = sync.snapshot(core.encode({ [100] = quest("Retired") }), oldSession, 100)
+			for _, message in ipairs(wire("D", 100, oldData)) do
+				b:receive(a.sender, message)
+			end
+			assert.equal("After reload", title(b, 99))
+			assert.is_nil(title(b, 100))
+			assert.is_true(b.view.complete)
+			local oldBase = sync.snapshot(core.encode({ [100] = quest("Retired base") }), oldSession, 99)
+			local oldTarget = sync.snapshot(core.encode({ [100] = quest("Retired patch") }), oldSession, 100)
+			for _, message in ipairs(wire("P", 100, sync.patch(oldBase, oldTarget))) do
+				b:receive(a.sender, message)
+			end
+			assert.is_nil(title(b, 100))
+			assert.is_true(b.view.complete)
+		end)
+		it("prioritizes patches over a running checkpoint without rolling back", function()
+			local n, a, b = modern()
+			a.env.SlashCmdList.QUESTWITHFRIENDS("")
+			n:advance(3)
+			local oldFull = a:count("1.2:D:")
+			replaceQuest(n, a, 1, "Overtaking checkpoint", 2.5)
+			assert.is_true(a:count("1.2:P:") > 0)
+			assert.equal("Overtaking checkpoint", title(b, 1))
+			assert.is_true(a:count("1.2:D:") >= oldFull)
+			n:advance(12)
+			assert.equal("Overtaking checkpoint", title(b, 1))
+			assert.is_true(b.view.complete)
+		end)
+
+		it("makes checkpoint progress during a continuous stream of partial updates", function()
+			local n, a, b = modern()
+			local start = n.time
+			a.env.SlashCmdList.QUESTWITHFRIENDS("")
+			n:advance(2.5)
+			local checkpoint
+			for _, attempt in ipairs(a.attempts) do
+				if attempt.time > start then
+					checkpoint = checkpoint or attempt.message:match("^1%.2:D:(%d+):")
+				end
+			end
+			assert.is_not_nil(checkpoint)
+			for i = 1, 24 do
+				a.quests[1] = quest(string.rep("y", 200) .. i)
+				a:fire("QUEST_LOG_UPDATE")
+				n:advance(1)
+			end
+			local finished = false
+			for _, attempt in ipairs(a.attempts) do
+				local serial, part, total = attempt.message:match("^1%.2:D:(%d+):(%d+):(%d+):")
+				if serial == checkpoint and part == total and attempt.result == 0 then
+					finished = true
+				end
+			end
+			assert.is_true(finished)
+			n:advance(12)
+			assert.equal(string.rep("y", 200) .. 24, title(b, 1))
+			assert.is_true(b.view.complete)
+		end)
+
+		it("does not let capability packets hide lost state heartbeats", function()
+			local n, a, b = modern()
+			n.deliver = function(from, recipient, message)
+				return not (
+					from == a
+					and recipient == b
+					and (message:match("^1%.2:V:") or message:match("^1%.2:D:") or message:match("^1%.2:P:"))
+				)
+			end
+			n:advance(65)
+			assert.is_false(b.view.complete)
+			assert.equal("stale", b.view.notices[1].reason)
+			n.deliver = nil
+			-- Recovery may already be in the watchdog's 60-second backoff.
+			n:advance(120)
+			assert.is_true(b.view.complete)
+		end)
+		it("recovers a missing partial fragment without another quest event", function()
+			local n, a, b = modern()
+			local dropped = false
+			n.deliver = function(from, recipient, message)
+				local part, total = message:match("^1%.2:P:%d+:(%d+):(%d+):")
+				if from == a and recipient == b and part and part == total and not dropped then
+					dropped = true
+					return false
+				end
+				return true
+			end
+			replaceQuest(n, a, 1, string.rep("Changed", 40), 3)
+			assert.is_true(dropped)
+			assert.is_true(b.view.updating)
+			n:advance(45)
+			assert.equal(string.rep("Changed", 40), title(b, 1))
+			assert.is_true(b.view.complete)
+		end)
+		it("retries an obsolete unsent partial using the latest state and published base", function()
+			local n, a, b = modern()
+			local recoveries = #syncLogs(b, "Partial synchronization requires full snapshot")
+			local reject = true
+			a.sendResult = function(message)
+				return reject and message:match("^1%.2:P:") and 5 or 0
+			end
+			replaceQuest(n, a, 1, "Obsolete", 1.4)
+			reject = false
+			replaceQuest(n, a, 1, "Latest after rejection", 6)
+			assert.equal("Latest after rejection", title(b, 1))
+			assert.is_true(b.view.complete)
+			assert.equal(recoveries, #syncLogs(b, "Partial synchronization requires full snapshot"))
+		end)
+		it("finishes started partials unchanged and builds the next patch against their result", function()
+			local n, a, b = modern()
+			local recoveries = #syncLogs(b, "Partial synchronization requires full snapshot")
+			replaceQuest(n, a, 1, string.rep("Intermediate", 24), 1.4)
+			replaceQuest(n, a, 1, "Latest chained state", 7)
+			assert.equal("Latest chained state", title(b, 1))
+			assert.is_true(b.view.complete)
+			assert.equal(recoveries, #syncLogs(b, "Partial synchronization requires full snapshot"))
+		end)
+		it("rejects a corrupted result without replacing cached data", function()
+			local n, a, b = modern()
+			local messages = {}
+			n.deliver = function(from, recipient, message)
+				if from == a and recipient == b and message:match("^1%.2:P:") then
+					messages[#messages + 1] = message
+					return false
+				end
+				return true
+			end
+			local old = title(b, 1)
+			replaceQuest(n, a, 1, "Changed", 3)
+			for _, message in ipairs(messages) do
+				b:receive(a.sender, (message:gsub("Changed", "Damaged")))
+			end
+			assert.equal(old, title(b, 1))
+			assert.is_false(b.view.complete)
+			n.deliver = nil
+			n:advance(12)
+			assert.equal("Changed", title(b, 1))
+			assert.is_true(b.view.complete)
+		end)
+		it("applies objective changes and explicit quest removals", function()
+			local n, a, b = modern()
+			local name = a.quests[1].title
+			a.quests[1].objectives = { { text = "Gnolls slain: 3/8", numFulfilled = 3, numRequired = 8 } }
+			b.quests[1] = {
+				title = name,
+				state = "ready",
+				objectives = { { text = "Gnolls slain: 8/8", numFulfilled = 8, numRequired = 8 } },
+			}
+			a:fire("QUEST_LOG_UPDATE")
+			b:fire("QUEST_LOG_UPDATE")
+			n:advance(5)
+			local function progress()
+				for _, group in ipairs(b.view.groups) do
+					if group.questID == 1 then
+						for _, difference in ipairs(group.differences) do
+							if difference.objective then
+								return difference.objective.have
+							end
+						end
+					end
+				end
+			end
+			assert.equal(3, progress())
+			a.quests[1].objectives[1] = { text = "Gnolls slain: 5/8", numFulfilled = 5, numRequired = 8 }
+			a.quests[2] = nil
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(5)
+			assert.equal(5, progress())
+			assert.is_nil(title(b, 2))
+		end)
+		it("returns to full updates when a legacy member joins", function()
+			local n = network(game, 3, { 2, 2, 1 })
+			local a, b, c = unpack(n.clients)
+			a.units, b.units, c.party = { 2 }, { 1 }, false
+			for id = 1, 12 do
+				a.quests[id] = quest(string.rep("x", 100))
+			end
+			n:join()
+			n:advance(12)
+			replaceQuest(n, a, 1, "Before join")
+			local patches = a:count("1.2:P:")
+			assert.is_true(patches > 0)
+			a.units, b.units, c.party = { 2, 3 }, { 1, 3 }, true
+			for _, client in ipairs(n.clients) do
+				client:fire("GROUP_ROSTER_UPDATE")
+			end
+			n:advance(15)
+			replaceQuest(n, a, 1, "After legacy join", 10)
+			assert.equal(patches, a:count("1.2:P:"))
+			assert.equal("After legacy join", title(b, 1))
+			assert.equal("After legacy join", title(c, 1))
+		end)
+
+		it("keeps a size-limit baseline intact and resumes partials when metadata fits again", function()
+			local n = network(game, 2, { 2, 2 })
+			local a, b = unpack(n.clients)
+			for id = 1, 68 do
+				a.quests[id] = quest(string.rep("x", id == 68 and 109 or 300))
+			end
+			n:join()
+			n:advance(120)
+			assert.is_true(b.view.complete)
+			assert.equal(string.rep("x", 109), title(b, 68))
+			assert.equal(0, a:count("1.2:P:"))
+			for _, attempt in ipairs(a.attempts) do
+				assert.is_true(#attempt.message <= 255)
+			end
+			for id = 13, 68 do
+				a.quests[id] = nil
+			end
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			assert.is_true(b.view.complete)
+			replaceQuest(n, a, 1, "Smaller baseline", 4)
+			assert.is_true(a:count("1.2:P:") > 0)
+			assert.equal("Smaller baseline", title(b, 1))
+		end)
+
+		it("preserves an oversized warning across periodic capability announcements", function()
+			local n = network(game, 2, { 2, 2 })
+			local a, b = unpack(n.clients)
+			for id = 1, 100 do
+				a.quests[id] = quest(string.rep("x", 300))
+			end
+			n:join()
+			n:advance(40)
+			assert.is_false(b.view.complete)
+			assert.equal("oversized", b.view.notices[1].reason)
+			for id = 13, 100 do
+				a.quests[id] = nil
+			end
+			a:fire("QUEST_LOG_UPDATE")
+			n:advance(12)
+			assert.is_true(b.view.complete)
+		end)
+		for _, versions in ipairs({ { 2, 2 }, { 2, 2, 1 } }) do
+			it(
+				"keeps an idle party current without scans or snapshots (" .. table.concat(versions, ",") .. ")",
+				function()
+					local n, a = modern(versions)
+					local before, scans = {}, 0
+					for _, client in ipairs(n.clients) do
+						local version = client.env.QuestWithFriends.Core.PROTOCOL_VERSION .. ":"
+						before[client] = {}
+						for _, kind in ipairs({ "D:", "P:", "H", "C:", "V:" }) do
+							before[client][kind] = client:count(version .. kind)
+						end
+						local scan = client.env.C_QuestLog.GetNumQuestLogEntries
+						client.env.C_QuestLog.GetNumQuestLogEntries = function()
+							scans = scans + 1
+							return scan()
+						end
+					end
+					n:advance(720)
+					assert.equal(0, scans)
+					for _, client in ipairs(n.clients) do
+						local version = client.env.QuestWithFriends.Core.PROTOCOL_VERSION .. ":"
+						for _, kind in ipairs({ "D:", "P:", "H" }) do
+							assert.equal(before[client][kind], client:count(version .. kind))
+						end
+						if version == "1.2:" then
+							assert.is_true(client:count(version .. "C:") > before[client]["C:"])
+							assert.is_true(client:count(version .. "V:") > before[client]["V:"])
+						end
+						assert.is_true(client.view.complete)
+						assert.same({}, client.view.notices)
+					end
+					replaceQuest(n, a, 1, "After long idle", 8)
+					for _, client in ipairs(n.clients) do
+						assert.equal("After long idle", title(client, 1))
+						assert.is_true(client.view.complete)
+					end
+					if #versions == 2 then
+						assert.is_true(a:count("1.2:P:") > before[a]["P:"])
+						assert.equal(before[a]["D:"], a:count("1.2:D:"))
+					else
+						assert.equal(before[a]["P:"], a:count("1.2:P:"))
+						assert.is_true(a:count("1.2:D:") > before[a]["D:"])
+					end
+				end
+			)
+		end
+
+		it("still sends a full snapshot for an explicit refresh after a long idle", function()
+			local n, a, b = modern()
+			n:advance(240)
+			local full = a:count("1.2:D:")
+			a.env.SlashCmdList.QUESTWITHFRIENDS("")
+			n:advance(12)
+			assert.is_true(a:count("1.2:D:") > full)
+			assert.is_true(b.view.complete)
+		end)
+
+		it("stops periodic announcements after leaving", function()
+			local n, a, b = modern()
+			n:advance(20)
+			a.party, b.party = false, false
+			a:fire("GROUP_ROSTER_UPDATE")
+			b:fire("GROUP_ROSTER_UPDATE")
+			local sendsA, sendsB = #a.attempts, #b.attempts
+			n:advance(220)
+			assert.equal(sendsA, #a.attempts)
+			assert.equal(sendsB, #b.attempts)
 		end)
 	end)
 end

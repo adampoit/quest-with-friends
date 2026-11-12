@@ -188,7 +188,7 @@ local function sendSnapshot(quests, revision)
 	local total = math.max(1, math.ceil(#payload / 220))
 	for part = total, 1, -1 do
 		receive(
-			"1.1:D:"
+			"1.2:D:"
 				.. (revision or 100)
 				.. ":"
 				.. part
@@ -203,7 +203,7 @@ end
 local function outgoingSnapshot(messages)
 	local parts = {}
 	for _, message in ipairs(messages) do
-		local part, data = message:match("^1%.1:D:%d+:(%d+):%d+:(.+)$")
+		local part, data = message:match("^1%.2:D:%d+:(%d+):%d+:(.+)$")
 		if part then
 			parts[tonumber(part)] = data
 		end
@@ -606,7 +606,7 @@ test("native join popup accepts or keeps existing quest differences", function()
 end)
 
 partyTest("joining warns about unknown members and leaving hides the panel", function(_, messages)
-	assertContains(messages, "1.1:H")
+	assertContains(messages, "1.2:H")
 	assertTrue(QuestWithFriendsPanel:IsShown())
 	assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 	assertContains(panelTexts(), "Julia: Quest With Friends not detected")
@@ -744,12 +744,12 @@ partyTest("partial and duplicate chunks stay unknown until reverse-order assembl
 	local total = math.ceil(#payload / 220)
 	assertTrue(total > 1)
 	for part = total, 2, -1 do
-		local message = "1.1:D:100:" .. part .. ":" .. total .. ":" .. payload:sub((part - 1) * 220 + 1, part * 220)
+		local message = "1.2:D:100:" .. part .. ":" .. total .. ":" .. payload:sub((part - 1) * 220 + 1, part * 220)
 		receive(message)
 		receive(message)
 		assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 	end
-	receive("1.1:D:100:1:" .. total .. ":" .. payload:sub(1, 220))
+	receive("1.2:D:100:1:" .. total .. ":" .. payload:sub(1, 220))
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
 end)
 
@@ -762,7 +762,7 @@ partyTest("routine chunk transfers keep the header and geometry stable with quie
 	local total = math.ceil(#payload / 220)
 	assertTrue(total > 1)
 	for part = 1, total do
-		receive("1.1:D:101:" .. part .. ":" .. total .. ":" .. payload:sub((part - 1) * 220 + 1, part * 220))
+		receive("1.2:D:101:" .. part .. ":" .. total .. ":" .. payload:sub((part - 1) * 220 + 1, part * 220))
 		assertEquals("Party in sync", panel.status:GetText())
 		assertEquals(part < total, panel.updating:IsShown())
 		assertAlmostEquals(height, panel:GetHeight())
@@ -780,17 +780,17 @@ partyTest("remote quest differences render and stale snapshots cannot replace th
 	assertEquals("Party out of sync", QuestWithFriendsPanel.status:GetText())
 	assertContains(panelTexts(), "Simulator errand")
 	assertContains(panelTexts(), "You: Missing")
-	receive("1.1:D:100:1:1:" .. original:sub(1, 220))
-	receive("1.1:D:101:1:1:broken")
+	receive("1.2:D:100:1:1:" .. original:sub(1, 220))
+	receive("1.2:D:101:1:1:broken")
 	assertContains(panelTexts(), "Simulator errand")
 end)
 
 partyTest("wrong prefixes, channels, senders and malformed payloads stay unknown", function(quests)
-	local message = "1.1:D:100:1:1:" .. QuestWithFriends.Core.encode({})
+	local message = "1.2:D:100:1:1:" .. QuestWithFriends.Core.encode({})
 	receive(message, "OTHER")
 	receive(message, nil, "RAID")
 	receive(message, nil, nil, "Stranger-OtherRealm")
-	receive("1.1:D:100:1:1:broken")
+	receive("1.2:D:100:1:1:broken")
 	assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 	sendSnapshot(quests)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
@@ -799,11 +799,11 @@ end)
 partyTest("a peer handshake preserves cached data with a refreshing notice", function(quests)
 	sendSnapshot(quests)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
-	receive("1.1:X")
+	receive("1.2:X")
 	assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 	sendSnapshot(quests, 101)
 	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
-	receive("1.1:H")
+	receive("1.2:H")
 	assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 	assertContains(panelTexts(), "Julia: Refreshing · showing last snapshot")
 end)
@@ -1104,7 +1104,7 @@ partyTest("quest event bursts and slash refreshes queue only one new snapshot", 
 	local before = #messages
 	local chunks = 0
 	for _, message in ipairs(messages) do
-		if message:match("^1%.1:D:") then
+		if message:match("^1%.2:D:") then
 			chunks = chunks + 1
 		end
 	end
@@ -1114,9 +1114,50 @@ partyTest("quest event bursts and slash refreshes queue only one new snapshot", 
 	SlashCmdList.QUESTWITHFRIENDS("")
 	assertEquals(before, #messages)
 	return function()
-		assertEquals("1.1:H", messages[before + 1])
-		assertEquals(before + 1 + chunks, #messages)
+		assertEquals("1.2:H", messages[before + 1])
+		assertEquals(before + 2 + chunks, #messages)
 	end
+end)
+
+partyTest("partial snapshots update the panel atomically and ignore older checkpoints", function(quests)
+	local core, sync = QuestWithFriends.Core, QuestWithFriends.Sync
+	local session = string.rep("a", 32)
+	local base, baseline = sync.snapshot(core.encode(quests), session, 100)
+	local function deliver(kind, revision, payload)
+		local total = math.ceil(#payload / 220)
+		for part = total, 1, -1 do
+			receive(
+				"1.2:"
+					.. kind
+					.. ":"
+					.. revision
+					.. ":"
+					.. part
+					.. ":"
+					.. total
+					.. ":"
+					.. payload:sub((part - 1) * 220 + 1, part * 220)
+			)
+			if kind == "P" and part > 1 then
+				assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
+			end
+		end
+	end
+	deliver("D", 100, baseline)
+	assertEquals("Party in sync", QuestWithFriendsPanel.status:GetText())
+	local changed = {}
+	for id, quest in pairs(quests) do
+		changed[id] = quest
+	end
+	changed[987654] =
+		{ title = "Realtime errand", state = "active", mapID = C_Map.GetBestMapForUnit("player"), objectives = {} }
+	local target = sync.snapshot(core.encode(changed), session, 101)
+	local patch = sync.patch(base, target)
+	deliver("P", 101, patch)
+	assertEquals("Party out of sync", QuestWithFriendsPanel.status:GetText())
+	assertContains(panelTexts(), "Realtime errand")
+	sendSnapshot(quests, 100)
+	assertContains(panelTexts(), "Realtime errand")
 end)
 
 partyTest("higher minors and unknown optional extensions preserve baseline comparisons", function(quests)
@@ -1145,7 +1186,7 @@ end)
 
 partyTest("invalid protocol envelopes show a warning and valid data restores sync", function(quests)
 	sendSnapshot(quests)
-	for index, message in ipairs({ "2.0:H", "broken", "1.00:H", "1.1:" }) do
+	for index, message in ipairs({ "2.0:H", "broken", "1.00:H", "1.2:" }) do
 		receive(message)
 		assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 		assertContains(panelTexts(), "Julia: Incompatible addon protocol · update addon")

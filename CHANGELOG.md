@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add optional protocol 1.2 partial snapshots: send changed quests and explicit removals when all connected members support them, retaining normal full updates for mixed-version parties. Guard updates with session identities, exact bases and SHA-256/128 state digests; use periodic state checks and on-demand full-snapshot recovery to detect missed updates, without scheduled full checkpoints. Prioritize small updates over running full snapshots without rolling back newer comparisons.
+
 ## 0.1.10
 
 - Dismiss the main panel's ignore notice and **Undo** button after 15 seconds, pausing while hovered or focused and restarting for each new ignore batch. Keep the ignored count and **View → Ignored quests** restoration available without a time limit.

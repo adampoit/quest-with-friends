@@ -55,6 +55,9 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/Client.lua"))()
 		assert(loadfile("src/QuestCategories.lua"))()
 		assert(loadfile("src/Core.lua"))()
+		assert(loadfile("src/Sync.lua"))()
+		QuestWithFriends.Core.PROTOCOL_MINOR = 1
+		QuestWithFriends.Core.PROTOCOL_VERSION = "1.1"
 		assert(loadfile("src/QuestIgnores.lua"))()
 		assert(loadfile("src/ItemStock.lua"))()
 		assert(loadfile("src/Preview.lua"))()
@@ -811,12 +814,16 @@ describe("Quest With Friends party sync", function()
 			pushable[42] = true
 			fire("PLAYER_ENTERING_WORLD")
 			flush()
-			assert.are.equal("1.1:H", messages[1])
+			assert.are.equal("1.2:H", messages[1])
 			local function receiveQuests(quests, serial)
 				fire(
 					"CHAT_MSG_ADDON",
 					"QWF",
-					"1.1:D:" .. serial .. ":1:1:" .. QuestWithFriends.Core.encode(quests),
+					QuestWithFriends.Core.PROTOCOL_VERSION
+						.. ":D:"
+						.. serial
+						.. ":1:1:"
+						.. QuestWithFriends.Core.encode(quests),
 					"PARTY",
 					sender
 				)
@@ -1955,6 +1962,7 @@ describe("Quest With Friends party sync", function()
 			"src/Client.lua",
 			"src/QuestCategories.lua",
 			"src/Core.lua",
+			"src/Sync.lua",
 			"src/QuestIgnores.lua",
 			"src/ItemStock.lua",
 			"src/Preview.lua",
@@ -1985,8 +1993,8 @@ describe("Quest With Friends party sync", function()
 		pushable[42] = true
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		assert.are.equal("1.1:H", messages[1])
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
+		assert.are.equal("1.2:H", messages[1])
+		fire("CHAT_MSG_ADDON", "QWF", "1.2:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		view.share(42)
 		assert.same({ "QuestWithFriendsDev", "Version" }, metadata)
@@ -2632,14 +2640,14 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal(0, #timers)
 	end)
 
-	it("logs partial snapshot assembly without storing raw quest payloads", function()
+	it("logs snapshot fragment assembly without storing raw quest payloads", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local records = captureLogs()
 		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:2:2:" .. payload:sub(7), "PARTY", "Julia-Realm")
 		local chunk = findLog(records, "Received snapshot chunk").data
-		assert.same({ sender = "Julia-Realm", revision = 1, part = 2, parts = 2, received = 1 }, chunk)
+		assert.same({ kind = "D", sender = "Julia-Realm", revision = 1, part = 2, parts = 2, received = 1 }, chunk)
 		assert.is_nil(findLog(records, "Received quest snapshot"))
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:2:" .. payload:sub(1, 6), "PARTY", "Julia-Realm")
 		assert.is_not_nil(findLog(records, "Received quest snapshot"))
