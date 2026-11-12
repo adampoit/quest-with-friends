@@ -143,6 +143,32 @@ python3 tools/generate_quest_equivalences.py \
 
 The generator validates category membership for every selected ID and reports additional Camping leads for review. The manifest records revision/snapshot pins and per-record hashes. For a preview, choose output paths under `.cache/quest-sources/forever/`.
 
+## Synchronization benchmark
+
+[Measured results and limitations](SYNC_BENCHMARK.md) compare a four-player party using 1.1 full snapshots and 1.2 partial updates. Each character has 20 logged quests and the addon's maximum 30 retained turn-ins. The benchmark runs the actual runtime, not a byte-count-only transport model; instrumentation does not modify production code. The checked-in measurements predate removal of scheduled full checkpoints; rerunning measures the current runtime.
+
+Requires LuaJIT and a **trusted QuestieDB checkout** at `e0a6eaa86f181ac99262e34126bcd2ed1a1712d6`. From the repository root:
+
+```sh
+root="$PWD"
+source=/absolute/path/to/QuestieDB
+mkdir -p .cache/benchmark-source
+(cd "$source" && luajit "$root/tools/export_sync_benchmark.lua" \
+  "$root/.cache/benchmark-source/fixture.lua")
+
+# Five repeats, native bit operations, JIT disabled to avoid measuring JIT-only speedups.
+luajit -joff tools/benchmark_sync.lua .cache/benchmark-source/fixture.lua 5 native \
+  > .cache/benchmark-source/after-results.json
+
+# Optional sensitivity runs: arithmetic-only bits, or 50 ms one-way delivery delay.
+luajit -joff tools/benchmark_sync.lua .cache/benchmark-source/fixture.lua 3 portable single_player \
+  > .cache/benchmark-source/after-portable.json
+luajit -joff tools/benchmark_sync.lua .cache/benchmark-source/fixture.lua 3 native single_player 0.05 \
+  > .cache/benchmark-source/after-latency50.json
+```
+
+Arguments after the fixture are repeat count, `native`/`portable` bit mode, optional scenario name, and optional one-way link latency in seconds. Scenarios: `cold_party`, `single_player`, `all_players`, `four_quests`, `during_checkpoint`, `idle_300s`, `adventure_300s`, `rapid_61s`. A mixed-party update is also measured. Progress is printed to stderr; JSON results go to stdout. The runtime fixture and full results remain ignored cache files, not redistributed upstream data.
+
 ## Tests
 
 ```sh
