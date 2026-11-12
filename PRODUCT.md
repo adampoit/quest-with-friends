@@ -94,7 +94,7 @@ Addon-enabled members establish complete quest snapshots through WoW's addon com
 
 When all connected members advertise support, routine changes send only added, replaced or removed quests. Session identities, exact-base checks and atomic result-digest validation prevent applying partial updates to the wrong state. Periodic state announcements detect missed final updates and stale connections; full snapshots repair gaps when needed rather than on a timer. Mixed-version or capability-unknown parties retain normal full-snapshot updates without removing newer optional data.
 
-Party changes and quest events drive updates. Paced messages, coalesced changes, automatic retries and stalled-transfer recovery keep synchronization responsive. Routine updates that become outdated before transmission are skipped in favor of the latest state, while explicit refreshes and transfers already underway remain protected. Small partial updates can overtake an ongoing full snapshot without older data rolling back the comparison. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
+Party changes and quest events drive updates. Paced messages, coalesced changes, automatic retries and stalled-transfer recovery keep synchronization responsive. Ordinary updates batch for 200 ms and use the first eligible send slot without an extra idle delay. Routine updates that become outdated before transmission are refreshed at that slot instead of postponed until activity stops; explicit refreshes and transfers already underway remain protected. All message kinds share 500 ms pacing and retry deadlines. Small partial updates can overtake an ongoing full snapshot without older data rolling back the comparison. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 
 ## Design principles
 

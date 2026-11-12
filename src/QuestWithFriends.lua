@@ -17,6 +17,7 @@ local OVERSIZED = VERSION .. ":X"
 local CHUNK_SIZE = 220
 local MAX_PARTS = 100
 local SEND_INTERVAL = 0.5
+local COALESCE_INTERVAL = 0.2
 local SNAPSHOT_TIMEOUT = 15
 local MAX_RETRY_DELAY = 8
 local SHARE_DIAGNOSTIC_WINDOW = 5
@@ -61,6 +62,8 @@ local requestPending = false
 local oversizePending = false
 local sending = false
 local retryDelay = 1
+local nextSendAt = 0
+local pumping = false
 local refresh
 local queueRequest
 local prefixRegistered
@@ -1306,14 +1309,14 @@ local function awaitingSnapshot(key, peer, explicit)
 	watchPeer(key, peer)
 end
 
-local pump
-local function scheduleSend(delay)
-	if sending then
+local pump, broadcast
+local function scheduleSend()
+	if sending or pumping then
 		return
 	end
 	sending = true
 	local currentGeneration = generation
-	C_Timer.After(delay, function()
+	C_Timer.After(math.max(0, nextSendAt - (GetTime and GetTime() or 0)), function()
 		if currentGeneration ~= generation then
 			return
 		end
@@ -1493,13 +1496,13 @@ function delta.startTimer()
 		if delta.published then
 			delta.heartbeatPending = VERSION .. ":V:" .. QWF.Sync.identityText(delta.published)
 		end
-		scheduleSend(SEND_INTERVAL)
+		scheduleSend()
 		C_Timer.After(15 + tonumber(delta.session:sub(1, 2), 16) % 4, tick)
 	end
 	C_Timer.After(15 + tonumber(delta.session:sub(1, 2), 16) % 4, tick)
 end
 
-pump = function()
+local function pumpOnce()
 	if not inParty() then
 		return
 	end
@@ -1514,15 +1517,24 @@ pump = function()
 		message = delta.heartbeatPending
 	else
 		if not outgoing or outgoing.next == 1 or queuedSnapshot then
-			-- A queued partial may overtake a started checkpoint, so check it before selecting the next transfer.
 			local payload = Core.encode(localQuests)
-			if outgoing and outgoing.next == 1 and not outgoing.forced and outgoing.content ~= payload then
-				logCanceledSnapshot(outgoing, "obsolete_before_start")
-				outgoing = nil
-			end
-			if queuedSnapshot and not queuedSnapshot.forced and queuedSnapshot.content ~= payload then
-				logCanceledSnapshot(queuedSnapshot, "obsolete_before_start")
-				queuedSnapshot = nil
+			local staleOutgoing = outgoing
+				and outgoing.next == 1
+				and not outgoing.forced
+				and outgoing.content ~= payload
+			local staleQueued = queuedSnapshot and not queuedSnapshot.forced and queuedSnapshot.content ~= payload
+			if staleOutgoing or staleQueued then
+				local context = mergeContext(staleOutgoing and outgoing.context, staleQueued and queuedSnapshot.context)
+				if staleOutgoing then
+					logCanceledSnapshot(outgoing, "obsolete_before_start")
+					outgoing = nil
+				end
+				if staleQueued then
+					logCanceledSnapshot(queuedSnapshot, "obsolete_before_start")
+					queuedSnapshot = nil
+				end
+				-- Reuse this eligible send opportunity; restarting a batching timer can starve busy logs.
+				broadcast(false, context)
 			end
 			if
 				not outgoing
@@ -1575,10 +1587,11 @@ pump = function()
 				retryDelay = retryDelay,
 			})
 		end
-		scheduleSend(retryDelay)
+		nextSendAt = delta.now() + retryDelay
 		retryDelay = math.min(MAX_RETRY_DELAY, retryDelay * 2)
 		return
 	end
+	nextSendAt = delta.now() + SEND_INTERVAL
 	retryDelay = 1
 	if message == HANDSHAKE then
 		requestPending = false
@@ -1630,16 +1643,29 @@ pump = function()
 			outgoing = nil
 		end
 	end
+end
+
+pump = function()
+	pumping = true
+	local ok, err = pcall(pumpOnce)
+	pumping = false
+	if not ok then
+		error(err, 0)
+	end
+
 	if
-		requestPending
-		or oversizePending
-		or outgoing
-		or queuedSnapshot
-		or delta.suspended
-		or delta.capabilityPending
-		or delta.heartbeatPending
+		inParty()
+		and (
+			requestPending
+			or oversizePending
+			or outgoing
+			or queuedSnapshot
+			or delta.suspended
+			or delta.capabilityPending
+			or delta.heartbeatPending
+		)
 	then
-		scheduleSend(SEND_INTERVAL)
+		scheduleSend()
 	end
 end
 
@@ -1648,10 +1674,10 @@ queueRequest = function()
 	if delta.enabled then
 		delta.capabilityPending = true
 	end
-	scheduleSend(SEND_INTERVAL)
+	scheduleSend()
 end
 
-local function broadcast(force, context)
+broadcast = function(force, context)
 	if not inParty() then
 		return
 	end
@@ -1681,7 +1707,7 @@ local function broadcast(force, context)
 	if #payload > Core.MAX_SNAPSHOT_BYTES then
 		if not snapshotTooLarge or force then
 			oversizePending = true
-			scheduleSend(SEND_INTERVAL)
+			scheduleSend()
 		end
 		logCanceledSnapshot(outgoing, "oversized")
 		logCanceledSnapshot(queuedSnapshot, "oversized")
@@ -1742,7 +1768,7 @@ local function broadcast(force, context)
 	end
 	logCanceledSnapshot(queuedSnapshot, "superseded")
 	queuedSnapshot = snapshot
-	scheduleSend(SEND_INTERVAL)
+	scheduleSend()
 end
 
 refresh = function(force, trigger)
@@ -1763,7 +1789,7 @@ refresh = function(force, trigger)
 	end
 	scheduled = true
 	local currentGeneration = generation
-	C_Timer.After(0.8, function()
+	C_Timer.After(COALESCE_INTERVAL, function()
 		if currentGeneration ~= generation then
 			return
 		end
@@ -1863,6 +1889,7 @@ local function updateRoster(force, trigger)
 			delta.timer = nil
 		end
 		requestPending, oversizePending = false, false
+		nextSendAt = math.min(nextSendAt, delta.now() + SEND_INTERVAL)
 		retryDelay = 1
 	end
 	if party then
