@@ -168,9 +168,6 @@ cache_dir=${QWF_SIMULATOR_CACHE_DIR:-"${XDG_CACHE_HOME:-"$HOME/.cache"}/quest-wi
 mkdir -p -- "$output_dir" "$cache_dir"
 output_dir=$(cd -- "$output_dir" && pwd -P)
 cache_dir=$(cd -- "$cache_dir" && pwd -P)
-if [[ "$addon_name" == QuestWithFriendsDev ]]; then
-	python3 "$script_dir/bundle_addon.py" --dev-toc
-fi
 args=(
 	--rm
 	--init

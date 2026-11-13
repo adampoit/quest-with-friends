@@ -2,7 +2,6 @@
 .cache/
 .ruff_cache/
 dist/
-QuestWithFriendsDev.toc
 __pycache__/
 QuestEquivalences.generated.lua
 QuestEquivalences.forever.generated.lua

@@ -343,6 +343,9 @@ class TrackingTests(unittest.TestCase):
 			json.dumps(BASELINES, indent=2) + "\n", encoding="utf-8"
 		)
 		_ = (self.root / monitor.TOC).write_text(TOC, encoding="utf-8")
+		_ = (self.root / "QuestWithFriendsDev.toc").write_text(
+			TOC.replace("0.1.7", "dev"), encoding="utf-8"
+		)
 		_ = monitor.run(self.root, "git", "add", ".")
 		_ = monitor.run(self.root, "git", "commit", "-m", "Initial")
 		_ = monitor.run(self.root, "git", "remote", "add", "origin", str(self.origin))
@@ -480,7 +483,7 @@ class TrackingTests(unittest.TestCase):
 		self.assertEqual(BASELINES, monitor.read_baselines(self.root))
 		branch = self.candidate.branch
 		self.assertEqual(
-			[str(monitor.TOC), str(monitor.BASELINES)],
+			[str(monitor.TOC), "QuestWithFriendsDev.toc", str(monitor.BASELINES)],
 			self.real_run(
 				self.root, "git", "diff", "--name-only", f"main..{branch}"
 			).splitlines(),
@@ -495,6 +498,12 @@ class TrackingTests(unittest.TestCase):
 		self.assertIn(
 			"120105, 16001",
 			self.real_run(self.root, "git", "show", f"{branch}:{monitor.TOC}"),
+		)
+		self.assertEqual(
+			TOC.replace("0.1.7", "dev").replace("120100", "120105").strip(),
+			self.real_run(
+				self.root, "git", "show", f"{branch}:QuestWithFriendsDev.toc"
+			),
 		)
 		create = next(
 			call for call in self.gh_calls if call[1:3] == ("issue", "create")

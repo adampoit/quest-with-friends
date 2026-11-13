@@ -75,7 +75,6 @@ jobs:
             -e WOW_SIM_LOAD_OUT_OF_DATE_ADDONS=1 \
             -v "$GITHUB_WORKSPACE:/app/Interface/AddOns/QuestWithFriends:ro" \
             wow-ui-sim:0.1.32-portable run-tests QuestWithFriends
-          python3 tools/bundle_addon.py --dev-toc
           docker run --rm \
             -e WOW_SIM_LOAD_OUT_OF_DATE_ADDONS=1 \
             -v "$GITHUB_WORKSPACE:/app/Interface/AddOns/QuestWithFriendsDev:ro" \

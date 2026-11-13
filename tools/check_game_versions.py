@@ -337,11 +337,12 @@ def create_linked_branch(
 	if not isinstance(base_tree, str):
 		raise TypeError("GitHub base commit is missing its tree SHA")
 	files = {
-		TOC: proposed_toc(
-			(root / TOC).read_text(encoding="utf-8"), baselines, candidate
-		),
-		BASELINES: json.dumps(baselines | {client: version}, indent=2) + "\n",
+		path: proposed_toc(
+			(root / path).read_text(encoding="utf-8"), baselines, candidate
+		)
+		for path in (TOC, Path("QuestWithFriendsDev.toc"))
 	}
+	files[BASELINES] = json.dumps(baselines | {client: version}, indent=2) + "\n"
 	# Upload complete objects before creating the ref: a failed request cannot leave
 	# a visible branch that lacks its compatibility metadata.
 	tree = post_json(

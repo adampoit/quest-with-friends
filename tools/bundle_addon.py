@@ -16,32 +16,6 @@ DEV_ADDON_NAME = "QuestWithFriendsDev"
 DEV_FILES = ("dev/Development.lua", "dev/InGameTests.lua")
 
 
-def development_toc(toc: str) -> str:
-	"""Derive the dev manifest from the release's interfaces and runtime list."""
-	toc = re.sub(r"(?m)^## Title:.*$", "## Title: Quest With Friends (Dev)", toc)
-	toc = re.sub(r"(?m)^(## Version:.*)$", r"\1-dev", toc)
-	toc = re.sub(
-		r"(?m)^## SavedVariables:.*$", "## SavedVariables: QuestWithFriendsDevDB", toc
-	)
-	# Load an enabled release first so it wins when both are checked.
-	toc = re.sub(r"(?m)^(## OptionalDeps:.*)$", r"\1, QuestWithFriends", toc)
-	toc = re.sub(r"(?m)^## X-(?:Wago-ID|Curse-Project-ID):.*\n?", "", toc)
-	lines = toc.splitlines()
-	index = lines.index("src/Load.xml") if "src/Load.xml" in lines else len(lines)
-	lines.insert(index, DEV_FILES[0])
-	lines.append(DEV_FILES[1])
-	return "\n".join(lines) + "\n"
-
-
-def write_development_toc(root: Path) -> Path:
-	output = root / f"{DEV_ADDON_NAME}.toc"
-	_ = output.write_text(
-		development_toc((root / f"{ADDON_NAME}.toc").read_text(encoding="utf-8-sig")),
-		encoding="utf-8",
-	)
-	return output
-
-
 def bundle(
 	root: Path,
 	output: Path | None = None,
@@ -55,9 +29,7 @@ def bundle(
 		raise ValueError("Release tags cannot be used with development packages")
 	addon_name = DEV_ADDON_NAME if development else ADDON_NAME
 	toc_name = f"{addon_name}.toc"
-	toc = (root / f"{ADDON_NAME}.toc").read_text(encoding="utf-8-sig")
-	if development:
-		toc = development_toc(toc)
+	toc = (root / toc_name).read_text(encoding="utf-8-sig")
 	version_match = re.search(r"^##\s*Version:\s*(\S+)\s*$", toc, re.MULTILINE)
 	if not version_match or not re.fullmatch(r"[A-Za-z0-9._-]+", version_match[1]):
 		raise ValueError("TOC must contain a filename-safe Version")
@@ -141,7 +113,7 @@ def bundle(
 	).resolve()
 	if output in files.values() or output in (
 		root / f"{ADDON_NAME}.toc",
-		root / toc_name,
+		root / f"{DEV_ADDON_NAME}.toc",
 	):
 		raise ValueError("Output would overwrite an addon file")
 	output.parent.mkdir(parents=True, exist_ok=True)
@@ -173,29 +145,15 @@ def main() -> None:
 		"--preview-version",
 		help="override only the packaged TOC with a prerelease version",
 	)
-	mode = parser.add_mutually_exclusive_group()
-	_ = mode.add_argument(
+	_ = parser.add_argument(
 		"--dev", action="store_true", help="build a separate development addon ZIP"
-	)
-	_ = mode.add_argument(
-		"--dev-toc",
-		action="store_true",
-		help="write the dev TOC for a live QuestWithFriendsDev checkout",
 	)
 	args = parser.parse_args()
 	requested_output = cast(Path | None, args.output)
 	tag = cast(str | None, args.tag)
 	development = cast(bool, args.dev)
-	dev_toc = cast(bool, args.dev_toc)
 	preview_version = cast(str | None, args.preview_version)
-	if dev_toc and (requested_output or tag or preview_version):
-		parser.error(
-			"--dev-toc cannot be combined with an output path, release tag, or preview version"
-		)
 	try:
-		if dev_toc:
-			print(f"Created {write_development_toc(ADDON_ROOT)}")
-			return
 		output = bundle(
 			ADDON_ROOT,
 			requested_output,
