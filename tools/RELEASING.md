@@ -40,6 +40,8 @@ To promote a final beta, tag its tested commit with the stable base version. The
 
 There are only two PTR branch names: **`ptr/retail`** and **`ptr/forever`**. Each client can have only one open tracked game patch at a time. Compatibility detection still opens tracking issues, prepares branches and merges the default branch into active candidates; it does not publish automatically.
 
+Sync uses Git 2.39+ in a temporary object-only repository to merge the pinned default-branch commit and align both TOCs with the reviewed PTR target. It preserves the release and `dev` versions and the other client's live interface. One non-force push publishes the merge and corrected manifests together, so CI does not see an intermediate mismatched pair. Candidate files are never checked out or executed; external merge drivers and hooks are disabled. Already-merged branches also have their manifests checked and repaired when they still contain live interfaces. Repeated syncs are no-ops once aligned. Genuine merge conflicts, unexpected interfaces/baselines, or concurrent divergent pushes fail instead of rewriting history or guessing at a target.
+
 An issue records the client and patch with a marker such as:
 
 ```text
