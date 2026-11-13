@@ -169,6 +169,27 @@ luajit -joff tools/benchmark_sync.lua .cache/benchmark-source/fixture.lua 3 nati
 
 Arguments after the fixture are repeat count, `native`/`portable` bit mode, optional scenario name, and optional one-way link latency in seconds. Scenarios: `cold_party`, `single_player`, `all_players`, `four_quests`, `during_checkpoint`, `idle_300s`, `adventure_300s`, `rapid_61s`. A mixed-party update is also measured. Progress is printed to stderr; JSON results go to stdout. The runtime fixture and full results remain ignored cache files, not redistributed upstream data.
 
+## Development diagnostics
+
+Build the separate development addon with `python3 tools/bundle_addon.py --dev`.
+Enable **Quest With Friends (Dev)** instead of the release, then use `/qwf dev`
+to toggle its movable, resizable diagnostics window. `/qwf dev on` and
+`/qwf dev off` explicitly open or close it; Escape and the close button also close it.
+The window starts hidden after each reload and is not included in release packages.
+
+Diagnostics show local client/protocol information, each peer's observed protocol,
+connection health, cached quest counts, snapshot age, `q1` capability, state identity,
+full/partial assembly progress, outgoing transfers, send pacing, and recent recovery
+reasons. Full-snapshot fallback explanations distinguish a missing outgoing baseline
+from peers without recent partial-sync capability. Protocol versions are not addon
+release versions; remote release versions are not advertised.
+
+The view refreshes twice a second only while visible. It reads real runtime state,
+including during appearance previews, without scanning quests, sending additional
+messages, enabling debug logging, or requiring AddonKit. Player names are visible;
+redact them before sharing screenshots. Session and digest values are shortened for
+inspection and must not be compared across players as a party-wide state checksum.
+
 ## Tests
 
 ```sh

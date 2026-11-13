@@ -2004,6 +2004,177 @@ describe("Quest With Friends party sync", function()
 		_G.QuestWithFriendsDevDB = nil
 	end)
 
+	local function diagnosticsRuntime(minor)
+		QuestWithFriends.isDevelopment = true
+		QuestWithFriends.Core.PROTOCOL_MINOR = minor or 1
+		QuestWithFriends.Core.PROTOCOL_VERSION = "1." .. (minor or 1)
+		assert(loadfile("dev/Development.lua"))()
+		local create = QuestWithFriends.Development.new
+		---@type fun(): table
+		local diagnostics
+		rawset(QuestWithFriends.Development, "new", function(setPreviewMode, isScreenshot, getDiagnostics)
+			diagnostics = getDiagnostics
+			return create(setPreviewMode, isScreenshot, getDiagnostics)
+		end)
+		assert(loadfile("src/QuestWithFriends.lua"))()
+		return diagnostics
+	end
+
+	it("provides live diagnostics without scans, logging or additional traffic", function()
+		local now = 10
+		_G.GetTime = function()
+			return now
+		end
+		_G.C_AddOns = {
+			GetAddOnMetadata = function()
+				return "0.1.10-dev"
+			end,
+		}
+		local diagnostics = diagnosticsRuntime()
+		local initial = diagnostics()
+		assert.is_false(initial.localSnapshotKnown)
+		assert.same({}, initial.peers)
+		assert.are.equal("0.1.10-dev", initial.addonVersion)
+		assert.are.equal("Retail", initial.game)
+		assert.are.equal("live", initial.view)
+		assert.is_true(initial.prefixRegistered)
+		assert.is_false(QuestWithFriends.db.debugMode)
+		entries = { { questID = 42, title = "Errand" } }
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		local count, timerCount = #messages, #timers
+		local snapshot = diagnostics()
+		assert.is_true(snapshot.localSnapshotKnown)
+		assert.are.equal(1, snapshot.localQuestCount)
+		assert.are.equal(1, #snapshot.peers)
+		assert.are.equal("unknown", snapshot.peers[1].status)
+		assert.is_nil(snapshot.peers[1].protocol)
+		receiveSnapshot({}, 1)
+		now = 12
+		assert.are.equal(2, diagnostics().peers[1].snapshotAge)
+		assert.are.equal("healthy", diagnostics().peers[1].status)
+		assert.are.equal(count, #messages)
+		assert.are.equal(timerCount, #timers)
+		assert.is_false(QuestWithFriends.db.debugMode)
+	end)
+
+	it("reports observed protocol versions, incompatibility and cached data separately", function()
+		local diagnostics = diagnosticsRuntime()
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		assert.are.equal("1.1", diagnostics().peers[1].protocol)
+		fire("CHAT_MSG_ADDON", "QWF", "1.7:H", "PARTY", "Julia-Realm")
+		local peer = diagnostics().peers[1]
+		assert.are.equal("1.7", peer.protocol)
+		assert.are.equal("refreshing", peer.status)
+		assert.is_true(peer.hasSnapshot)
+		assert.are.equal(1, peer.revision)
+		fire("CHAT_MSG_ADDON", "QWF", "2.0:H", "PARTY", "Julia-Realm")
+		peer = diagnostics().peers[1]
+		assert.are.equal("2.0", peer.protocol)
+		assert.are.equal("incompatible", peer.status)
+		assert.is_true(peer.hasSnapshot)
+		fire("CHAT_MSG_ADDON", "QWF", "01.2:H", "PARTY", "Julia-Realm")
+		assert.are.equal("unversioned / malformed", diagnostics().peers[1].protocol)
+		fire("CHAT_MSG_ADDON", "QWF", "1.2:H", "PARTY", "Stranger-Realm")
+		assert.are.equal("unversioned / malformed", diagnostics().peers[1].protocol)
+	end)
+
+	it("reports incomplete transfers and rejected snapshots while retaining cached counts", function()
+		local diagnostics = diagnosticsRuntime()
+		fire("PLAYER_ENTERING_WORLD")
+		receiveSnapshot({}, 1)
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:2:1:3:incomplete", "PARTY", "Julia-Realm")
+		assert.same({ revision = 2, received = 1, parts = 3 }, diagnostics().peers[1].pending)
+		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:3:1:1:invalid", "PARTY", "Julia-Realm")
+		local peer = diagnostics().peers[1]
+		assert.is_nil(peer.pending)
+		assert.is_true(peer.hasSnapshot)
+		assert.are.equal(0, peer.questCount)
+		assert.are.equal("invalid snapshot rejected", peer.recoveryReason)
+	end)
+
+	it("reports partial capability, state identity and recovery with detached summaries", function()
+		local diagnostics = diagnosticsRuntime(2)
+		fire("PLAYER_ENTERING_WORLD")
+		local session = string.rep("a", 32)
+		fire("CHAT_MSG_ADDON", "QWF", "1.2:C:" .. session .. ":q1", "PARTY", "Julia-Realm")
+		local peer = diagnostics().peers[1]
+		assert.are.equal(session, peer.session)
+		assert.are.equal(0, peer.capabilityAge)
+		assert.are.equal("session needs baseline", peer.recoveryReason)
+		local state, payload = QuestWithFriends.Sync.snapshot(QuestWithFriends.Core.encode({}), session, 1)
+		local total = math.ceil(#payload / 220)
+		for part = 1, total do
+			fire(
+				"CHAT_MSG_ADDON",
+				"QWF",
+				"1.2:D:1:" .. part .. ":" .. total .. ":" .. payload:sub((part - 1) * 220 + 1, part * 220),
+				"PARTY",
+				"Julia-Realm"
+			)
+		end
+		peer = diagnostics().peers[1]
+		assert.are.equal("healthy", peer.status)
+		assert.same({ session = session, sequence = 1, digest = state.digest }, peer.state)
+		peer.state.sequence, peer.name, peer.status = 999, "Changed", "stale"
+		assert.are.equal(1, diagnostics().peers[1].state.sequence)
+		assert.are.equal("Julia", diagnostics().peers[1].name)
+		assert.are.equal("healthy", diagnostics().peers[1].status)
+		local advertised = { session = session, sequence = 2, digest = state.digest }
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.2:V:" .. QuestWithFriends.Sync.identityText(advertised),
+			"PARTY",
+			"Julia-Realm"
+		)
+		assert.are.equal("missed update", diagnostics().peers[1].recoveryReason)
+	end)
+
+	it("reports queued sends and retry pacing without submitting anything from the inspector", function()
+		_G.GetTime = function()
+			return 0
+		end
+		rawset(_G.C_ChatInfo, "SendAddonMessage", function()
+			return false
+		end)
+		local diagnostics = diagnosticsRuntime()
+		fire("PLAYER_ENTERING_WORLD")
+		flush(1)
+		local snapshot = diagnostics()
+		assert.is_true(snapshot.requestPending)
+		assert.are.equal(1, snapshot.retryIn)
+		assert.are.equal(1, snapshot.nextSendIn)
+		assert.is_not_nil(snapshot.queued)
+		assert.are.equal(0, snapshot.queued.sent)
+		assert.is_false(snapshot.queued.materialized)
+		assert.is_true(snapshot.queued.forced)
+		assert.is_true(snapshot.queued.bytes > 0)
+	end)
+
+	it("keeps diagnostics on real data while previewing and clears peers after leaving", function()
+		local diagnostics = diagnosticsRuntime()
+		party = false
+		SlashCmdList.QUESTWITHFRIENDS("preview on")
+		assert.are.equal("preview samples", diagnostics().view)
+		assert.same({}, diagnostics().peers)
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		assert.are.equal("live", diagnostics().view)
+		assert.are.equal(1, #diagnostics().peers)
+		_G.UnitIsConnected = function()
+			return false
+		end
+		fire("UNIT_CONNECTION", "party1")
+		assert.are.equal("offline", diagnostics().peers[1].status)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		assert.same({}, diagnostics().peers)
+		assert.is_nil(diagnostics().outgoing)
+		assert.is_nil(diagnostics().queued)
+	end)
+
 	it("has no screenshot controls or in-game test registrations in the release", function()
 		local settings = captureSettings()
 		_G.AddonKit = { Test = { tests = {}, assert = {} } }

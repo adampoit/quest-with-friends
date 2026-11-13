@@ -41,6 +41,46 @@ test("native debug setting shares the persistent slash-command preference", func
 	end
 end)
 
+test("development diagnostics opens separately without enabling logging", function()
+	if not QuestWithFriends.isDevelopment then
+		assertEquals(nil, QuestWithFriends.Development)
+		return
+	end
+	local debugMode = QuestWithFriends.db.debugMode
+	local name = QuestWithFriends.name .. "Diagnostics"
+	SlashCmdList.QUESTWITHFRIENDS("dev off")
+	assertEquals(nil, _G[name])
+	SlashCmdList.QUESTWITHFRIENDS("dev on")
+	local window = _G[name]
+	assertNotNil(window)
+	assertTrue(window:IsShown())
+	assertEquals("Quest With Friends · Diagnostics (Dev)", window.TitleText:GetText())
+	local report
+	for _, child in ipairs({ window:GetChildren() }) do
+		if child:GetObjectType() == "ScrollFrame" then
+			local content = child:GetScrollChild()
+			for _, region in ipairs({ content:GetRegions() }) do
+				if region:GetObjectType() == "FontString" then
+					report = region
+				end
+			end
+		end
+	end
+	assertNotNil(report)
+	assertTrue(report:GetText():find("Protocol 1.2", 1, true) ~= nil)
+	assertTrue(report:GetText():find("Party peers", 1, true) ~= nil)
+	window:SetSize(480, 300)
+	window:GetScript("OnSizeChanged")(window)
+	assertTrue(report:GetWidth() <= window:GetWidth() - 32)
+	window.CloseButton:Click()
+	assertFalse(window:IsShown())
+	SlashCmdList.QUESTWITHFRIENDS("dev")
+	assertTrue(window:IsShown())
+	SlashCmdList.QUESTWITHFRIENDS("dev off")
+	assertFalse(window:IsShown())
+	assertEquals(debugMode, QuestWithFriends.db.debugMode)
+end)
+
 local function panelRegions()
 	local regions = { QuestWithFriendsPanel:GetRegions() }
 	for _, region in ipairs({ QuestWithFriendsPanel.content:GetRegions() }) do
