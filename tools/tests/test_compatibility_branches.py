@@ -217,8 +217,14 @@ class SyncTests(unittest.TestCase):
 
 	def test_sync_pins_main_and_passes_reviewed_baselines(self):
 		branches.sync_branches(self.root, "main")
-		self.sync.assert_called_once_with(self.root, MAIN_SHA, ISSUE, LIVE)
+		self.sync.assert_called_once_with(self.root, MAIN_SHA, ISSUE, LIVE, base="main")
 		self.comment.assert_not_called()
+
+	def test_sync_passes_the_selected_base_branch_name(self):
+		branches.sync_branches(self.root, "integration")
+		self.sync.assert_called_once_with(
+			self.root, MAIN_SHA, ISSUE, LIVE, base="integration"
+		)
 
 	def test_up_to_date_branch_is_a_noop(self):
 		self.sync.return_value = False

@@ -98,6 +98,10 @@ class ManifestSyncTests(unittest.TestCase):
 				)
 			)
 		self.assertEqual(
+			"Merge main into ptr/retail",
+			git(self.origin, "show", "-s", "--format=%s", self.tip()),
+		)
+		self.assertEqual(
 			f"{before} {self.main}",
 			git(self.origin, "show", "-s", "--format=%P", self.tip()),
 		)
@@ -111,6 +115,22 @@ class ManifestSyncTests(unittest.TestCase):
 		)
 		self.assertEqual("main", git(self.root, "branch", "--show-current"))
 		self.assertEqual("", git(self.root, "status", "--porcelain"))
+
+	def test_merge_message_uses_the_selected_base_branch(self):
+		self.prepare()
+		with (
+			patch.object(branches, "run", return_value=str(self.origin)),
+			patch.object(branches, "ref_sha", return_value=self.tip()),
+		):
+			self.assertTrue(
+				branches.sync_branch(
+					self.root, self.main, self.issue, LIVE, base="integration"
+				)
+			)
+		self.assertEqual(
+			"Merge integration into ptr/retail",
+			git(self.origin, "show", "-s", "--format=%s", self.tip()),
+		)
 
 	def test_forever_sync_keeps_retail_on_its_live_interface(self):
 		self.prepare("forever", "1.60.2")

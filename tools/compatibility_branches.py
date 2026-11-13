@@ -126,7 +126,12 @@ def _target_toc(toc: str, live: dict[str, str], issue: TrackingIssue) -> str:
 
 
 def sync_branch(
-	root: Path, main_sha: str, issue: TrackingIssue, live: dict[str, str]
+	root: Path,
+	main_sha: str,
+	issue: TrackingIssue,
+	live: dict[str, str],
+	*,
+	base: str = "main",
 ) -> bool:
 	branch_sha = ref_sha(root, issue.branch)
 	url = run(root, "gh", "repo", "view", "--json", "url", "--jq", ".url")
@@ -194,7 +199,7 @@ def sync_branch(
 			tree,
 			*parents,
 			"-m",
-			f"Sync default branch and PTR interfaces into {issue.branch}",
+			f"Merge {base} into {issue.branch}",
 		)
 		# A single non-force push publishes the merge and both corrected manifests.
 		_ = isolated_git(repo, "push", url, f"{commit}:refs/heads/{issue.branch}")
@@ -217,7 +222,7 @@ def sync_branches(root: Path, base: str) -> None:
 			)
 			continue
 		try:
-			result = sync_branch(root, main_sha, issue, baselines)
+			result = sync_branch(root, main_sha, issue, baselines, base=base)
 			print(f"{'Updated' if result else 'Already current'}: {issue.branch}")
 		except (subprocess.CalledProcessError, ValueError, TypeError) as error:
 			stderr = (
