@@ -1,0 +1,1202 @@
+{
+  "bit_mode": "native",
+  "date": "2026-11-12",
+  "fixture_sha256": "b2cf0a978fa47237a48b40dd0311e5033ef2c3cea56b919e6caa3aeb087f77df",
+  "host": "Apple M3 Pro / macOS 26.6.2 / LuaJIT 2.1.1785763465, JIT disabled",
+  "latency50": {
+    "1.1": {
+      "duration_s": 9.35,
+      "total_cpu_ms_median": 22.079
+    },
+    "1.2": {
+      "duration_s": 1.35,
+      "total_cpu_ms_median": 19.834
+    }
+  },
+  "mixed": {
+    "bytes": 15763,
+    "calls": {
+      "activity": 20,
+      "activity_and_scan_glue": 8,
+      "comparison": 648,
+      "decode": 24,
+      "digest": 9,
+      "encode": 8,
+      "fragmentation": 774,
+      "item_stock": 8,
+      "quest_scan": 8,
+      "render_preparation": 216,
+      "runtime.other": 75,
+      "runtime_other": 276,
+      "send_glue": 68,
+      "sender_queue": 72,
+      "sync_state": 12
+    },
+    "client_cpu_ms": {
+      "Player1 Family1": 32.942000000034,
+      "Player2 Family2": 31.267000000021,
+      "Player3 Family3": 31.242999999947,
+      "Player4 Family4": 23.779000000012
+    },
+    "cpu_ms": {
+      "activity": 0.28499999999809,
+      "activity_and_scan_glue": 0.017999999997187,
+      "comparison": 70.737000000037,
+      "decode": 2.8930000000216,
+      "digest": 31.608999999996,
+      "encode": 0.94100000000452,
+      "fragmentation": 0.5909999999929,
+      "item_stock": 0.15199999999282,
+      "quest_scan": 0.45199999999568,
+      "render_preparation": 8.6869999999806,
+      "runtime.other": 0.084999999963031,
+      "runtime_other": 1.5690000000461,
+      "send_glue": 0.11499999996545,
+      "sender_queue": 0.29300000004895,
+      "sync_state": 0.80399999997383
+    },
+    "data_span_s": 8,
+    "duration_s": 9.3,
+    "first_data_s": 1.3,
+    "local_payload_bytes": {
+      "Player1 Family1": 3651,
+      "Player2 Family2": 3651,
+      "Player3 Family3": 3634,
+      "Player4 Family4": 3662
+    },
+    "messages": {
+      "D": 68
+    },
+    "peak_same_time_ms": {
+      "Player1 Family1": 8.6170000000081,
+      "Player2 Family2": 8.7700000000126,
+      "Player3 Family3": 8.9009999999803,
+      "Player4 Family4": 1.8740000000079
+    },
+    "sender_last_data_s": {
+      "Player1 Family1": 9.3,
+      "Player2 Family2": 9.3,
+      "Player3 Family3": 9.3,
+      "Player4 Family4": 9.3
+    },
+    "total_cpu_ms": 119.23100000001
+  },
+  "portable": {
+    "1.1": {
+      "duration_s": 9.3,
+      "total_cpu_ms_median": 19.919
+    },
+    "1.2": {
+      "duration_s": 1.3,
+      "total_cpu_ms_median": 131.477
+    }
+  },
+  "repeats": 5,
+  "results": {
+    "1.1": {
+      "adventure_300s": {
+        "batch_latency_s": {
+          "max": 9.3,
+          "median": 9.3,
+          "min": 9.3
+        },
+        "bytes": 467010,
+        "cached_state_matched_before_next_batch": 30,
+        "calls": {
+          "activity": 600,
+          "activity_and_scan_glue": 240,
+          "comparison": 19440,
+          "decode": 360,
+          "encode": 240,
+          "fragmentation": 12960,
+          "item_stock": 240,
+          "quest_scan": 240,
+          "render_preparation": 6480,
+          "runtime.other": 2520,
+          "runtime_other": 8280,
+          "send_glue": 2040,
+          "sender_queue": 2160
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 683.173,
+          "Player2 Family2": 693.035,
+          "Player3 Family3": 687.331,
+          "Player4 Family4": 689.995
+        },
+        "cpu_ms_median": {
+          "activity": 7.147,
+          "activity_and_scan_glue": 0.44,
+          "comparison": 2302.679,
+          "decode": 48.435,
+          "encode": 23.786,
+          "fragmentation": 11.429,
+          "item_stock": 5.226,
+          "quest_scan": 15.633,
+          "render_preparation": 280.496,
+          "runtime.other": 2.574,
+          "runtime_other": 47.296,
+          "send_glue": 4.345,
+          "sender_queue": 8.177
+        },
+        "data_messages_during_workload": 2040,
+        "data_span_s": 298,
+        "duration_s": 300,
+        "event_batches": 30,
+        "first_data_s": 1.3,
+        "messages": {
+          "D": 2040
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 4.461,
+          "Player2 Family2": 4.471,
+          "Player3 Family3": 4.214,
+          "Player4 Family4": 4.574
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 299.3,
+          "Player2 Family2": 299.3,
+          "Player3 Family3": 299.3,
+          "Player4 Family4": 299.3
+        },
+        "total_cpu_ms_max": 2778.92,
+        "total_cpu_ms_median": 2758.576,
+        "total_cpu_ms_min": 2643.596,
+        "workload_s": 300
+      },
+      "all_players": {
+        "bytes": 15514,
+        "calls": {
+          "activity": 20,
+          "activity_and_scan_glue": 8,
+          "comparison": 648,
+          "decode": 12,
+          "encode": 8,
+          "fragmentation": 432,
+          "item_stock": 8,
+          "quest_scan": 8,
+          "render_preparation": 216,
+          "runtime.other": 84,
+          "runtime_other": 276,
+          "send_glue": 68,
+          "sender_queue": 72
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 19.763,
+          "Player2 Family2": 20.561,
+          "Player3 Family3": 19.859,
+          "Player4 Family4": 19.815
+        },
+        "cpu_ms_median": {
+          "activity": 0.215,
+          "activity_and_scan_glue": 0.018,
+          "comparison": 65.568,
+          "decode": 1.581,
+          "encode": 0.667,
+          "fragmentation": 0.329,
+          "item_stock": 0.172,
+          "quest_scan": 0.479,
+          "render_preparation": 8.024,
+          "runtime.other": 0.072,
+          "runtime_other": 1.358,
+          "send_glue": 0.116,
+          "sender_queue": 0.253
+        },
+        "data_span_s": 8,
+        "duration_s": 9.3,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "D": 68
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 1.804,
+          "Player2 Family2": 1.76,
+          "Player3 Family3": 1.633,
+          "Player4 Family4": 1.77
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 9.3,
+          "Player2 Family2": 9.3,
+          "Player3 Family3": 9.3,
+          "Player4 Family4": 9.3
+        },
+        "total_cpu_ms_max": 84.32,
+        "total_cpu_ms_median": 78.676,
+        "total_cpu_ms_min": 78.535
+      },
+      "cold_party": {
+        "bytes": 15534,
+        "calls": {
+          "activity": 32,
+          "activity_and_scan_glue": 20,
+          "comparison": 720,
+          "decode": 12,
+          "encode": 8,
+          "fragmentation": 432,
+          "item_stock": 20,
+          "quest_scan": 20,
+          "render_preparation": 240,
+          "runtime.other": 80,
+          "runtime_other": 292,
+          "send_glue": 72,
+          "sender_queue": 76
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 8.296,
+          "Player2 Family2": 8.013,
+          "Player3 Family3": 8.074,
+          "Player4 Family4": 8.422
+        },
+        "cpu_ms_median": {
+          "activity": 0.212,
+          "activity_and_scan_glue": 0.033,
+          "comparison": 23.974,
+          "decode": 1.558,
+          "encode": 0.654,
+          "fragmentation": 0.334,
+          "item_stock": 0.377,
+          "quest_scan": 1.135,
+          "render_preparation": 2.722,
+          "runtime.other": 0.078,
+          "runtime_other": 1.391,
+          "send_glue": 0.129,
+          "sender_queue": 0.234
+        },
+        "data_span_s": 8,
+        "duration_s": 9.35,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "D": 68,
+          "H": 4
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 1.029,
+          "Player2 Family2": 1.23,
+          "Player3 Family3": 1.33,
+          "Player4 Family4": 1.213
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 9.3,
+          "Player2 Family2": 9.3,
+          "Player3 Family3": 9.3,
+          "Player4 Family4": 9.3
+        },
+        "total_cpu_ms_max": 33.791,
+        "total_cpu_ms_median": 32.995,
+        "total_cpu_ms_min": 31.774
+      },
+      "during_checkpoint": {
+        "bytes": 17297,
+        "calls": {
+          "activity": 17,
+          "activity_and_scan_glue": 2,
+          "comparison": 693,
+          "decode": 15,
+          "encode": 15,
+          "fragmentation": 540,
+          "item_stock": 2,
+          "quest_scan": 2,
+          "render_preparation": 231,
+          "runtime.other": 101,
+          "runtime_other": 305,
+          "send_glue": 76,
+          "sender_queue": 77
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 19.929,
+          "Player2 Family2": 23.181,
+          "Player3 Family3": 24.295,
+          "Player4 Family4": 23.488
+        },
+        "cpu_ms_median": {
+          "activity": 0.183,
+          "activity_and_scan_glue": 0.003,
+          "comparison": 75.513,
+          "decode": 1.983,
+          "encode": 1.52,
+          "fragmentation": 0.47,
+          "item_stock": 0.034,
+          "quest_scan": 0.098,
+          "render_preparation": 9.314,
+          "runtime.other": 0.087,
+          "runtime_other": 1.674,
+          "send_glue": 0.149,
+          "sender_queue": 0.316
+        },
+        "data_span_s": 15,
+        "duration_s": 15.3,
+        "first_data_s": 0.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "D": 76
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 2.208,
+          "Player2 Family2": 1.803,
+          "Player3 Family3": 1.761,
+          "Player4 Family4": 1.837
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 15.3,
+          "Player2 Family2": 7.3,
+          "Player3 Family3": 7.3,
+          "Player4 Family4": 7.3
+        },
+        "total_cpu_ms_max": 94.568,
+        "total_cpu_ms_median": 91.646,
+        "total_cpu_ms_min": 84.827
+      },
+      "four_quests": {
+        "bytes": 15525,
+        "calls": {
+          "activity": 20,
+          "activity_and_scan_glue": 8,
+          "comparison": 648,
+          "decode": 12,
+          "encode": 8,
+          "fragmentation": 432,
+          "item_stock": 8,
+          "quest_scan": 8,
+          "render_preparation": 216,
+          "runtime.other": 84,
+          "runtime_other": 276,
+          "send_glue": 68,
+          "sender_queue": 72
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 20.903,
+          "Player2 Family2": 21.327,
+          "Player3 Family3": 20.137,
+          "Player4 Family4": 19.512
+        },
+        "cpu_ms_median": {
+          "activity": 0.222,
+          "activity_and_scan_glue": 0.017,
+          "comparison": 67.421,
+          "decode": 1.544,
+          "encode": 0.992,
+          "fragmentation": 0.435,
+          "item_stock": 0.191,
+          "quest_scan": 0.501,
+          "render_preparation": 8.595,
+          "runtime.other": 0.078,
+          "runtime_other": 1.42,
+          "send_glue": 0.117,
+          "sender_queue": 0.256
+        },
+        "data_span_s": 8,
+        "duration_s": 9.3,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3662,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3623,
+          "Player4 Family4": 3673
+        },
+        "messages": {
+          "D": 68
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 1.734,
+          "Player2 Family2": 1.89,
+          "Player3 Family3": 1.731,
+          "Player4 Family4": 1.666
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 9.3,
+          "Player2 Family2": 9.3,
+          "Player3 Family3": 9.3,
+          "Player4 Family4": 9.3
+        },
+        "total_cpu_ms_max": 85.929,
+        "total_cpu_ms_median": 81.593,
+        "total_cpu_ms_min": 79.074
+      },
+      "idle_300s": {
+        "bytes": 0,
+        "calls": {
+          "runtime.other": 12
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 0.001,
+          "Player2 Family2": 0.003,
+          "Player3 Family3": 0.001,
+          "Player4 Family4": 0.001
+        },
+        "cpu_ms_median": {
+          "runtime.other": 0.005
+        },
+        "duration_s": 300,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {},
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 0.001,
+          "Player2 Family2": 0.003,
+          "Player3 Family3": 0.001,
+          "Player4 Family4": 0.001
+        },
+        "sender_last_data_s": {},
+        "total_cpu_ms_max": 0.013,
+        "total_cpu_ms_median": 0.005,
+        "total_cpu_ms_min": 0.004
+      },
+      "rapid_61s": {
+        "batch_latency_s": {
+          "max": 0.3,
+          "median": 0.3,
+          "min": 0.3
+        },
+        "bytes": 15582,
+        "cached_state_matched_before_next_batch": 3,
+        "calls": {
+          "activity": 500,
+          "activity_and_scan_glue": 488,
+          "comparison": 2772,
+          "decode": 12,
+          "encode": 476,
+          "fragmentation": 432,
+          "item_stock": 488,
+          "quest_scan": 488,
+          "render_preparation": 924,
+          "runtime.other": 552,
+          "runtime_other": 516,
+          "send_glue": 68,
+          "sender_queue": 540
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 104.666,
+          "Player2 Family2": 103.514,
+          "Player3 Family3": 103.066,
+          "Player4 Family4": 103.033
+        },
+        "cpu_ms_median": {
+          "activity": 5.361,
+          "activity_and_scan_glue": 0.824,
+          "comparison": 287.399,
+          "decode": 1.591,
+          "encode": 41.456,
+          "fragmentation": 0.326,
+          "item_stock": 9.538,
+          "quest_scan": 26.906,
+          "render_preparation": 35.743,
+          "runtime.other": 0.909,
+          "runtime_other": 2.199,
+          "send_glue": 0.117,
+          "sender_queue": 2.295
+        },
+        "data_messages_during_workload": 0,
+        "data_span_s": 8,
+        "duration_s": 69.35,
+        "event_batches": 61,
+        "first_data_s": 61.3,
+        "messages": {
+          "D": 68
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 1.86,
+          "Player2 Family2": 1.851,
+          "Player3 Family3": 1.966,
+          "Player4 Family4": 1.809
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 69.3,
+          "Player2 Family2": 69.3,
+          "Player3 Family3": 69.3,
+          "Player4 Family4": 69.3
+        },
+        "total_cpu_ms_max": 447.66,
+        "total_cpu_ms_median": 414.828,
+        "total_cpu_ms_min": 402.483,
+        "workload_s": 61
+      },
+      "single_player": {
+        "bytes": 3880,
+        "calls": {
+          "activity": 5,
+          "activity_and_scan_glue": 2,
+          "comparison": 162,
+          "decode": 3,
+          "encode": 2,
+          "fragmentation": 108,
+          "item_stock": 2,
+          "quest_scan": 2,
+          "render_preparation": 54,
+          "runtime.other": 30,
+          "runtime_other": 69,
+          "send_glue": 17,
+          "sender_queue": 18
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 1.355,
+          "Player2 Family2": 5.936,
+          "Player3 Family3": 6.041,
+          "Player4 Family4": 5.916
+        },
+        "cpu_ms_median": {
+          "activity": 0.051,
+          "activity_and_scan_glue": 0.004,
+          "comparison": 16.139,
+          "decode": 0.347,
+          "encode": 0.163,
+          "fragmentation": 0.08,
+          "item_stock": 0.035,
+          "quest_scan": 0.089,
+          "render_preparation": 1.925,
+          "runtime.other": 0.021,
+          "runtime_other": 0.341,
+          "send_glue": 0.033,
+          "sender_queue": 0.075
+        },
+        "data_span_s": 8,
+        "duration_s": 9.3,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "D": 17
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 0.69,
+          "Player2 Family2": 0.919,
+          "Player3 Family3": 1.002,
+          "Player4 Family4": 0.968
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 9.3
+        },
+        "total_cpu_ms_max": 20.317,
+        "total_cpu_ms_median": 19.273,
+        "total_cpu_ms_min": 18.994
+      }
+    },
+    "1.2": {
+      "adventure_300s": {
+        "batch_latency_s": {
+          "max": 10,
+          "median": 1.8,
+          "min": 1.3
+        },
+        "bytes": 53231,
+        "cached_state_matched_before_next_batch": 30,
+        "calls": {
+          "activity": 606,
+          "activity_and_scan_glue": 246,
+          "comparison": 3228,
+          "decode": 964,
+          "digest": 836,
+          "encode": 246,
+          "fragmentation": 4004,
+          "item_stock": 246,
+          "patch_apply": 354,
+          "patch_build": 236,
+          "quest_scan": 246,
+          "render_preparation": 1076,
+          "runtime.other": 952,
+          "runtime_other": 1696,
+          "send_glue": 394,
+          "sender_queue": 516,
+          "sync_state": 958
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 619.522,
+          "Player2 Family2": 609.172,
+          "Player3 Family3": 617.393,
+          "Player4 Family4": 612.465
+        },
+        "cpu_ms_median": {
+          "activity": 11.078,
+          "activity_and_scan_glue": 0.519,
+          "comparison": 393.6,
+          "decode": 88.443,
+          "digest": 1783.954,
+          "encode": 25.555,
+          "fragmentation": 3.758,
+          "item_stock": 5.563,
+          "patch_apply": 6.42,
+          "patch_build": 1.256,
+          "quest_scan": 16.784,
+          "render_preparation": 52.642,
+          "runtime.other": 1.418,
+          "runtime_other": 15.272,
+          "send_glue": 0.901,
+          "sender_queue": 2.914,
+          "sync_state": 46.987
+        },
+        "data_messages_during_workload": 242,
+        "data_span_s": 290.5,
+        "duration_s": 300,
+        "event_batches": 30,
+        "first_data_s": 1.3,
+        "messages": {
+          "C": 76,
+          "D": 69,
+          "P": 173,
+          "V": 76
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 15.115,
+          "Player2 Family2": 15.394,
+          "Player3 Family3": 15.386,
+          "Player4 Family4": 15.107
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 291.8,
+          "Player2 Family2": 291.8,
+          "Player3 Family3": 291.8,
+          "Player4 Family4": 291.3
+        },
+        "total_cpu_ms_max": 2530.411,
+        "total_cpu_ms_median": 2462.531,
+        "total_cpu_ms_min": 2400.911,
+        "workload_s": 300
+      },
+      "all_players": {
+        "bytes": 856,
+        "calls": {
+          "activity": 20,
+          "activity_and_scan_glue": 8,
+          "comparison": 72,
+          "decode": 32,
+          "digest": 28,
+          "encode": 8,
+          "fragmentation": 48,
+          "item_stock": 8,
+          "patch_apply": 12,
+          "patch_build": 8,
+          "quest_scan": 8,
+          "render_preparation": 24,
+          "runtime.other": 8,
+          "runtime_other": 20,
+          "send_glue": 4,
+          "sender_queue": 8,
+          "sync_state": 32
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 19.898,
+          "Player2 Family2": 19.349,
+          "Player3 Family3": 19.588,
+          "Player4 Family4": 20.728
+        },
+        "cpu_ms_median": {
+          "activity": 0.406,
+          "activity_and_scan_glue": 0.017,
+          "comparison": 9.039,
+          "decode": 2.918,
+          "digest": 60.339,
+          "encode": 0.828,
+          "fragmentation": 0.053,
+          "item_stock": 0.197,
+          "patch_apply": 0.251,
+          "patch_build": 0.039,
+          "quest_scan": 0.606,
+          "render_preparation": 1.268,
+          "runtime.other": 0.02,
+          "runtime_other": 0.367,
+          "send_glue": 0.011,
+          "sender_queue": 0.084,
+          "sync_state": 1.639
+        },
+        "data_span_s": 0,
+        "duration_s": 1.3,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "P": 4
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 13.858,
+          "Player2 Family2": 13.942,
+          "Player3 Family3": 14.005,
+          "Player4 Family4": 13.38
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 1.3,
+          "Player2 Family2": 1.3,
+          "Player3 Family3": 1.3,
+          "Player4 Family4": 1.3
+        },
+        "total_cpu_ms_max": 82.658,
+        "total_cpu_ms_median": 78.395,
+        "total_cpu_ms_min": 74.357
+      },
+      "cold_party": {
+        "bytes": 16228,
+        "calls": {
+          "activity": 60,
+          "activity_and_scan_glue": 48,
+          "comparison": 885,
+          "decode": 32,
+          "digest": 16,
+          "encode": 12,
+          "fragmentation": 511,
+          "item_stock": 48,
+          "quest_scan": 48,
+          "render_preparation": 295,
+          "runtime.other": 97,
+          "runtime_other": 344,
+          "send_glue": 85,
+          "sender_queue": 93,
+          "sync_state": 20
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 25.081,
+          "Player2 Family2": 26.855,
+          "Player3 Family3": 26.919,
+          "Player4 Family4": 26.708
+        },
+        "cpu_ms_median": {
+          "activity": 0.522,
+          "activity_and_scan_glue": 0.088,
+          "comparison": 30.506,
+          "decode": 4.167,
+          "digest": 57.697,
+          "encode": 0.996,
+          "fragmentation": 0.39,
+          "item_stock": 0.952,
+          "quest_scan": 2.732,
+          "render_preparation": 3.546,
+          "runtime.other": 0.114,
+          "runtime_other": 1.832,
+          "send_glue": 0.164,
+          "sender_queue": 0.295,
+          "sync_state": 1.48
+        },
+        "data_span_s": 8.5,
+        "duration_s": 11,
+        "first_data_s": 2.5,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "C": 8,
+          "D": 69,
+          "H": 8
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 8.516,
+          "Player2 Family2": 8.532,
+          "Player3 Family3": 8.782,
+          "Player4 Family4": 12.628
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 10.5,
+          "Player2 Family2": 10.5,
+          "Player3 Family3": 10.5,
+          "Player4 Family4": 11
+        },
+        "total_cpu_ms_max": 113.346,
+        "total_cpu_ms_median": 105.125,
+        "total_cpu_ms_min": 104.03
+      },
+      "during_checkpoint": {
+        "bytes": 2431,
+        "calls": {
+          "activity": 5,
+          "activity_and_scan_glue": 2,
+          "comparison": 99,
+          "decode": 8,
+          "digest": 7,
+          "encode": 2,
+          "fragmentation": 99,
+          "item_stock": 2,
+          "patch_apply": 3,
+          "patch_build": 2,
+          "quest_scan": 2,
+          "render_preparation": 33,
+          "runtime.other": 28,
+          "runtime_other": 49,
+          "send_glue": 12,
+          "sender_queue": 13,
+          "sync_state": 8
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 9.541,
+          "Player2 Family2": 7.317,
+          "Player3 Family3": 6.934,
+          "Player4 Family4": 7.074
+        },
+        "cpu_ms_median": {
+          "activity": 0.103,
+          "activity_and_scan_glue": 0.003,
+          "comparison": 12.256,
+          "decode": 0.687,
+          "digest": 15.197,
+          "encode": 0.208,
+          "fragmentation": 0.082,
+          "item_stock": 0.042,
+          "patch_apply": 0.055,
+          "patch_build": 0.011,
+          "quest_scan": 0.125,
+          "render_preparation": 1.505,
+          "runtime.other": 0.04,
+          "runtime_other": 0.362,
+          "send_glue": 0.029,
+          "sender_queue": 0.07,
+          "sync_state": 0.412
+        },
+        "data_span_s": 1.2,
+        "duration_s": 1.5,
+        "first_data_s": 0.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "C": 1,
+          "D": 9,
+          "P": 1,
+          "V": 1
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 6.852,
+          "Player2 Family2": 4.441,
+          "Player3 Family3": 4.481,
+          "Player4 Family4": 4.872
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 1.5,
+          "Player2 Family2": 1.3,
+          "Player3 Family3": 1.3,
+          "Player4 Family4": 1.3
+        },
+        "total_cpu_ms_max": 32.77,
+        "total_cpu_ms_median": 31.606,
+        "total_cpu_ms_min": 28.979
+      },
+      "four_quests": {
+        "bytes": 2895,
+        "calls": {
+          "activity": 20,
+          "activity_and_scan_glue": 8,
+          "comparison": 180,
+          "decode": 32,
+          "digest": 28,
+          "encode": 8,
+          "fragmentation": 120,
+          "item_stock": 8,
+          "patch_apply": 12,
+          "patch_build": 8,
+          "quest_scan": 8,
+          "render_preparation": 60,
+          "runtime.other": 20,
+          "runtime_other": 68,
+          "send_glue": 16,
+          "sender_queue": 20,
+          "sync_state": 32
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 24.413,
+          "Player2 Family2": 24.52,
+          "Player3 Family3": 24.26,
+          "Player4 Family4": 24.055
+        },
+        "cpu_ms_median": {
+          "activity": 0.363,
+          "activity_and_scan_glue": 0.02,
+          "comparison": 20.388,
+          "decode": 3.203,
+          "digest": 65.126,
+          "encode": 0.749,
+          "fragmentation": 0.146,
+          "item_stock": 0.21,
+          "patch_apply": 0.229,
+          "patch_build": 0.041,
+          "quest_scan": 0.578,
+          "render_preparation": 2.742,
+          "runtime.other": 0.034,
+          "runtime_other": 0.59,
+          "send_glue": 0.032,
+          "sender_queue": 0.109,
+          "sync_state": 1.691
+        },
+        "data_span_s": 1.5,
+        "duration_s": 2.8,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3662,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3623,
+          "Player4 Family4": 3673
+        },
+        "messages": {
+          "P": 16
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 14.698,
+          "Player2 Family2": 14.725,
+          "Player3 Family3": 15.0,
+          "Player4 Family4": 14.721
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 2.8,
+          "Player2 Family2": 2.8,
+          "Player3 Family3": 2.8,
+          "Player4 Family4": 2.8
+        },
+        "total_cpu_ms_max": 101.157,
+        "total_cpu_ms_median": 95.674,
+        "total_cpu_ms_min": 95.336
+      },
+      "idle_300s": {
+        "bytes": 24980,
+        "calls": {
+          "activity": 20,
+          "activity_and_scan_glue": 8,
+          "comparison": 657,
+          "decode": 32,
+          "digest": 16,
+          "encode": 8,
+          "fragmentation": 657,
+          "item_stock": 8,
+          "quest_scan": 8,
+          "render_preparation": 219,
+          "runtime.other": 325,
+          "runtime_other": 884,
+          "send_glue": 221,
+          "sender_queue": 225,
+          "sync_state": 20
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 39.766,
+          "Player2 Family2": 40.403,
+          "Player3 Family3": 36.87,
+          "Player4 Family4": 39.977
+        },
+        "cpu_ms_median": {
+          "activity": 0.384,
+          "activity_and_scan_glue": 0.019,
+          "comparison": 74.044,
+          "decode": 4.573,
+          "digest": 58.384,
+          "encode": 0.871,
+          "fragmentation": 0.556,
+          "item_stock": 0.166,
+          "quest_scan": 0.49,
+          "render_preparation": 9.394,
+          "runtime.other": 0.488,
+          "runtime_other": 3.59,
+          "send_glue": 0.379,
+          "sender_queue": 0.631,
+          "sync_state": 1.575
+        },
+        "data_span_s": 20,
+        "duration_s": 300,
+        "first_data_s": 181.5,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "C": 76,
+          "D": 69,
+          "V": 76
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 5.577,
+          "Player2 Family2": 5.312,
+          "Player3 Family3": 5.172,
+          "Player4 Family4": 5.658
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 192.5,
+          "Player2 Family2": 189.5,
+          "Player3 Family3": 201.5,
+          "Player4 Family4": 190
+        },
+        "total_cpu_ms_max": 162.055,
+        "total_cpu_ms_median": 156.171,
+        "total_cpu_ms_min": 149.302
+      },
+      "rapid_61s": {
+        "batch_latency_s": {
+          "max": 0.3,
+          "median": 0.3,
+          "min": 0.3
+        },
+        "bytes": 2784,
+        "cached_state_matched_before_next_batch": 3,
+        "calls": {
+          "activity": 500,
+          "activity_and_scan_glue": 488,
+          "comparison": 2196,
+          "decode": 488,
+          "digest": 256,
+          "encode": 462,
+          "fragmentation": 88,
+          "item_stock": 488,
+          "patch_apply": 12,
+          "patch_build": 8,
+          "quest_scan": 488,
+          "render_preparation": 732,
+          "runtime.other": 522,
+          "runtime_other": 388,
+          "send_glue": 36,
+          "sender_queue": 494,
+          "sync_state": 488
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 340.739,
+          "Player2 Family2": 346.019,
+          "Player3 Family3": 340.96,
+          "Player4 Family4": 344.132
+        },
+        "cpu_ms_median": {
+          "activity": 6.813,
+          "activity_and_scan_glue": 1.032,
+          "comparison": 260.137,
+          "decode": 67.564,
+          "digest": 884.65,
+          "encode": 45.055,
+          "fragmentation": 0.082,
+          "item_stock": 10.306,
+          "patch_apply": 0.243,
+          "patch_build": 0.039,
+          "quest_scan": 32.608,
+          "render_preparation": 32.817,
+          "runtime.other": 1.2,
+          "runtime_other": 2.066,
+          "send_glue": 0.109,
+          "sender_queue": 3.161,
+          "sync_state": 25.586
+        },
+        "data_messages_during_workload": 0,
+        "data_span_s": 0,
+        "duration_s": 61.35,
+        "event_batches": 61,
+        "first_data_s": 61.3,
+        "messages": {
+          "C": 16,
+          "P": 4,
+          "V": 16
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 13.643,
+          "Player2 Family2": 13.181,
+          "Player3 Family3": 13.698,
+          "Player4 Family4": 13.27
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 61.3,
+          "Player2 Family2": 61.3,
+          "Player3 Family3": 61.3,
+          "Player4 Family4": 61.3
+        },
+        "total_cpu_ms_max": 1412.885,
+        "total_cpu_ms_median": 1371.85,
+        "total_cpu_ms_min": 1347.303,
+        "workload_s": 61
+      },
+      "single_player": {
+        "bytes": 214,
+        "calls": {
+          "activity": 5,
+          "activity_and_scan_glue": 2,
+          "comparison": 18,
+          "decode": 8,
+          "digest": 7,
+          "encode": 2,
+          "fragmentation": 12,
+          "item_stock": 2,
+          "patch_apply": 3,
+          "patch_build": 2,
+          "quest_scan": 2,
+          "render_preparation": 6,
+          "runtime.other": 2,
+          "runtime_other": 5,
+          "send_glue": 1,
+          "sender_queue": 2,
+          "sync_state": 8
+        },
+        "client_cpu_ms_median": {
+          "Player1 Family1": 5.353,
+          "Player2 Family2": 4.426,
+          "Player3 Family3": 4.442,
+          "Player4 Family4": 4.384
+        },
+        "cpu_ms_median": {
+          "activity": 0.104,
+          "activity_and_scan_glue": 0.004,
+          "comparison": 1.719,
+          "decode": 0.672,
+          "digest": 15.069,
+          "encode": 0.19,
+          "fragmentation": 0.015,
+          "item_stock": 0.043,
+          "patch_apply": 0.051,
+          "patch_build": 0.011,
+          "quest_scan": 0.126,
+          "render_preparation": 0.248,
+          "runtime.other": 0.004,
+          "runtime_other": 0.096,
+          "send_glue": 0.004,
+          "sender_queue": 0.017,
+          "sync_state": 0.39
+        },
+        "data_span_s": 0,
+        "duration_s": 1.3,
+        "first_data_s": 1.3,
+        "local_payload_bytes": {
+          "Player1 Family1": 3651,
+          "Player2 Family2": 3651,
+          "Player3 Family3": 3634,
+          "Player4 Family4": 3662
+        },
+        "messages": {
+          "P": 1
+        },
+        "peak_same_time_ms_median": {
+          "Player1 Family1": 4.786,
+          "Player2 Family2": 4.426,
+          "Player3 Family3": 4.442,
+          "Player4 Family4": 4.384
+        },
+        "sender_last_data_s": {
+          "Player1 Family1": 1.3
+        },
+        "total_cpu_ms_max": 19.896,
+        "total_cpu_ms_median": 18.845,
+        "total_cpu_ms_min": 18.015
+      }
+    }
+  },
+  "runtime_revision": "6763772acd7c3e9092377d51f2c8db613fde0b85",
+  "source": "Questie/QuestieDB",
+  "source_revision": "e0a6eaa86f181ac99262e34126bcd2ed1a1712d6"
+}

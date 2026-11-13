@@ -1,10 +1,12 @@
 name: Prepare release
 
 on:
-  workflow_dispatch:
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -12,56 +14,98 @@ concurrency:
 
 jobs:
   validate:
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.event.deleted == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
+      plan: ${{ steps.plan.outputs.plan }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      automation_sha: ${{ steps.plan.outputs.automation_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - name: Resolve release tag and validate package
-        id: release
+          path: automation
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: candidate
+      - name: Validate tag and pin release plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          version="$(python3 -c 'import pathlib, re; print(re.search(r"^##\s*Version:\s*(\S+)\s*$", pathlib.Path("QuestWithFriends.toc").read_text(), re.MULTILINE)[1])')"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          tag="v$version"
-          python3 tools/bundle_addon.py --tag "$tag"
-          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          source_sha="$(git -C candidate rev-parse HEAD)"
+          python3 automation/tools/prepare_release.py plan candidate \
+            --tag "$RELEASE_TAG" --sha "$source_sha" --base "$BASE_BRANCH" > plan.json
+          printf 'sha=%s\n' "$source_sha" >> "$GITHUB_OUTPUT"
+          printf 'automation_sha=%s\n' "$(git -C automation rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          printf 'plan=%s\n' "$(jq -c . plan.json)" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$(jq -r .version plan.json)" >> "$GITHUB_OUTPUT"
+          cat plan.json >> "$GITHUB_STEP_SUMMARY"
 
   tests:
     needs: validate
     uses: ./.github/workflows/test.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
 
-  release:
+  package:
     needs: [validate, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.automation_sha }}
+          persist-credentials: false
+          path: automation
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
+          path: candidate
+      - name: Build reviewed package and checksum manifest
+        env:
+          RELEASE_PLAN: ${{ needs.validate.outputs.plan }}
+        run: |
+          printf '%s\n' "$RELEASE_PLAN" > plan.json
+          python3 automation/tools/prepare_release.py build candidate plan.json dist > release-plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: |
+            dist/*.zip
+            release-plan.json
+          if-no-files-found: error
+
+  draft:
+    needs: [validate, package]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
-    env:
-      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-      TARGET_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.validate.outputs.automation_sha }}
           persist-credentials: false
-      - name: Build addon ZIP
-        run: python3 tools/bundle_addon.py --tag "$RELEASE_TAG"
-      - name: Create release tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f "ref=refs/tags/$RELEASE_TAG" \
-            -f "sha=$TARGET_SHA"
-      - name: Create draft GitHub Release
+          path: automation
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package
+      - name: Create or resume draft without replacing reviewed assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          gh release create "$RELEASE_TAG" \
-            "dist/QuestWithFriends-${RELEASE_TAG#v}.zip" \
-            --verify-tag --draft --generate-notes \
-            --title "$RELEASE_TAG"
+          python3 automation/tools/prepare_release.py draft \
+            "dist/QuestWithFriends-$RELEASE_VERSION.zip" release-plan.json
+          printf 'Draft ready. Review the ZIP and notes, then publish it to start eligible storefront uploads.\n' >> "$GITHUB_STEP_SUMMARY"

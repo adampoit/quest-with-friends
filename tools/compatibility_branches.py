@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync tracked compatibility branches and prepare GitHub-only previews in CI."""
+"""Sync tracked compatibility branches and validate pinned preview candidates."""
 
 import argparse
 import base64
@@ -13,7 +13,6 @@ from typing import cast
 if not __package__:
 	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.bundle_addon import bundle
 from tools.check_game_versions import (
 	API,
 	BASELINES,
@@ -80,7 +79,7 @@ def sync_branches(root: Path, base: str) -> None:
 	for issue in tracking_issues(root):
 		if issue.state != "open":
 			continue
-		client, version = branch_target(issue.branch)
+		client, version = issue.client, issue.version
 		if version_tuple(version) <= version_tuple(baselines[client]):
 			print(
 				f"Already promoted or superseded on {base}: {issue.branch}; close its issue and remove the branch"
@@ -131,19 +130,27 @@ def report_test_failure(root: Path, branch: str, sha: str, url: str) -> None:
 	)
 
 
-def preview_plan(root: Path, base: str, branch: str, sequence: str) -> dict[str, str]:
-	client, version = branch_target(branch)
-	if re.fullmatch(r"[1-9][0-9]*\.[1-9][0-9]*", sequence) is None:
-		raise ValueError("Preview sequence must be <run-id>.<attempt>")
+def validate_preview(
+	root: Path, base: str, client: str, version: str, sha: str
+) -> TrackingIssue:
+	branch = f"ptr/{client}"
+	_ = branch_target(branch)
+	_ = version_tuple(version)
+	if re.fullmatch(r"[0-9a-f]{40}", sha) is None:
+		raise ValueError("Preview requires a full commit SHA")
 	issues = [
 		issue
 		for issue in tracking_issues(root)
-		if issue.branch == branch and issue.state == "open"
+		if issue.branch == branch and issue.state == "open" and issue.version == version
 	]
 	if len(issues) != 1:
 		raise ValueError("Preview requires an open tracking issue for this branch")
+	branch_sha = ref_sha(root, branch)
+	if branch_sha != sha and api(root, f"compare/{sha}...{branch_sha}").get(
+		"status"
+	) not in ("ahead", "identical"):
+		raise ValueError("Tagged alpha commit must belong to its PTR branch")
 	main_sha = ref_sha(root, base)
-	sha = ref_sha(root, branch)
 	status = api(root, f"compare/{main_sha}...{sha}")["status"]
 	if status not in ("ahead", "identical"):
 		raise ValueError(
@@ -161,25 +168,11 @@ def preview_plan(root: Path, base: str, branch: str, sequence: str) -> dict[str,
 	)
 	if targets[client] != version:
 		raise ValueError("Branch target does not match its compatibility baseline")
+	if targets != live | {client: version}:
+		raise ValueError("PTR source must only change its selected client baseline")
 	toc = source_file(root, sha, TOC)
 	_ = proposed_toc(toc, targets, Candidate(client, version, 1, version))
-	live_toc = source_file(root, main_sha, TOC)
-	match = re.search(
-		r"^##[ \t]*Version:[ \t]*([0-9]+\.[0-9]+\.[0-9]+)[ \t]*$",
-		live_toc,
-		re.MULTILINE,
-	)
-	if match is None:
-		raise ValueError("Default branch must declare a stable addon version")
-	preview_version = f"{match[1]}-ptr.{client}.{version}.{sequence}"
-	return {
-		"sha": sha,
-		"tag": f"v{preview_version}",
-		"version": preview_version,
-		"issue": str(issues[0].number),
-		"client": client,
-		"game_version": version,
-	}
+	return issues[0]
 
 
 def main() -> None:
@@ -189,19 +182,6 @@ def main() -> None:
 		"sync", help="merge the default branch into open tracked branches (CI only)"
 	)
 	_ = sync.add_argument("--base", required=True)
-	plan = sub.add_parser(
-		"plan-preview", help="validate a tracked branch and pin preview metadata"
-	)
-	_ = plan.add_argument("--base", required=True)
-	_ = plan.add_argument("--branch", required=True)
-	_ = plan.add_argument("--sequence", required=True)
-	build = sub.add_parser(
-		"build-preview",
-		help="package a pinned checkout without changing its source TOC",
-	)
-	_ = build.add_argument("root", type=Path)
-	_ = build.add_argument("--version", required=True)
-	_ = build.add_argument("--tag", required=True)
 	report = sub.add_parser(
 		"report-test-failure", help="notify an active branch's issue (CI only)"
 	)
@@ -213,25 +193,6 @@ def main() -> None:
 	try:
 		if command == "sync":
 			sync_branches(ROOT, cast(str, args.base))
-		elif command == "plan-preview":
-			print(
-				json.dumps(
-					preview_plan(
-						ROOT,
-						cast(str, args.base),
-						cast(str, args.branch),
-						cast(str, args.sequence),
-					)
-				)
-			)
-		elif command == "build-preview":
-			print(
-				bundle(
-					cast(Path, args.root),
-					preview_version=cast(str, args.version),
-					tag=cast(str, args.tag),
-				)
-			)
 		else:
 			report_test_failure(
 				ROOT, cast(str, args.branch), cast(str, args.sha), cast(str, args.url)

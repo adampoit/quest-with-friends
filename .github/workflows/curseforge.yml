@@ -12,36 +12,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/published-package.yml
+
   upload:
-    if: github.event.release.prerelease == false && !contains(github.event.release.tag_name, '-')
+    needs: verify
+    if: needs.verify.outputs.curseforge == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      RELEASE_ID: ${{ github.event.release.id }}
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+      RELEASE_CHANNEL: ${{ needs.verify.outputs.channel }}
     steps:
-      - name: Validate configuration and published release
-        shell: bash
-        run: |
-          [[ "$CF_PROJECT_ID" =~ ^[0-9]+$ ]]
-          [[ "$RELEASE_TAG" =~ ^v[A-Za-z0-9._-]+$ ]]
-
-          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > release.json
-          jq -e --arg tag "$RELEASE_TAG" '
-            .draft == false and .prerelease == false and .tag_name == $tag
-          ' release.json >/dev/null
-
-      - name: Download published release asset
-        run: |
-          gh release download "$RELEASE_TAG" \
-            --pattern "QuestWithFriends-${RELEASE_TAG#v}.zip" \
-            --dir dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: published-package
+      - name: Validate configuration
+        run: test -n "$CF_PROJECT_ID" && [[ "$CF_PROJECT_ID" =~ ^[0-9]+$ ]]
 
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           path: source
 
@@ -60,19 +54,13 @@ jobs:
 
       - name: Prepare CurseForge metadata
         run: |
-          jq --slurpfile versions game-versions.json '
+          jq --arg channel "$RELEASE_CHANNEL" --slurpfile versions game-versions.json '
             {
               changelog: (.body // ""),
               changelogType: "markdown",
               displayName: (.name // .tag_name),
               gameVersions: $versions[0],
-              releaseType: (
-                if (.tag_name | ascii_downcase | contains("alpha"))
-                then "alpha"
-                elif .prerelease then "beta"
-                else "release"
-                end
-              )
+              releaseType: (if $channel == "stable" then "release" else $channel end)
             }
           ' release.json > metadata.json
 

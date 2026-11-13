@@ -12,7 +12,6 @@ from zipfile import ZipFile
 from tools.release_package import TOC_PATH
 from tools.wago_metadata import prepare_upload, project_id, resolve_patches
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "wago_metadata.py"
 PROJECT_ID = "aB3dE5fG"
 
@@ -47,9 +46,12 @@ class WagoMetadataTests(unittest.TestCase):
 		self.write_toc()
 
 	def write_toc(
-		self, interfaces: str = "120100, 16001", project: str | None = PROJECT_ID
+		self,
+		interfaces: str = "120100, 16001",
+		project: str | None = PROJECT_ID,
+		version: str = "1.2.3",
 	) -> None:
-		toc = f"## Interface: {interfaces}\n"
+		toc = f"## Interface: {interfaces}\n## Version: {version}\n"
 		if project is not None:
 			toc += f"## X-Wago-ID: {project}\n"
 		with ZipFile(self.archive, "w") as archive:
@@ -100,14 +102,25 @@ class WagoMetadataTests(unittest.TestCase):
 		for tag, prerelease, expected in (
 			("v1.2.3", False, "stable"),
 			("v1.2.3-beta.1", True, "beta"),
-			("v1.2.3-rc.1", True, "beta"),
-			("v1.2.3-ALPHA.1", True, "alpha"),
 		):
 			with self.subTest(tag=tag):
+				self.write_toc(version=tag[1:])
 				metadata = self.metadata(
 					self.release | {"tag_name": tag, "prerelease": prerelease}
 				)
 				self.assertEqual(expected, metadata["stability"])
+
+	def test_package_version_and_prerelease_flags_must_match_the_tag(self):
+		with self.assertRaisesRegex(ValueError, "Packaged Version"):
+			_ = self.metadata(self.release | {"tag_name": "v1.2.4"})
+		with self.assertRaisesRegex(ValueError, "prerelease status"):
+			_ = self.metadata(self.release | {"prerelease": True})
+
+	def test_ptr_previews_are_never_storefront_uploads(self):
+		tag = "v1.2.3-alpha.retail.1"
+		self.write_toc(version=tag[1:])
+		with self.assertRaisesRegex(ValueError, "PTR previews"):
+			_ = self.metadata(self.release | {"tag_name": tag, "prerelease": True})
 
 	def test_missing_title_and_notes_use_safe_defaults(self):
 		metadata = self.metadata(self.release | {"name": None, "body": None})

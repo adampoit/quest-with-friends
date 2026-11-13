@@ -1,0 +1,59 @@
+name: Verify published package
+
+on:
+  workflow_call:
+    outputs:
+      channel:
+        value: ${{ jobs.verify.outputs.channel }}
+      curseforge:
+        value: ${{ jobs.verify.outputs.curseforge }}
+      wago:
+        value: ${{ jobs.verify.outputs.wago }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      channel: ${{ steps.verify.outputs.channel }}
+      curseforge: ${{ steps.verify.outputs.curseforge }}
+      wago: ${{ steps.verify.outputs.wago }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          path: automation
+      - name: Download the published release and its reviewed package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[A-Za-z0-9._-]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > release.json
+          jq -e --arg tag "$RELEASE_TAG" '.tag_name == $tag and .draft == false' release.json >/dev/null
+          gh release download "$RELEASE_TAG" --pattern release-plan.json
+          gh release download "$RELEASE_TAG" --pattern "QuestWithFriends-${RELEASE_TAG#v}.zip" --dir dist
+      - name: Verify approval, tag identity, package checksum and distribution policy
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 automation/tools/prepare_release.py verify \
+            "dist/QuestWithFriends-${RELEASE_TAG#v}.zip" release-plan.json release.json > verified.json
+          jq -r 'to_entries[] | "\(.key)=\(.value)"' verified.json >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-package
+          path: |
+            dist/*.zip
+            release.json
+            release-plan.json
+          if-no-files-found: error
