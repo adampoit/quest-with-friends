@@ -1,0 +1,11 @@
+## Interface: 120105, 16001
+## Title: Quest With Friends (Dev)
+## Notes: Shows actionable quest differences in your party
+## Version: dev
+## OptionalDeps: AddonKit, QuestWithFriends
+## SavedVariables: QuestWithFriendsDevDB
+
+src/Bootstrap.lua
+dev/Development.lua
+src/Load.xml
+dev/InGameTests.lua

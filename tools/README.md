@@ -169,6 +169,18 @@ luajit -joff tools/benchmark_sync.lua .cache/benchmark-source/fixture.lua 3 nati
 
 Arguments after the fixture are repeat count, `native`/`portable` bit mode, optional scenario name, and optional one-way link latency in seconds. Scenarios: `cold_party`, `single_player`, `all_players`, `four_quests`, `during_checkpoint`, `idle_300s`, `adventure_300s`, `rapid_61s`. A mixed-party update is also measured. Progress is printed to stderr; JSON results go to stdout. The runtime fixture and full results remain ignored cache files, not redistributed upstream data.
 
+## Live addon development
+
+Install or symlink this checkout as `Interface/AddOns/QuestWithFriendsDev` alongside your release installation. The checked-in `QuestWithFriendsDev.toc` loads the shared `src/Load.xml` plus screenshot tools and in-game tests, using separate SavedVariables. No manifest generation is needed; add runtime files to `src/Load.xml` and reload WoW.
+
+Enable only one copy at a time. If both are enabled, the release loads first and the dev copy stays inactive. The dev version is always `dev`; keep Interface compatibility metadata aligned in both TOCs (checked by tests and updated together by compatibility-branch automation).
+
+To build a separate development ZIP:
+
+```sh
+python3 tools/bundle_addon.py --dev
+```
+
 ## Tests
 
 ```sh

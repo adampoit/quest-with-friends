@@ -140,6 +140,18 @@ class PreviewTests(unittest.TestCase):
 		self.assertIn("QuestWithFriendsPanel", run)
 		self.assertIn(f"{self.repo}/tools/simulator/preview_demo.lua:/demo.lua:ro", run)
 
+	def test_development_capture_uses_checked_in_manifest_without_generation(self):
+		toc = self.repo / "QuestWithFriendsDev.toc"
+		original = (ROOT / toc.name).read_bytes()
+		_ = toc.write_bytes(original)
+		result, calls = self.capture(arguments=["--dev", str(self.output)])
+		self.assertEqual(result.returncode, 0, result.stderr)
+		self.assertIn(
+			f"{self.repo.resolve()}:/app/Interface/AddOns/QuestWithFriendsDev:ro",
+			calls[-1],
+		)
+		self.assertEqual(original, toc.read_bytes())
+
 	def test_stock_text_position_is_opt_in_and_preserves_calibrated_preview(self):
 		result, calls = self.capture(
 			arguments=["--stock-text-position", str(self.output)]
