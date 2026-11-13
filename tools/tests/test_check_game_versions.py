@@ -161,9 +161,11 @@ class CandidateTests(unittest.TestCase):
 			"120105",
 			"`101`",
 			"GetBuildInfo()",
-			"compatibility/retail-12.1.5@origin",
-			"Publish compatibility preview",
-			monitor.issue_marker(candidate.branch),
+			"ptr/retail@origin",
+			"Prepare release",
+			"alpha.retail.1",
+			"Publish release",
+			monitor.issue_marker(candidate.branch, candidate.version),
 		):
 			self.assertIn(text, body)
 
@@ -221,7 +223,7 @@ class CandidateTests(unittest.TestCase):
 						"client": "retail",
 						"version": future,
 						"version_id": 101,
-						"branch": f"compatibility/retail-{future}",
+						"branch": "ptr/retail",
 					}
 				],
 				json.loads(result.stdout),
@@ -510,7 +512,9 @@ class TrackingTests(unittest.TestCase):
 			{
 				"number": 42,
 				"state": "closed",
-				"body": monitor.issue_marker(self.candidate.branch),
+				"body": monitor.issue_marker(
+					self.candidate.branch, self.candidate.version
+				),
 			}
 		]
 		self.track()
@@ -533,7 +537,9 @@ class TrackingTests(unittest.TestCase):
 			{
 				"number": 42,
 				"state": "open",
-				"body": monitor.issue_marker(self.candidate.branch),
+				"body": monitor.issue_marker(
+					self.candidate.branch, self.candidate.version
+				),
 			}
 		]
 		self.track()
@@ -561,7 +567,7 @@ class TrackingTests(unittest.TestCase):
 			{
 				"number": 2,
 				"state": "closed",
-				"body": monitor.issue_marker("compatibility/retail-12.1.7"),
+				"body": monitor.issue_marker("ptr/retail", "12.1.7"),
 			}
 		]
 		candidates = monitor.find_candidates(
@@ -577,7 +583,7 @@ class TrackingTests(unittest.TestCase):
 				"ls-remote",
 				"--heads",
 				"origin",
-				"refs/heads/compatibility/*",
+				"refs/heads/ptr/*",
 			),
 		)
 
@@ -635,7 +641,7 @@ class TrackingTests(unittest.TestCase):
 					self.root,
 					"git",
 					"show",
-					f"compatibility/forever-1.60.2:{monitor.BASELINES}",
+					f"ptr/forever:{monitor.BASELINES}",
 				)
 			),
 		)
@@ -671,14 +677,16 @@ class TrackingTests(unittest.TestCase):
 		)
 		self.assertEqual("", self.real_run(self.root, "git", "status", "--porcelain"))
 
-	def test_missing_older_open_branch_recovers_even_when_catalog_has_newer_candidate(
+	def test_active_target_blocks_a_second_ptr_for_the_same_client(
 		self,
 	):
 		self.existing = [
 			{
 				"number": 42,
 				"state": "open",
-				"body": monitor.issue_marker(self.candidate.branch),
+				"body": monitor.issue_marker(
+					self.candidate.branch, self.candidate.version
+				),
 			}
 		]
 		self.track([monitor.Candidate("retail", "12.1.7", 102, "12.1.0")])
@@ -687,15 +695,51 @@ class TrackingTests(unittest.TestCase):
 			for endpoint, payload in self.posts
 			if endpoint == "graphql"
 		]
-		self.assertEqual([self.candidate.branch, "compatibility/retail-12.1.7"], linked)
+		self.assertEqual([self.candidate.branch], linked)
+		self.assertEqual(1, len(self.existing))
+
+	def test_retired_branch_must_be_deleted_before_reusing_its_name_for_a_new_patch(
+		self,
+	):
+		self.track()
+		self.existing[0]["state"] = "closed"
+		next_candidate = monitor.Candidate("retail", "12.1.7", 102, "12.1.0")
+		self.posts.clear()
+		with self.assertRaisesRegex(ValueError, "Delete the retired ptr/retail"):
+			self.track([next_candidate])
+		self.assertEqual([], self.posts)
+		self.assertEqual(1, len(self.existing))
+		_ = self.real_run(self.root, "git", "push", "origin", "--delete", "ptr/retail")
+		self.track([next_candidate])
 		self.assertEqual(2, len(self.existing))
+		updated = monitor.parse_baselines(
+			cast(
+				object,
+				json.loads(
+					self.real_run(
+						self.root, "git", "show", f"ptr/retail:{monitor.BASELINES}"
+					)
+				),
+			)
+		)
+		self.assertEqual("12.1.7", updated["retail"])
+
+	def test_duplicate_client_candidates_are_rejected_before_mutation(self):
+		with self.assertRaisesRegex(ValueError, "Only one PTR candidate"):
+			self.track(
+				[self.candidate, monitor.Candidate("retail", "12.1.7", 102, "12.1.0")]
+			)
+		self.assertEqual([], self.posts)
+		self.assertFalse(
+			any(call[1:3] == ("issue", "create") for call in self.gh_calls)
+		)
 
 	def test_open_issue_for_live_target_does_not_recreate_a_branch(self):
 		self.existing = [
 			{
 				"number": 42,
 				"state": "open",
-				"body": monitor.issue_marker("compatibility/retail-12.1.0"),
+				"body": monitor.issue_marker("ptr/retail", "12.1.0"),
 			}
 		]
 		self.track([])

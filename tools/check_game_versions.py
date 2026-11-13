@@ -27,7 +27,7 @@ CLIENTS = {
 	"forever": ("Forever", FOREVER_VERSION_TYPE_ID),
 }
 VERSION_PATTERN = r"([1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)"
-BRANCH_PATTERN = rf"compatibility/(retail|forever)-({VERSION_PATTERN})"
+BRANCH_PATTERN = r"ptr/(retail|forever)"
 
 
 def version_tuple(version: str) -> tuple[int, int, int]:
@@ -62,16 +62,17 @@ def read_baselines(root: Path) -> dict[str, str]:
 	)
 
 
-def branch_target(branch: str) -> tuple[str, str]:
+def branch_target(branch: str) -> str:
 	match = re.fullmatch(BRANCH_PATTERN, branch)
 	if match is None:
-		raise ValueError(f"Invalid compatibility branch: {branch}")
-	return match[1], match[2]
+		raise ValueError(f"Invalid PTR branch: {branch}")
+	return match[1]
 
 
-def issue_marker(branch: str) -> str:
-	_ = branch_target(branch)
-	return f"<!-- qwf-compatibility:{branch} -->"
+def issue_marker(branch: str, version: str) -> str:
+	client = branch_target(branch)
+	_ = version_tuple(version)
+	return f"<!-- qwf-ptr:{client}:{version} -->"
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,11 @@ class TrackingIssue:
 	number: int
 	branch: str
 	state: str
+	version: str
+
+	@property
+	def client(self) -> str:
+		return branch_target(self.branch)
 
 
 def run(root: Path, *command: str) -> str:
@@ -112,7 +118,8 @@ def paged_items(root: Path, endpoint: str) -> list[dict[str, object]]:
 
 def tracking_issues(root: Path) -> list[TrackingIssue]:
 	issues: list[TrackingIssue] = []
-	seen: set[str] = set()
+	seen: set[tuple[str, str]] = set()
+	active: set[str] = set()
 	for issue in paged_items(root, "issues?state=all&per_page=100"):
 		author = issue.get("user")
 		login = (
@@ -120,7 +127,7 @@ def tracking_issues(root: Path) -> list[TrackingIssue]:
 			if isinstance(author, dict)
 			else None
 		)
-		# Public issue bodies must not be able to control privileged branch automation.
+		# Public issue bodies must not control privileged branch automation.
 		if login != "not-adam[bot]" and issue.get("author_association") not in (
 			"OWNER",
 			"MEMBER",
@@ -131,23 +138,40 @@ def tracking_issues(root: Path) -> list[TrackingIssue]:
 		if "pull_request" in issue or not isinstance(body, str):
 			continue
 		markers = cast(
-			list[str],
-			re.findall(r"^<!-- qwf-compatibility:(.+) -->$", body, re.MULTILINE),
+			list[tuple[str, str]],
+			re.findall(r"^<!-- qwf-(ptr|compatibility):(.+) -->$", body, re.MULTILINE),
 		)
 		if not markers:
 			continue
 		if len(markers) != 1:
-			raise ValueError("Tracking issue must contain exactly one branch marker")
-		branch = markers[0]
-		_ = branch_target(branch)
-		if branch in seen:
-			raise ValueError(f"Duplicate tracking issues for {branch}")
+			raise ValueError("Tracking issue must contain exactly one target marker")
 		number, state = issue.get("number"), issue.get("state")
 		if type(number) is not int or number <= 0 or state not in ("open", "closed"):
 			raise ValueError("Invalid tracking issue number/state")
 		assert isinstance(state, str)
-		seen.add(branch)
-		issues.append(TrackingIssue(number, branch, state))
+		kind, marker = markers[0]
+		pattern = (
+			rf"compatibility/(retail|forever)-({VERSION_PATTERN})"
+			if kind == "compatibility"
+			else rf"(retail|forever):({VERSION_PATTERN})"
+		)
+		match = re.fullmatch(pattern, marker)
+		if match is None:
+			raise ValueError("Invalid PTR tracking marker")
+		client, version = match[1], match[2]
+		branch = f"ptr/{client}"
+		if kind == "compatibility" and state == "open":
+			raise ValueError(
+				f"Migrate {marker} to {branch} and replace its issue marker with {issue_marker(branch, version)}"
+			)
+		if (client, version) in seen:
+			raise ValueError(f"Duplicate tracking issues for {client} {version}")
+		if state == "open" and client in active:
+			raise ValueError(f"Only one open PTR target is allowed for {client}")
+		seen.add((client, version))
+		if state == "open":
+			active.add(client)
+		issues.append(TrackingIssue(number, branch, state, version))
 	return issues
 
 
@@ -160,15 +184,15 @@ class Candidate:
 
 	@property
 	def branch(self) -> str:
-		return f"compatibility/{self.client}-{self.version}"
+		return f"ptr/{self.client}"
 
 	@property
 	def title(self) -> str:
-		return f"Compatibility: test {CLIENTS[self.client][0]} {self.version}"
+		return f"PTR: test {CLIENTS[self.client][0]} {self.version}"
 
 	def body(self, reviewer: str) -> str:
 		label, type_id = CLIENTS[self.client]
-		return f"""{issue_marker(self.branch)}
+		return f"""{issue_marker(self.branch, self.version)}
 @{reviewer}: CurseForge lists **{label} {self.version}**.
 
 - Live baseline at detection: `{self.previous}` → candidate: `{self.version}`
@@ -193,9 +217,13 @@ Checkout: `jj git fetch && jj new '{self.branch}@origin'`
 Git alternative: `git fetch origin && git switch --track origin/{self.branch}`
 Local dev ZIP: `python3 tools/bundle_addon.py --dev`
 
-To share a normal-installation ZIP, run **Publish compatibility preview** from the
-default branch with `{self.branch}` as its branch input. It runs tests and publishes
-a GitHub-only prerelease. Nothing is uploaded to CurseForge or Wago.
+To share a normal-installation ZIP, push a tag such as
+`v<addon-version>-alpha.{self.client}.1` at the reviewed commit,
+using its source TOC's stable addon version. **Prepare release** runs tests and
+creates a draft GitHub prerelease with a ZIP and checksum manifest. Review the draft
+and click **Publish release** when ready. PTR previews remain GitHub-only; nothing
+is uploaded to CurseForge or Wago. Use a new sequence for each candidate; never move
+a published tag.
 
 ### Readiness
 
@@ -212,8 +240,9 @@ a GitHub-only prerelease. Nothing is uploaded to CurseForge or Wago.
 - [ ] Open a short-lived promotion PR to the default branch; review the complete diff, finalize stable addon version/changelog, and include `Closes #<issue-number>`.
 - [ ] Merge promotion PR, publish stable normally, and delete the integration branch.
 
-Closing this issue stops automatic syncing and preview publication, and suppresses
-repeat detection for this version. Close and delete superseded branches explicitly;
+Closing this issue stops automatic syncing and new preview preparation, and
+suppresses repeat detection for this version. Delete obsolete drafts separately.
+Close and delete superseded branches explicitly;
 newer candidates do not silently retire older work. Reopen to resume. No automatic
 promotion or stable release occurs.
 """
@@ -291,8 +320,11 @@ def post_json(
 	return data
 
 
-def create_linked_branch(root: Path, branch: str, base: str, issue_number: int) -> None:
-	client, version = branch_target(branch)
+def create_linked_branch(
+	root: Path, branch: str, base: str, issue_number: int, version: str
+) -> None:
+	client = branch_target(branch)
+	_ = version_tuple(version)
 	baselines = read_baselines(root)
 	candidate = Candidate(client, version, 0, baselines[client])
 	base_sha = run(root, "git", "rev-parse", "--verify", f"{base}^{{commit}}")
@@ -375,10 +407,31 @@ def track_candidates(
 		raise ValueError("Reviewer must be a GitHub user login")
 	if run(root, "git", "status", "--porcelain"):
 		raise ValueError("Branch creation requires a clean CI checkout")
-	tracked = {issue.branch: issue for issue in tracking_issues(root)}
+	issues = tracking_issues(root)
+	tracked = {(issue.client, issue.version): issue for issue in issues}
+	active = {issue.client: issue for issue in issues if issue.state == "open"}
+	if len({candidate.client for candidate in candidates}) != len(candidates):
+		raise ValueError("Only one PTR candidate per client is allowed")
 	for candidate in candidates:
-		if candidate.branch in tracked:
+		key = (candidate.client, candidate.version)
+		if key in tracked:
 			continue
+		if candidate.client in active:
+			print(
+				f"Keeping active {candidate.branch} target {active[candidate.client].version}; retire it before tracking {candidate.version}"
+			)
+			continue
+		if any(issue.client == candidate.client for issue in issues) and run(
+			root,
+			"git",
+			"ls-remote",
+			"--heads",
+			"origin",
+			f"refs/heads/{candidate.branch}",
+		):
+			raise ValueError(
+				f"Delete the retired {candidate.branch} branch before tracking a new target"
+			)
 		url = run(
 			root,
 			"gh",
@@ -394,14 +447,15 @@ def track_candidates(
 		match = re.search(r"/issues/([1-9][0-9]*)$", url)
 		if match is None:
 			raise ValueError(f"GitHub did not return a tracking issue URL: {url}")
-		tracked[candidate.branch] = TrackingIssue(
-			int(match[1]), candidate.branch, "open"
+		issue = TrackingIssue(
+			int(match[1]), candidate.branch, "open", candidate.version
 		)
+		tracked[key] = issue
+		active[candidate.client] = issue
 		print(url)
 	baselines = read_baselines(root)
 	for issue in tracked.values():
-		client, version = branch_target(issue.branch)
-		# Closed issues remain tombstones; only active, upcoming targets can recover.
+		client, version = issue.client, issue.version
 		if issue.state != "open" or version_tuple(version) <= version_tuple(
 			baselines[client]
 		):
@@ -412,7 +466,7 @@ def track_candidates(
 		if remote:
 			print(f"Keeping existing branch unchanged: {issue.branch}")
 			continue
-		create_linked_branch(root, issue.branch, base, issue.number)
+		create_linked_branch(root, issue.branch, base, issue.number, version)
 
 
 def main() -> None:

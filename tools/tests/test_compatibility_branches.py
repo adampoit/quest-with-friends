@@ -24,8 +24,8 @@ else:
 
 MAIN_SHA = "a" * 40
 BRANCH_SHA = "b" * 40
-BRANCH = "compatibility/retail-12.1.7"
-ISSUE = monitor.TrackingIssue(2, BRANCH, "open")
+BRANCH = "ptr/retail"
+ISSUE = monitor.TrackingIssue(2, BRANCH, "open", "12.1.7")
 LIVE = {"retail": "12.1.5", "forever": "1.60.1"}
 TARGET = LIVE | {"retail": "12.1.7"}
 LIVE_TOC = "## Interface: 120105, 16001\n## Version: 0.1.9\nCore.lua\n"
@@ -51,7 +51,7 @@ class TrackingIssueTests(unittest.TestCase):
 		issue: dict[str, object] = {
 			"number": 2,
 			"state": "open",
-			"body": monitor.issue_marker(BRANCH),
+			"body": monitor.issue_marker(BRANCH, "12.1.7"),
 		}
 		self.assertEqual(
 			[ISSUE],
@@ -69,14 +69,14 @@ class TrackingIssueTests(unittest.TestCase):
 
 	def test_closed_issue_is_retained_as_a_detection_tombstone(self):
 		self.assertEqual(
-			[monitor.TrackingIssue(2, BRANCH, "closed")],
+			[monitor.TrackingIssue(2, BRANCH, "closed", "12.1.7")],
 			self.lookup(
 				[
 					[
 						{
 							"number": 2,
 							"state": "closed",
-							"body": monitor.issue_marker(BRANCH),
+							"body": monitor.issue_marker(BRANCH, "12.1.7"),
 						}
 					],
 				]
@@ -84,7 +84,7 @@ class TrackingIssueTests(unittest.TestCase):
 		)
 
 	def test_duplicate_markers_are_rejected(self):
-		marker = monitor.issue_marker(BRANCH)
+		marker = monitor.issue_marker(BRANCH, "12.1.7")
 		issue: dict[str, object] = {"number": 2, "state": "open", "body": marker}
 		for pages in ([[issue, issue]], [[issue | {"body": marker + "\n" + marker}]]):
 			with self.subTest(pages=pages), self.assertRaises(ValueError):
@@ -94,7 +94,7 @@ class TrackingIssueTests(unittest.TestCase):
 		issue: dict[str, object] = {
 			"number": 2,
 			"state": "open",
-			"body": monitor.issue_marker(BRANCH),
+			"body": monitor.issue_marker(BRANCH, "12.1.7"),
 			"author_association": "NONE",
 			"user": {"login": "external-user"},
 		}
@@ -104,12 +104,85 @@ class TrackingIssueTests(unittest.TestCase):
 		with patch.object(monitor, "run", return_value=json.dumps([[issue]])):
 			self.assertEqual([ISSUE], monitor.tracking_issues(Path(".")))
 
-	def test_branch_names_cannot_escape_the_compatibility_namespace(self):
+	def test_closed_targets_do_not_prevent_tracking_the_next_patch(self):
+		self.assertEqual(
+			[monitor.TrackingIssue(1, BRANCH, "closed", "12.1.5"), ISSUE],
+			self.lookup(
+				[
+					[
+						{
+							"number": 1,
+							"state": "closed",
+							"body": monitor.issue_marker(BRANCH, "12.1.5"),
+						},
+						{
+							"number": 2,
+							"state": "open",
+							"body": monitor.issue_marker(BRANCH, "12.1.7"),
+						},
+					]
+				]
+			),
+		)
+
+	def test_two_open_targets_for_one_client_are_rejected(self):
+		with self.assertRaisesRegex(ValueError, "Only one open PTR"):
+			_ = self.lookup(
+				[
+					[
+						{
+							"number": 1,
+							"state": "open",
+							"body": monitor.issue_marker(BRANCH, "12.1.5"),
+						},
+						{
+							"number": 2,
+							"state": "open",
+							"body": monitor.issue_marker(BRANCH, "12.1.7"),
+						},
+					]
+				]
+			)
+
+	def test_legacy_open_issues_require_explicit_migration(self):
+		with self.assertRaisesRegex(
+			ValueError, "Migrate compatibility/retail-12.1.7 to ptr/retail"
+		):
+			_ = self.lookup(
+				[
+					[
+						{
+							"number": 2,
+							"state": "open",
+							"body": "<!-- qwf-compatibility:compatibility/retail-12.1.7 -->",
+						}
+					]
+				]
+			)
+
+	def test_legacy_closed_issues_remain_version_specific_tombstones(self):
+		self.assertEqual(
+			[monitor.TrackingIssue(2, BRANCH, "closed", "12.1.7")],
+			self.lookup(
+				[
+					[
+						{
+							"number": 2,
+							"state": "closed",
+							"body": "<!-- qwf-compatibility:compatibility/retail-12.1.7 -->",
+						}
+					]
+				]
+			),
+		)
+
+	def test_branch_names_cannot_escape_the_ptr_namespace(self):
 		for branch in (
 			"main",
-			"compatibility/retail-12.1.7; echo bad",
-			"compatibility/retail-12.01.7",
-			"compatibility/classic-1.1.1",
+			"ptr/retail; echo bad",
+			"compatibility/retail-12.1.7",
+			"ptr/retail/12.1.7",
+			"ptr/classic",
 			BRANCH + "\n",
 		):
 			with self.subTest(branch=branch), self.assertRaises(ValueError):
@@ -163,8 +236,8 @@ class SyncTests(unittest.TestCase):
 
 	def test_closed_and_promoted_candidates_are_not_synced(self):
 		self.track.return_value = [
-			monitor.TrackingIssue(2, BRANCH, "closed"),
-			monitor.TrackingIssue(3, "compatibility/retail-12.1.5", "open"),
+			monitor.TrackingIssue(2, BRANCH, "closed", "12.1.7"),
+			monitor.TrackingIssue(3, "ptr/retail", "open", "12.1.5"),
 		]
 		branches.sync_branches(self.root, "main")
 		self.api.assert_not_called()
@@ -172,7 +245,7 @@ class SyncTests(unittest.TestCase):
 	def test_conflict_is_reported_and_other_branches_still_sync(self):
 		self.track.return_value = [
 			ISSUE,
-			monitor.TrackingIssue(3, "compatibility/forever-1.60.2", "open"),
+			monitor.TrackingIssue(3, "ptr/forever", "open", "1.60.2"),
 		]
 		self.api.side_effect = [
 			subprocess.CalledProcessError(1, "gh", stderr="Merge conflict (HTTP 409)"),
@@ -198,7 +271,7 @@ class SyncTests(unittest.TestCase):
 		branches.report_test_failure(
 			self.root, BRANCH, BRANCH_SHA, "https://github.invalid/run/1"
 		)
-		self.track.return_value = [monitor.TrackingIssue(2, BRANCH, "closed")]
+		self.track.return_value = [monitor.TrackingIssue(2, BRANCH, "closed", "12.1.7")]
 		branches.report_test_failure(
 			self.root, BRANCH, MAIN_SHA, "https://github.invalid/run/1"
 		)
@@ -271,28 +344,51 @@ class PreviewTests(unittest.TestCase):
 			self.addCleanup(patcher.stop)
 
 	def plan(self):
-		return branches.preview_plan(self.root, "main", BRANCH, "123.1")
-
-	def test_preview_metadata_pins_source_and_has_a_unique_prerelease_version(self):
-		self.assertEqual(
-			{
-				"sha": BRANCH_SHA,
-				"tag": "v0.1.9-ptr.retail.12.1.7.123.1",
-				"version": "0.1.9-ptr.retail.12.1.7.123.1",
-				"issue": "2",
-				"client": "retail",
-				"game_version": "12.1.7",
-			},
-			self.plan(),
+		return branches.validate_preview(
+			self.root, "main", "retail", "12.1.7", BRANCH_SHA
 		)
+
+	def test_preview_readiness_uses_the_tagged_sha_not_the_moving_branch_tip(self):
+		self.assertEqual(ISSUE, self.plan())
 		self.api.assert_called_once_with(
 			self.root, f"compare/{MAIN_SHA}...{BRANCH_SHA}"
 		)
-		second = branches.preview_plan(self.root, "main", BRANCH, "123.2")
-		self.assertNotEqual(self.plan()["tag"], second["tag"])
+		self.assertEqual(2, self.ref.call_count)
+		self.ref.assert_any_call(self.root, BRANCH)
+		self.ref.assert_any_call(self.root, "main")
+
+	def test_tagged_commit_must_belong_to_the_selected_ptr_branch(self):
+		def get_ref(_root: Path, branch: str) -> str:
+			return MAIN_SHA if branch == "main" else "c" * 40
+
+		self.ref.side_effect = get_ref
+		self.api.return_value = {"status": "diverged"}
+		with self.assertRaisesRegex(ValueError, "belong to its PTR branch"):
+			_ = self.plan()
+
+	def test_older_tagged_candidate_can_still_belong_to_an_advanced_ptr_branch(self):
+		def get_ref(_root: Path, branch: str) -> str:
+			return MAIN_SHA if branch == "main" else "c" * 40
+
+		self.ref.side_effect = get_ref
+		self.assertEqual(ISSUE, self.plan())
+		self.assertEqual(2, self.api.call_count)
+		self.api.assert_any_call(self.root, f"compare/{BRANCH_SHA}...{'c' * 40}")
+
+	def test_ptr_source_cannot_change_the_other_clients_baseline(self):
+		self.files[(BRANCH_SHA, monitor.BASELINES)] = json.dumps(
+			TARGET | {"forever": "1.60.2"}
+		)
+		with self.assertRaisesRegex(ValueError, "selected client baseline"):
+			_ = self.plan()
+
+	def test_wrong_tracked_patch_cannot_be_published_under_a_short_tag(self):
+		self.track.return_value = [monitor.TrackingIssue(2, BRANCH, "open", "12.1.9")]
+		with self.assertRaisesRegex(ValueError, "open tracking issue"):
+			_ = self.plan()
 
 	def test_missing_or_closed_tracking_issue_blocks_preview(self):
-		for issues in ([], [monitor.TrackingIssue(2, BRANCH, "closed")]):
+		for issues in ([], [monitor.TrackingIssue(2, BRANCH, "closed", "12.1.7")]):
 			self.track.return_value = issues
 			with self.assertRaisesRegex(ValueError, "open tracking issue"):
 				_ = self.plan()
@@ -326,23 +422,18 @@ class PreviewTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "TOC does not match"):
 			_ = self.plan()
 
-	def test_main_prerelease_version_is_not_used_as_preview_base(self):
-		self.files[(MAIN_SHA, monitor.TOC)] = LIVE_TOC.replace("0.1.9", "0.1.9-beta.1")
-		with self.assertRaisesRegex(ValueError, "stable addon version"):
-			_ = self.plan()
-
-	def test_untrusted_branch_and_sequence_inputs_are_rejected(self):
-		for branch, sequence in (
-			("main", "123.1"),
-			(BRANCH, "../1"),
-			(BRANCH, "1.0"),
-			(BRANCH, "1.1\n"),
+	def test_untrusted_client_version_and_sha_inputs_are_rejected(self):
+		for client, version, sha in (
+			("classic", "12.1.7", BRANCH_SHA),
+			("retail", "12.01.7", BRANCH_SHA),
+			("retail", "12.1.7", "unsafe"),
+			("retail", "12.1.7", BRANCH_SHA + "\n"),
 		):
 			with (
-				self.subTest(branch=branch, sequence=sequence),
+				self.subTest(client=client, version=version, sha=sha),
 				self.assertRaises(ValueError),
 			):
-				_ = branches.preview_plan(self.root, "main", branch, sequence)
+				_ = branches.validate_preview(self.root, "main", client, version, sha)
 
 
 class GitHubApiTests(unittest.TestCase):
@@ -373,24 +464,43 @@ class WorkflowTests(unittest.TestCase):
 	def workflow(self, name: str) -> str:
 		return (monitor.ROOT / ".github/workflows" / name).read_text()
 
-	def test_distribution_uploads_exclude_prereleases_before_using_secrets(self):
-		for name in ("curseforge.yml", "wago.yml"):
+	def test_storefronts_only_use_verified_published_artifacts(self):
+		for name, destination in (
+			("curseforge.yml", "curseforge"),
+			("wago.yml", "wago"),
+		):
 			with self.subTest(name=name):
 				workflow = self.workflow(name)
+				self.assertIn("types: [published]", workflow)
 				self.assertIn(
-					"if: github.event.release.prerelease == false && !contains(github.event.release.tag_name, '-')",
-					workflow,
+					"uses: ./.github/workflows/published-package.yml", workflow
 				)
-				self.assertIn(".prerelease == false", workflow)
+				self.assertIn(
+					f"if: needs.verify.outputs.{destination} == 'true'", workflow
+				)
+				self.assertIn("name: published-package", workflow)
+				self.assertNotIn("workflow_dispatch", workflow)
+		verification = self.workflow("published-package.yml")
+		self.assertIn(".draft == false", verification)
+		self.assertIn("prepare_release.py verify", verification)
+		self.assertNotIn("secrets.", verification)
 
-	def test_preview_tests_and_packages_the_same_pinned_sha(self):
-		workflow = self.workflow("compatibility-preview.yml")
+	def test_all_tags_share_one_pinned_draft_pipeline(self):
+		workflow = self.workflow("release.yml")
+		self.assertIn('tags: ["v*"]', workflow)
+		self.assertNotIn("workflow_dispatch", workflow)
+		self.assertFalse(
+			(monitor.ROOT / ".github/workflows/compatibility-preview.yml").exists()
+		)
+		self.assertEqual(1, workflow.count("ref: ${{ github.sha }}"))
 		self.assertEqual(2, workflow.count("ref: ${{ needs.validate.outputs.sha }}"))
+		self.assertEqual(
+			2, workflow.count("ref: ${{ needs.validate.outputs.automation_sha }}")
+		)
 		self.assertIn("needs: [validate, tests]", workflow)
-		self.assertIn('--target "$SOURCE_SHA" --prerelease --latest=false', workflow)
-		self.assertIn("plan-preview \\\n", workflow)
+		self.assertIn("prepare_release.py draft", workflow)
+		self.assertNotIn("git/refs", workflow)
 		self.assertNotIn("secrets: inherit", workflow)
-		self.assertNotIn("--dev", workflow)
 
 	def test_reusable_tests_checkout_the_requested_sha_in_both_jobs(self):
 		self.assertEqual(
@@ -403,7 +513,7 @@ class WorkflowTests(unittest.TestCase):
 		self.assertEqual(
 			2,
 			workflow.count(
-				"if: github.event_name != 'create' || (github.event.ref_type == 'branch' && startsWith(github.event.ref, 'compatibility/'))"
+				"if: github.event_name != 'create' || (github.event.ref_type == 'branch' && startsWith(github.event.ref, 'ptr/'))"
 			),
 		)
 		self.assertIn(
@@ -421,13 +531,6 @@ class WorkflowTests(unittest.TestCase):
 			workflow.index("--create-tracking"),
 			workflow.index("compatibility_branches.py sync"),
 		)
-
-	def test_stable_preparation_is_default_branch_only(self):
-		self.assertIn(
-			"if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
-			self.workflow("release.yml"),
-		)
-		self.assertNotIn("--prerelease", self.workflow("release.yml"))
 
 	def test_failure_reporter_only_trusts_push_runs_from_this_repository(self):
 		workflow = self.workflow("compatibility-sync.yml")

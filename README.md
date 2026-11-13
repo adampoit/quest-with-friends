@@ -26,7 +26,7 @@ Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-co
 
 Install a separate copy in each client if you play both Retail and Forever.
 
-Optional PTR compatibility previews, when available, are listed as prereleases on [GitHub Releases](https://github.com/adampoit/quest-with-friends/releases). These are experimental downloads for the client version named in their notes, not updates for live players. CurseForge and Wago carry stable releases only.
+Optional beta builds for live clients are listed as prereleases on [GitHub Releases](https://github.com/adampoit/quest-with-friends/releases) and are available through CurseForge and Wago when you opt into beta updates. Client-qualified alpha releases are GitHub-only PTR downloads for the test client named in their notes, not updates for live players. Maintainers: see [Publishing releases](https://github.com/adampoit/quest-with-friends/blob/main/tools/RELEASING.md).
 
 **Try it solo:** use `/qwf preview`, or enable **Preview appearance** in the addon's settings, to explore sample party data and arrange the panel. Sharing is disabled in preview. Click **End preview** or use `/qwf preview off` to stop; joining a group or reloading also ends it.
 

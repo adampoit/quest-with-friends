@@ -1,4 +1,4 @@
-name: Maintain compatibility branches
+name: Maintain PTR branches
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_run:
     workflows: [Tests]
     types: [completed]
-    branches: ["compatibility/**"]
+    branches: ["ptr/**"]
 
 permissions:
   contents: read

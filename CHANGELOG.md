@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Prepare draft GitHub releases from pushed version tags: client-qualified alphas (`alpha.retail.N` / `alpha.forever.N`) for GitHub-only PTR testing, plain betas for live-client testing, and stable versions. Reuse `ptr/retail` and `ptr/forever` branches with one tracked patch per client. Publishing the draft starts verified storefront uploads; live betas are opt-in on both CurseForge and Wago.
 - Add reproducible four-player QuestieDB benchmarks and before/after measurements.
 - Reduce ordinary synchronization batching to 200 ms and send immediately when the shared pacing budget permits. Refresh outdated unsent snapshots at their existing send opportunity so continuous quest events cannot starve delivery; retain 500 ms pacing, retry backoff, and immutable started transfers.
 

@@ -12,8 +12,7 @@ from zipfile import BadZipFile
 if not __package__:
 	sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.release_package import interface_versions, read_toc
-
+from tools.release_package import interface_versions, read_toc, validate_release_archive
 
 SUPPORTED_CLIENTS = ("retail", "forever")
 
@@ -62,32 +61,17 @@ def resolve_patches(archive: Path, catalog: object) -> dict[str, list[str]]:
 def prepare_upload(
 	archive: Path, release: object, catalog: object
 ) -> dict[str, object]:
-	if not isinstance(release, dict):
-		raise ValueError("GitHub release must be an object")
+	version = validate_release_archive(archive, release)
+	if version.client:
+		raise ValueError("PTR previews cannot be uploaded to Wago")
 	details = cast(dict[str, object], release)
-	tag = details.get("tag_name")
-	if not isinstance(tag, str) or re.fullmatch(r"v[A-Za-z0-9._-]+", tag) is None:
-		raise ValueError("GitHub release must have a valid version tag")
-	if details.get("draft") is not False:
-		raise ValueError("GitHub release must be published, not a draft")
-	prerelease = details.get("prerelease")
-	if not isinstance(prerelease, bool):
-		raise ValueError("GitHub release must specify prerelease status")
 	label = details.get("name")
 	notes = details.get("body")
-	if label is not None and not isinstance(label, str):
-		raise ValueError("GitHub release title must be a string")
-	if notes is not None and not isinstance(notes, str):
-		raise ValueError("GitHub release notes must be a string")
-
-	stability = (
-		"alpha" if "alpha" in tag.lower() else "beta" if prerelease else "stable"
-	)
 	return {
 		"project_id": project_id(archive),
 		"metadata": {
-			"label": label or tag,
-			"stability": stability,
+			"label": label or version.tag,
+			"stability": version.channel,
 			"changelog": notes or "",
 			**resolve_patches(archive, catalog),
 		},

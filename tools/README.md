@@ -4,6 +4,8 @@ Generate reproducible quest metadata from **local ATT and QuestieDB checkouts** 
 
 Requires Python 3.10+. QuestieDB export also uses Lua 5.1 or LuaJIT.
 
+For tag-driven PTR alphas, live-client betas and stable releases, see [Publishing releases](RELEASING.md).
+
 | Source    | Import method                                                                 | Current use                      |
 | --------- | ----------------------------------------------------------------------------- | -------------------------------- |
 | ATT       | Static scan of contributor quest constructors and the Retail reward catalog   | Reviewed Retail variant families |
