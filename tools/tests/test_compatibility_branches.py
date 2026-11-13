@@ -198,6 +198,7 @@ class SyncTests(unittest.TestCase):
 		self.ref = Mock(return_value=MAIN_SHA)
 		self.source = Mock(return_value=json.dumps(LIVE))
 		self.api = Mock(return_value={"sha": BRANCH_SHA})
+		self.sync = Mock(return_value=True)
 		self.comment = Mock()
 
 	@override
@@ -208,29 +209,25 @@ class SyncTests(unittest.TestCase):
 			("source_file", self.source),
 			("api", self.api),
 			("comment_once", self.comment),
+			("sync_branch", self.sync),
 		):
 			patcher = patch.object(branches, name, new=value)
 			_ = patcher.start()
 			self.addCleanup(patcher.stop)
 
-	def test_sync_uses_atomic_server_merge_with_pinned_main_commit(self):
+	def test_sync_pins_main_and_passes_reviewed_baselines(self):
 		branches.sync_branches(self.root, "main")
-		self.api.assert_called_once_with(
-			self.root,
-			"merges",
-			"--method",
-			"POST",
-			"-f",
-			f"base={BRANCH}",
-			"-f",
-			f"head={MAIN_SHA}",
-			"-f",
-			f"commit_message=Merge main into {BRANCH}",
-		)
+		self.sync.assert_called_once_with(self.root, MAIN_SHA, ISSUE, LIVE, base="main")
 		self.comment.assert_not_called()
 
+	def test_sync_passes_the_selected_base_branch_name(self):
+		branches.sync_branches(self.root, "integration")
+		self.sync.assert_called_once_with(
+			self.root, MAIN_SHA, ISSUE, LIVE, base="integration"
+		)
+
 	def test_up_to_date_branch_is_a_noop(self):
-		self.api.return_value = {}
+		self.sync.return_value = False
 		branches.sync_branches(self.root, "main")
 		self.comment.assert_not_called()
 
@@ -240,24 +237,34 @@ class SyncTests(unittest.TestCase):
 			monitor.TrackingIssue(3, "ptr/retail", "open", "12.1.5"),
 		]
 		branches.sync_branches(self.root, "main")
-		self.api.assert_not_called()
+		self.sync.assert_not_called()
 
 	def test_conflict_is_reported_and_other_branches_still_sync(self):
 		self.track.return_value = [
 			ISSUE,
 			monitor.TrackingIssue(3, "ptr/forever", "open", "1.60.2"),
 		]
-		self.api.side_effect = [
-			subprocess.CalledProcessError(1, "gh", stderr="Merge conflict (HTTP 409)"),
-			{"sha": BRANCH_SHA},
+		self.sync.side_effect = [
+			subprocess.CalledProcessError(1, "git", output="Merge conflict"),
+			True,
 		]
 		with self.assertRaisesRegex(ValueError, "Could not sync"):
 			branches.sync_branches(self.root, "main")
-		self.assertEqual(2, self.api.call_count)
+		self.assertEqual(2, self.sync.call_count)
 		assert self.comment.call_args is not None
 		self.assertEqual(f"sync:{MAIN_SHA}", self.comment.call_args.args[2])
 		self.assertIn(
 			"No history was rewritten", cast(str, self.comment.call_args.args[3])
+		)
+
+	def test_invalid_metadata_is_reported_without_publishing_a_branch(self):
+		self.sync.side_effect = ValueError("Unexpected TOC metadata")
+		with self.assertRaisesRegex(ValueError, "Could not sync"):
+			branches.sync_branches(self.root, "main")
+		self.comment.assert_called_once()
+		assert self.comment.call_args is not None
+		self.assertIn(
+			"Unexpected TOC metadata", cast(str, self.comment.call_args.args[3])
 		)
 
 	def test_current_tip_test_failure_is_reported(self):
@@ -320,6 +327,9 @@ class PreviewTests(unittest.TestCase):
 			(BRANCH_SHA, monitor.BASELINES): json.dumps(TARGET),
 			(MAIN_SHA, monitor.TOC): LIVE_TOC,
 			(BRANCH_SHA, monitor.TOC): TARGET_TOC,
+			(BRANCH_SHA, Path("QuestWithFriendsDev.toc")): TARGET_TOC.replace(
+				"0.1.9", "dev"
+			),
 		}
 
 		def get_ref(_root: Path, branch: str) -> str:
@@ -385,6 +395,11 @@ class PreviewTests(unittest.TestCase):
 	def test_wrong_tracked_patch_cannot_be_published_under_a_short_tag(self):
 		self.track.return_value = [monitor.TrackingIssue(2, BRANCH, "open", "12.1.9")]
 		with self.assertRaisesRegex(ValueError, "open tracking issue"):
+			_ = self.plan()
+
+	def test_preview_rejects_a_dev_manifest_left_on_live_interfaces(self):
+		self.files[(BRANCH_SHA, Path("QuestWithFriendsDev.toc"))] = LIVE_TOC
+		with self.assertRaisesRegex(ValueError, "TOC does not match"):
 			_ = self.plan()
 
 	def test_missing_or_closed_tracking_issue_blocks_preview(self):

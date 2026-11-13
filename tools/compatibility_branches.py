@@ -4,9 +4,11 @@
 import argparse
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import cast
 
@@ -70,6 +72,140 @@ def comment_once(root: Path, issue: TrackingIssue, key: str, message: str) -> No
 	)
 
 
+_TOCS = (TOC, Path("QuestWithFriendsDev.toc"))
+
+
+def isolated_git(
+	root: Path, *arguments: str, content: str | None = None, raw: bool = False
+) -> str:
+	# Candidate trees stay data; ignore external merge drivers and disable hooks.
+	result = subprocess.run(
+		[
+			"git",
+			"-c",
+			"core.hooksPath=/dev/null",
+			"-c",
+			"credential.helper=",
+			"-c",
+			"credential.helper=!gh auth git-credential",
+			*arguments,
+		],
+		cwd=root,
+		env=os.environ
+		| {
+			"GIT_CONFIG_NOSYSTEM": "1",
+			"GIT_CONFIG_GLOBAL": os.devnull,
+			"GIT_TERMINAL_PROMPT": "0",
+			"GIT_AUTHOR_NAME": "not-adam[bot]",
+			"GIT_AUTHOR_EMAIL": "299629278+not-adam[bot]@users.noreply.github.com",
+			"GIT_COMMITTER_NAME": "not-adam[bot]",
+			"GIT_COMMITTER_EMAIL": "299629278+not-adam[bot]@users.noreply.github.com",
+		},
+		input=content,
+		capture_output=True,
+		text=True,
+		check=True,
+	)
+	return result.stdout if raw else result.stdout.strip()
+
+
+def _target_toc(toc: str, live: dict[str, str], issue: TrackingIssue) -> str:
+	targets = live | {issue.client: issue.version}
+	try:
+		updated = proposed_toc(
+			toc, targets, Candidate(issue.client, issue.version, 1, issue.version)
+		)
+	except ValueError:
+		updated = proposed_toc(
+			toc, live, Candidate(issue.client, issue.version, 1, live[issue.client])
+		)
+	match = re.search(r"(?m)^##[ \t]*Interface:[ \t]*([^\r\n]+)", updated)
+	if match is None or len(match[1].split(",")) != len(targets):
+		raise ValueError("TOC has ambiguous Interface metadata")
+	return updated
+
+
+def sync_branch(
+	root: Path,
+	main_sha: str,
+	issue: TrackingIssue,
+	live: dict[str, str],
+	*,
+	base: str = "main",
+) -> bool:
+	branch_sha = ref_sha(root, issue.branch)
+	url = run(root, "gh", "repo", "view", "--json", "url", "--jq", ".url")
+	if not url.endswith(".git"):
+		url += ".git"
+	with tempfile.TemporaryDirectory() as directory:
+		repo = Path(directory).resolve()
+		_ = isolated_git(repo, "init", "--quiet", "--template=")
+		_ = isolated_git(
+			repo,
+			"fetch",
+			"--no-tags",
+			"--no-recurse-submodules",
+			url,
+			branch_sha,
+			main_sha,
+		)
+		original = isolated_git(repo, "rev-parse", f"{branch_sha}^{{tree}}")
+		contains_main = (
+			isolated_git(repo, "merge-base", branch_sha, main_sha) == main_sha
+		)
+		tree = (
+			original
+			if contains_main
+			else isolated_git(
+				repo, "merge-tree", "--write-tree", branch_sha, main_sha
+			).splitlines()[0]
+		)
+		targets = parse_baselines(
+			cast(
+				object,
+				json.loads(
+					isolated_git(repo, "show", f"{tree}:{BASELINES.as_posix()}")
+				),
+			)
+		)
+		if targets != live | {issue.client: issue.version}:
+			raise ValueError("Merged baselines do not match the tracked PTR target")
+		_ = isolated_git(repo, "read-tree", tree)
+		for path in _TOCS:
+			toc = isolated_git(repo, "show", f"{tree}:{path.as_posix()}", raw=True)
+			updated = _target_toc(toc, live, issue)
+			mode = isolated_git(
+				repo, "ls-files", "--stage", "--", path.as_posix()
+			).split()[0]
+			if mode not in ("100644", "100755"):
+				raise ValueError("TOCs must be regular files")
+			if updated != toc:
+				blob = isolated_git(
+					repo, "hash-object", "-w", "--stdin", content=updated
+				)
+				_ = isolated_git(
+					repo,
+					"update-index",
+					"--cacheinfo",
+					f"{mode},{blob},{path.as_posix()}",
+				)
+		tree = isolated_git(repo, "write-tree")
+		if contains_main and tree == original:
+			return False
+		parents = ["-p", branch_sha] + ([] if contains_main else ["-p", main_sha])
+		commit = isolated_git(
+			repo,
+			"commit-tree",
+			tree,
+			*parents,
+			"-m",
+			f"Merge {base} into {issue.branch}",
+		)
+		# A single non-force push publishes the merge and both corrected manifests.
+		_ = isolated_git(repo, "push", url, f"{commit}:refs/heads/{issue.branch}")
+		return True
+
+
 def sync_branches(root: Path, base: str) -> None:
 	main_sha = ref_sha(root, base)
 	baselines = parse_baselines(
@@ -86,22 +222,14 @@ def sync_branches(root: Path, base: str) -> None:
 			)
 			continue
 		try:
-			# GitHub merges against the current branch tip atomically; no reset or force push.
-			result = api(
-				root,
-				"merges",
-				"--method",
-				"POST",
-				"-f",
-				f"base={issue.branch}",
-				"-f",
-				f"head={main_sha}",
-				"-f",
-				f"commit_message=Merge {base} into {issue.branch}",
-			)
+			result = sync_branch(root, main_sha, issue, baselines, base=base)
 			print(f"{'Updated' if result else 'Already current'}: {issue.branch}")
-		except subprocess.CalledProcessError as error:
-			stderr = cast(str | None, error.stderr)
+		except (subprocess.CalledProcessError, ValueError, TypeError) as error:
+			stderr = (
+				(cast(str | None, error.stderr) or cast(str | None, error.stdout))
+				if isinstance(error, subprocess.CalledProcessError)
+				else str(error)
+			)
 			failed.append(issue.branch)
 			comment_once(
 				root,
@@ -170,8 +298,9 @@ def validate_preview(
 		raise ValueError("Branch target does not match its compatibility baseline")
 	if targets != live | {client: version}:
 		raise ValueError("PTR source must only change its selected client baseline")
-	toc = source_file(root, sha, TOC)
-	_ = proposed_toc(toc, targets, Candidate(client, version, 1, version))
+	for path in _TOCS:
+		toc = source_file(root, sha, path)
+		_ = proposed_toc(toc, targets, Candidate(client, version, 1, version))
 	return issues[0]
 
 

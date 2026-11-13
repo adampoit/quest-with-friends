@@ -1267,6 +1267,9 @@ local function watchPeer(key, peer)
 			watch.delay = SNAPSHOT_TIMEOUT
 		else
 			peer.status = peer.quests and "stale" or "waiting"
+			if QWF.isDevelopment then
+				peer.debugRecoveryReason, peer.debugRecoveryAt = "snapshot progress timeout", GetTime and GetTime()
+			end
 			peer.revision = nil
 			peer.allowReset = true
 			log("WARN", "sync", "Quest snapshot timed out; requesting refresh", {
@@ -1376,6 +1379,9 @@ function delta.materialize(snapshot)
 end
 
 function delta.recover(key, peer, reason)
+	if QWF.isDevelopment then
+		peer.debugRecoveryReason, peer.debugRecoveryAt = reason, delta.now()
+	end
 	peer.status = peer.quests and "stale" or "waiting"
 	peer.partialPending = nil
 	watchPeer(key, peer)
@@ -1958,6 +1964,10 @@ local function receive(sender, message)
 	end
 	local version, body = message:match("^(%d+%.%d+):(.+)$")
 	local major, minor = Core.parseProtocolVersion(version)
+	if QWF.isDevelopment then
+		peer.debugProtocol = major and version or "unversioned / malformed"
+		peer.debugMessageAt = delta.now()
+	end
 	if not major or major ~= Core.PROTOCOL_MAJOR then
 		peer.detected = true
 		peer.status = "incompatible"
@@ -2185,6 +2195,9 @@ local function receive(sender, message)
 			if peer.status ~= "stale" then
 				peer.status = peer.quests and "refreshing" or "waiting"
 			end
+			if QWF.isDevelopment then
+				peer.debugRecoveryReason, peer.debugRecoveryAt = "invalid snapshot rejected", delta.now()
+			end
 			log("WARN", "sync", "Rejected invalid quest snapshot", { sender = key })
 			render("snapshot_rejected")
 		end
@@ -2315,9 +2328,90 @@ if AddonKit and AddonKit.RegisterAddon then
 end
 applyDebugMode()
 
-local development = QWF.Development and QWF.Development.new(setPreviewMode, function()
-	return screenshotMode
-end)
+local development = QWF.Development
+	and QWF.Development.new(setPreviewMode, function()
+		return screenshotMode
+	end, function()
+		local now = delta.now()
+		local function age(timestamp)
+			return timestamp and math.max(0, now - timestamp)
+		end
+		local function stateSummary(state)
+			return state and { session = state.session, sequence = state.sequence, digest = state.digest }
+		end
+		local function transferSummary(snapshot)
+			return snapshot
+				and {
+					kind = snapshot.kind,
+					revision = snapshot.revision,
+					sent = snapshot.next - 1,
+					parts = snapshot.parts,
+					bytes = snapshot.wireBytes or #snapshot.payload,
+					forced = snapshot.forced == true,
+					materialized = #snapshot.messages > 0,
+				}
+		end
+		local function assemblySummary(pending)
+			return pending and { revision = pending.serial, received = pending.received, parts = pending.total }
+		end
+		local data = {
+			protocol = VERSION,
+			game = isForever and "Forever" or "Retail",
+			inParty = inParty(),
+			inRaid = IsInRaid(),
+			prefixRegistered = prefixRegistered,
+			view = screenshotMode and "screenshot samples" or (previewMode and "preview samples" or "live"),
+			localSnapshotKnown = localSnapshotKnown,
+			localQuestCount = entryCount(localQuests),
+			snapshotTooLarge = snapshotTooLarge,
+			submittedBytes = lastPayload and #lastPayload,
+			partialEnabled = delta.enabled,
+			baselineNeeded = delta.baselineNeeded,
+			published = stateSummary(delta.published),
+			outgoing = transferSummary(outgoing),
+			queued = transferSummary(queuedSnapshot),
+			suspended = transferSummary(delta.suspended),
+			requestPending = requestPending,
+			capabilityPending = delta.capabilityPending,
+			heartbeatPending = delta.heartbeatPending ~= nil,
+			oversizePending = oversizePending,
+			nextSendIn = math.max(0, nextSendAt - now),
+			retryIn = retryDelay > 1 and math.max(0, nextSendAt - now) or nil,
+			batching = scheduled,
+			peers = {},
+		}
+		if C_AddOns and C_AddOns.GetAddOnMetadata then
+			data.addonVersion = C_AddOns.GetAddOnMetadata(addonName, "Version")
+		end
+		if GetBuildInfo then
+			data.clientVersion, data.clientBuild = GetBuildInfo()
+		end
+		for _, member in ipairs(members) do
+			local peer = peers[member.key]
+			data.peers[#data.peers + 1] = {
+				name = member.name,
+				connected = peer.connected,
+				detected = peer.detected == true,
+				status = peerDisplayStatus(peer),
+				protocol = peer.debugProtocol,
+				messageAge = age(peer.debugMessageAt),
+				hasSnapshot = peer.quests ~= nil,
+				questCount = peer.quests and entryCount(peer.quests),
+				revision = peer.snapshotRevision,
+				snapshotAge = age(peer.snapshotAt),
+				session = peer.deltaSession,
+				capabilityAge = age(peer.capabilityAt),
+				state = stateSummary(peer.state),
+				stateAge = age(peer.deltaSeen and math.max(peer.deltaSeen, peer.deltaProgressAt or 0)),
+				fullOnly = peer.fullOnly,
+				pending = assemblySummary(peer.pending),
+				partialPending = assemblySummary(peer.partialPending),
+				recoveryReason = peer.debugRecoveryReason,
+				recoveryAge = age(peer.debugRecoveryAt),
+			}
+		end
+		return data
+	end)
 
 local debugSetting
 if
