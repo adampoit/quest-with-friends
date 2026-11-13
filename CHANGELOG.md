@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.11-beta.1
 
+- Add a separate, read-only `/qwf dev` diagnostics window to development installations, showing live peer health, protocol capabilities, snapshot transfers, pacing and recovery without enabling logging or adding sync traffic. The window remains excluded from normal beta and stable packages.
+- Check in the development installation's TOC with a fixed `dev` version, removing the manifest-generation step for live development, screenshots and simulator tests. Keep development and release interface metadata aligned.
 - Prepare draft GitHub releases from pushed version tags: client-qualified alphas (`alpha.retail.N` / `alpha.forever.N`) for GitHub-only PTR testing, plain betas for live-client testing, and stable versions. Reuse `ptr/retail` and `ptr/forever` branches with one tracked patch per client. Publishing the draft starts verified storefront uploads; live betas are opt-in on both CurseForge and Wago.
 - Add reproducible four-player QuestieDB benchmarks and before/after measurements.
 - Reduce ordinary synchronization batching to 200 ms and send immediately when the shared pacing budget permits. Refresh outdated unsent snapshots at their existing send opportunity so continuous quest events cannot starve delivery; retain 500 ms pacing, retry backoff, and immutable started transfers.
-
 - Add optional protocol 1.2 partial snapshots: send changed quests and explicit removals when all connected members support them, retaining normal full updates for mixed-version parties. Guard updates with session identities, exact bases and SHA-256/128 state digests; use periodic state checks and on-demand full-snapshot recovery to detect missed updates, without scheduled full checkpoints. Prioritize small updates over running full snapshots without rolling back newer comparisons.
 
 ## 0.1.10

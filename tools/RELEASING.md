@@ -5,7 +5,7 @@ Pushed version tags prepare releases. Publishing the resulting GitHub draft is t
 ## Maintainer flow
 
 1. Commit the candidate and push its branch. Merge these workflow changes into the default branch and update candidate branches before using the new publishing flow: the tagged revision must contain the tag-triggered workflow.
-2. Set the source `QuestWithFriends.toc` version to the next **stable base**, such as `0.1.11`, before its first alpha/beta. Keep that base throughout testing; the packager overrides only the version inside prerelease ZIPs. Regenerate the development TOC with `python3 tools/bundle_addon.py --dev-toc` when changing the base.
+2. Set the source `QuestWithFriends.toc` version to the next **stable base**, such as `0.1.11`, before its first alpha/beta. Keep that base throughout testing; the packager overrides only the version inside prerelease ZIPs. The checked-in development TOC keeps its fixed `dev` version; do not regenerate it when changing the release base. Keep Interface metadata aligned in both TOCs when changing supported game patches.
 3. Get branch CI green, then create and push a tag at the candidate commit:
 
    ```sh

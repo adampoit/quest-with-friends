@@ -94,6 +94,14 @@ class TagTests(unittest.TestCase):
 				_ = releases.tag_sha(Path("."), BETA)
 
 
+class DocumentationTests(unittest.TestCase):
+	def test_changelog_does_not_insert_blank_lines_between_bullets(self):
+		self.assertNotRegex(
+			(ADDON_ROOT / "CHANGELOG.md").read_text(),
+			r"(?m)^- [^\n]*\n(?:[ \t]*\n)+(?=- )",
+		)
+
+
 class PreparationTests(unittest.TestCase):
 	temp: tempfile.TemporaryDirectory[str]
 	root: Path
