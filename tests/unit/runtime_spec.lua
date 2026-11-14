@@ -1248,6 +1248,9 @@ describe("Quest With Friends party sync", function()
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		assert.same({}, view.groups)
+		flush()
+		assert.are.equal("active", latestSnapshot()[71002].state)
+		assert.is_nil(latestSnapshot()[71001])
 	end)
 
 	it("checks completion history for equivalent local IDs", function()
@@ -1264,6 +1267,148 @@ describe("Quest With Friends party sync", function()
 			{ player = "You", kind = "ahead", reason = "completed" },
 			{ player = "Julia", kind = "needs", reason = "active" },
 		}, view.groups[1].differences)
+	end)
+
+	it("broadcasts relevant historical completions with their real IDs and no invented objectives", function()
+		_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
+			return id == 71002 or id == 99
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		assert.same({}, latestSnapshot())
+		receiveSnapshot({
+			[71003] = { title = "Branch quest", state = "active", mapID = 202, category = "class", objectives = {} },
+		}, 1)
+		flush()
+		assert.same({
+			[71002] = { title = "Branch quest", state = "completed", mapID = 202, category = "class", objectives = {} },
+		}, latestSnapshot())
+		local sent = #messages
+		receiveSnapshot({
+			[71003] = {
+				title = "Branch quest",
+				state = "active",
+				mapID = 202,
+				category = "class",
+				objectives = { { text = "Gnolls slain", have = 2, need = 8 } },
+			},
+		}, 2)
+		flush()
+		assert.are.equal(sent, #messages)
+		receiveSnapshot({ [71003] = { title = "Branch quest", state = "completed", objectives = {} } }, 3)
+		flush()
+		assert.same({}, latestSnapshot())
+	end)
+
+	it("does not infer or transmit history across active-only variant families", function()
+		QuestWithFriends.QuestEquivalences[71001].history = false
+		_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
+			return id == 71002
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [71003] = { title = "Branch quest", state = "active", objectives = {} } }, 1)
+		flush()
+		assert.same({}, latestSnapshot())
+		assert.are.equal("missing", view.groups[1].differences[1].reason)
+	end)
+
+	it("prefers a reaccepted quest over completion flags and removes reset history", function()
+		local flagged = true
+		_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
+			return id == 42 and flagged
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [42] = { title = "Repeatable", state = "ready", objectives = {} } }, 1)
+		flush()
+		assert.are.equal("completed", latestSnapshot()[42].state)
+		entries = { { questID = 42, title = "Repeatable" } }
+		fire("QUEST_ACCEPTED", 1, 42)
+		flush()
+		assert.are.equal("active", latestSnapshot()[42].state)
+		flagged, entries = false, {}
+		fire("QUEST_REMOVED", 42)
+		flush()
+		assert.is_nil(latestSnapshot()[42])
+		assert.are.equal("missing", view.groups[1].differences[1].reason)
+	end)
+
+	it("removes historical replies when the party leaves but preserves observed turn-ins", function()
+		_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
+			return id == 42
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		fire("QUEST_TURNED_IN", 43)
+		receiveSnapshot({ [42] = { title = "Old quest", state = "active", objectives = {} } }, 1)
+		flush()
+		assert.are.equal("completed", latestSnapshot()[42].state)
+		party = false
+		fire("GROUP_ROSTER_UPDATE")
+		party = true
+		fire("GROUP_ROSTER_UPDATE")
+		flush()
+		assert.is_nil(latestSnapshot()[42])
+		assert.are.equal("completed", latestSnapshot()[43].state)
+	end)
+
+	it("retains missing comparisons when the completion API is unavailable", function()
+		_G.C_QuestLog.IsQuestFlaggedCompleted = nil
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [42] = { title = "Unknown quest", state = "active", objectives = {} } }, 1)
+		flush()
+		assert.same({}, latestSnapshot())
+		assert.are.equal("missing", view.groups[1].differences[1].reason)
+	end)
+
+	for _, count in ipairs({ 9, 99 }) do
+		for _, headroom in ipairs({ 0, -1 }) do
+			it(
+				"bounds history bytes across the quest-count boundary at " .. count .. " with headroom " .. headroom,
+				function()
+					local expected = {}
+					for id = 1, count do
+						entries[id] = { questID = id, title = "Quest " .. id }
+						expected[id] = { title = "Quest " .. id, state = "active", objectives = {} }
+					end
+					expected[999] = { title = "History", state = "completed", objectives = {} }
+					local Core = QuestWithFriends.Core
+					Core.MAX_SNAPSHOT_BYTES = #Core.encode(expected) + headroom
+					_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
+						return id == 999
+					end
+					fire("PLAYER_ENTERING_WORLD")
+					flush()
+					receiveSnapshot({ [999] = { title = "History", state = "active", objectives = {} } }, 1)
+					flush()
+					if headroom < 0 then
+						expected[999] = nil
+					end
+					assert.same(expected, latestSnapshot())
+					assert.is_not_nil(latestSnapshot()[count])
+				end
+			)
+		end
+	end
+
+	it("does not exceed the quest-count limit when adding history", function()
+		for id = 1, 500 do
+			entries[id] = { questID = id, title = "Q" }
+		end
+		_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
+			return id == 999
+		end
+		fire("PLAYER_ENTERING_WORLD")
+		flush()
+		receiveSnapshot({ [999] = { title = "History", state = "active", objectives = {} } }, 1)
+		flush()
+		local snapshot = latestSnapshot()
+		assert.is_nil(snapshot[999])
+		for id = 1, 500 do
+			assert.are.equal("active", snapshot[id].state)
+		end
 	end)
 
 	it("uses shipped counted and transition families for completion-history checks", function()
@@ -1706,7 +1851,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local status = findLog(records, "Party sync status").data
 		assert.are.equal("Carola Goodspeed", status.player)
-		assert.same({ { key = "Florace Bastille", name = "Florace Bastille" } }, status.members)
+		assert.same({ { key = "Florace Bastille", name = "Florace Bastille", unit = "party1" } }, status.members)
 		assert.same({ { player = "Florace Bastille", reason = "unknown" } }, view.notices)
 		local sent = #messages
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Carola Goodspeed")
@@ -2524,7 +2669,7 @@ describe("Quest With Friends party sync", function()
 		assert.same({ "1.1:H" }, messages)
 		local status = findLog(records, "Party sync status").data
 		assert.are.equal("Adam-Realm", status.player)
-		assert.same({ { name = "Julia", key = "Julia-Realm" } }, status.members)
+		assert.same({ { name = "Julia", key = "Julia-Realm", unit = "party1" } }, status.members)
 		assert.is_true(status.prefixRegistered)
 		flush()
 		local first = #messages

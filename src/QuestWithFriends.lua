@@ -76,6 +76,7 @@ local previewSetting
 local resettingPreviewSetting = false
 local panelLockSetting
 local render
+local native = { progress = QWF.NativeProgress and QWF.NativeProgress.new(), units = {} }
 local setPreviewMode
 local ignores, ignoreView, ignoreOffer, ignoreDialog
 local worldEntered = false
@@ -615,6 +616,56 @@ local function scanQuests(trigger)
 	localSnapshotKnown = true
 end
 
+local function questSnapshot(bounded)
+	local quests, candidates, ids = {}, {}, {}
+	local count = 0
+	for id, quest in pairs(localQuests) do
+		quests[id] = quest
+		count = count + 1
+	end
+	-- Only logged peer quests create demand; completion replies must not sustain each other.
+	for _, member in ipairs(members) do
+		local peer = peers[member.key]
+		for id, quest in pairs(peer and peer.quests or {}) do
+			if quest.state ~= "completed" and not candidates[id] then
+				candidates[id] = quest
+				ids[#ids + 1] = id
+			end
+		end
+	end
+	table.sort(ids)
+	local size = bounded and #Core.encode(quests) or 0
+	local emptySize = bounded and #Core.encode({}) or 0
+	for _, id in ipairs(ids) do
+		if not Core.matchQuest(quests, id) and C_QuestLog.IsQuestFlaggedCompleted then
+			for _, variantID in ipairs(Core.completionIDs(id)) do
+				if C_QuestLog.IsQuestFlaggedCompleted(variantID) then
+					local source = candidates[id]
+					local record = {
+						title = source.title,
+						state = "completed",
+						objectives = {},
+						mapID = source.mapID,
+						category = questCategory(variantID) or source.category,
+					}
+					local nextSize = size
+					if bounded then
+						local recordSize = #Core.encode({ [variantID] = record }) - emptySize
+						-- The quest-count field grows at 10 and 100 records.
+						nextSize = size + recordSize + #tostring(count + 1) - #tostring(count)
+					end
+					if not bounded or (count < 500 and nextSize <= Core.MAX_SNAPSHOT_BYTES) then
+						quests[variantID] = record
+						count, size = count + 1, nextSize
+					end
+					break
+				end
+			end
+		end
+	end
+	return quests, count
+end
+
 local function shareableQuestIndex(id)
 	if not inParty() or not C_QuestLog.IsPushableQuest(id) then
 		return nil
@@ -1045,6 +1096,37 @@ local function showPanel(groups, complete, notices, trigger)
 	recordUIState(true, groups, complete, notices, trigger, updating)
 end
 
+function native.startTimer()
+	if native.timer or not native.wanted then
+		return
+	end
+	local timer = {}
+	native.timer = timer
+	local function tick()
+		if native.timer ~= timer then
+			return
+		end
+		if not inParty() or not native.wanted then
+			native.timer = nil
+			return
+		end
+		local now = GetTime and GetTime() or 0
+		for _, unit in ipairs({ "target", "mouseover" }) do
+			if UnitExists(unit) then
+				native.progress:observeUnit(unit, now)
+			end
+		end
+		for unit in pairs(native.units) do
+			if UnitExists(unit) then
+				native.progress:observeUnit(unit, now)
+			end
+		end
+		render("native_progress_poll")
+		C_Timer.After(2, tick)
+	end
+	C_Timer.After(2, tick)
+end
+
 render = function(trigger)
 	trigger = trigger or "render"
 	if not QWF.Panel or resettingPreviewSetting then
@@ -1074,6 +1156,10 @@ render = function(trigger)
 		return
 	end
 	if not inParty() then
+		native.timer, native.wanted = nil, nil
+		if native.progress then
+			native.progress:reset()
+		end
 		cancelIgnoreDialog()
 		QWF.Panel.hide()
 		recordUIState(false, nil, nil, nil, trigger)
@@ -1082,11 +1168,12 @@ render = function(trigger)
 		recordObjectiveDiagnostics("peer", {}, trigger)
 		return
 	end
-	local roster, peerDiagnostics = {}, {}
-	local localView = {}
-	for id, quest in pairs(localQuests) do
-		localView[id] = quest
+	local roster, peerDiagnostics, templates = {}, {}, {}
+	local localView = questSnapshot()
+	for id, quest in pairs(localView) do
+		templates[id] = quest
 	end
+	native.wanted = false
 	for _, member in ipairs(members) do
 		local peer = peers[member.key]
 		local quests = peer and peer.quests
@@ -1096,21 +1183,53 @@ render = function(trigger)
 			name = member.name,
 			quests = quests,
 			syncStatus = status ~= "healthy" and status or nil,
+			unit = member.unit,
+			nativeEligible = peer
+				and peer.connected
+				and not quests
+				and status ~= "incompatible"
+				and status ~= "oversized",
 		}
+		if roster[#roster].nativeEligible then
+			native.wanted = native.progress and native.progress:available()
+		end
 		if quests then
-			snapshotObjectiveDiagnostics(peerDiagnostics, quests, member.key)
 			for id, quest in pairs(quests) do
-				if not Core.matchQuest(localView, id) then
-					for _, variantID in ipairs(Core.completionIDs(id)) do
-						if C_QuestLog.IsQuestFlaggedCompleted(variantID) then
-							localView[id] =
-								{ title = quest.title, state = "completed", objectives = {}, mapID = quest.mapID }
-							break
+				templates[id] = templates[id] or quest
+			end
+			snapshotObjectiveDiagnostics(peerDiagnostics, quests, member.key)
+		end
+	end
+	if native.progress then
+		local observed = native.progress:collect(templates, roster, GetTime and GetTime() or 0)
+		for _, member in ipairs(roster) do
+			local quests = observed[member.key]
+			if quests and next(quests) then
+				member.quests, member.partial, member.syncStatus = quests, true, "native"
+				for id, quest in pairs(quests) do
+					-- Native discoveries can demand our history locally, never remote completion guesses.
+					if not Core.matchQuest(localView, id) and C_QuestLog.IsQuestFlaggedCompleted then
+						for _, variantID in ipairs(Core.completionIDs(id)) do
+							if C_QuestLog.IsQuestFlaggedCompleted(variantID) then
+								localView[variantID] = {
+									title = quest.title,
+									state = "completed",
+									objectives = {},
+									mapID = quest.mapID,
+									category = quest.category,
+								}
+								break
+							end
 						end
 					end
 				end
 			end
 		end
+	end
+	if native.wanted then
+		native.startTimer()
+	else
+		native.timer = nil
 	end
 	recordObjectiveDiagnostics("peer", peerDiagnostics, trigger)
 	local zoneID = QWF.db.zoneFilter
@@ -1377,8 +1496,9 @@ function delta.materialize(snapshot)
 end
 
 function delta.content()
-	local content = Core.encode(localQuests, delta.targeted and { repair = "r1" } or nil)
-	return #content <= Core.MAX_SNAPSHOT_BYTES and content or Core.encode(localQuests)
+	local quests, count = questSnapshot(true)
+	local content = Core.encode(quests, delta.targeted and { repair = "r1" } or nil)
+	return #content <= Core.MAX_SNAPSHOT_BYTES and content or Core.encode(quests), count
 end
 
 function delta.targetable(peer)
@@ -1831,7 +1951,7 @@ broadcast = function(force, context)
 	if not inParty() then
 		return
 	end
-	local payload = delta.content()
+	local payload, count = delta.content()
 	local function matches(snapshot)
 		return snapshot and snapshot.content == payload
 	end
@@ -1898,10 +2018,6 @@ broadcast = function(force, context)
 		queuedAt = QWF.db.debugMode and GetTime and GetTime() or nil,
 	}
 	local total = math.max(1, math.ceil(#payload / CHUNK_SIZE))
-	local count = 0
-	for _ in pairs(localQuests) do
-		count = count + 1
-	end
 	snapshot.quests = count
 	snapshot.parts = total
 	if QWF.db.debugMode then
@@ -1922,6 +2038,9 @@ broadcast = function(force, context)
 end
 
 refresh = function(force, trigger)
+	if native.progress then
+		native.progress:invalidate()
+	end
 	scanQuests(trigger)
 	render(trigger)
 	if not inParty() then
@@ -1968,7 +2087,7 @@ local function updateRoster(force, trigger)
 				rosterPending = rosterPending or not key
 				if key and key ~= myself then
 					local name = isForever and key or UnitName(unit) or key
-					nextMembers[#nextMembers + 1] = { key = key, name = name }
+					nextMembers[#nextMembers + 1] = { key = key, name = name, unit = unit }
 					local connected = UnitIsConnected(unit) == true
 					local peer = peers[key]
 					changed = changed or not peer or peer.connected ~= connected
@@ -2025,6 +2144,9 @@ local function updateRoster(force, trigger)
 		return
 	end
 	if changed then
+		if native.progress then
+			native.progress:reset()
+		end
 		for _, peer in pairs(peers) do
 			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
 		end
@@ -2304,6 +2426,7 @@ local function receive(sender, message)
 			end
 		end
 		if quests then
+			local previousContent = delta.content()
 			peer.state = state
 			peer.fullOnly = peer.deltaSession and not state or nil
 			if peer.deltaSession then
@@ -2342,7 +2465,11 @@ local function receive(sender, message)
 			if QWF.db.debugMode then
 				peer.diagnosticPayload = diagnosticPayload
 			end
-			render("snapshot_received")
+			if delta.content() ~= previousContent then
+				refresh(false, "peer_completion_changed")
+			else
+				render("snapshot_received")
+			end
 		else
 			if peer.status ~= "stale" then
 				peer.status = peer.quests and "refreshing" or "waiting"
@@ -2366,6 +2493,11 @@ frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 frame:RegisterEvent("GROUP_LEFT")
 frame:RegisterEvent("UNIT_CONNECTION")
 frame:RegisterEvent("QUEST_LOG_UPDATE")
+frame:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
+frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+frame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 frame:RegisterEvent("BAG_UPDATE_DELAYED")
 frame:RegisterEvent("ITEM_LOCK_CHANGED")
 frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
@@ -2419,7 +2551,34 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		if type(unit) == "string" and unit:match("^party[1-4]$") then
 			updateRoster(false, event)
 		end
+	elseif event == "UNIT_QUEST_LOG_CHANGED" then
+		local unit = ...
+		if native.wanted and type(unit) == "string" and unit:match("^party[1-4]$") then
+			native.progress:invalidate()
+			render(event)
+		end
+	elseif event == "NAME_PLATE_UNIT_REMOVED" then
+		local unit = ...
+		if type(unit) == "string" then
+			native.units[unit] = nil
+		end
+	elseif event == "NAME_PLATE_UNIT_ADDED" or event == "PLAYER_TARGET_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then
+		local unit = event == "PLAYER_TARGET_CHANGED" and "target"
+			or (event == "UPDATE_MOUSEOVER_UNIT" and "mouseover" or ...)
+		if event == "NAME_PLATE_UNIT_ADDED" and type(unit) == "string" then
+			native.units[unit] = true
+		end
+		if
+			native.wanted
+			and type(unit) == "string"
+			and native.progress:observeUnit(unit, GetTime and GetTime() or 0)
+		then
+			render(event)
+		end
 	elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" or event == "ZONE_CHANGED_NEW_AREA" then
+		if native.progress then
+			native.progress:reset()
+		end
 		render(event)
 	elseif event == "GET_ITEM_INFO_RECEIVED" and select(2, ...) ~= true then
 		return

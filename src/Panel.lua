@@ -698,6 +698,7 @@ end
 local connectionLabels = {
 	offline = "Offline · sync resumes when online",
 	unknown = "Quest With Friends not detected",
+	native = "Limited Blizzard quest data · install QWF for full comparison",
 	waiting = "Waiting for quest snapshot · /qwf to refresh",
 	refreshing = "Refreshing · showing last snapshot",
 	stale = "Quest data stale · /qwf to refresh",

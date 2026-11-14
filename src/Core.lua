@@ -377,9 +377,12 @@ function Core.compare(localQuests, members, zoneID, progressMode)
 				ids[Core.questIDs(id)[1]] = true
 			end
 		end
-		if member.syncStatus or not member.quests then
+		if member.syncStatus or member.partial or not member.quests then
 			complete = false
-			notices[#notices + 1] = { player = safeText(member.name), reason = member.syncStatus or "unknown" }
+			notices[#notices + 1] = {
+				player = safeText(member.name),
+				reason = member.syncStatus or (member.partial and "native" or "unknown"),
+			}
 		end
 	end
 	table.sort(notices, function(a, b)
@@ -506,12 +509,17 @@ function Core.compare(localQuests, members, zoneID, progressMode)
 					second, secondID = secondQuests[firstID], firstID
 				end
 			end
-			if first and not second and first.state ~= "completed" then
+			if first and not second and first.state ~= "completed" and not members[secondIndex].partial then
 				addDifference(secondIndex, "missing", "missing")
 				if firstIndex == 0 then
 					group.shareQuestID = firstID
 				end
-			elseif second and not first and second.state ~= "completed" then
+			elseif
+				second
+				and not first
+				and second.state ~= "completed"
+				and not (members[firstIndex] and members[firstIndex].partial)
+			then
 				addDifference(firstIndex, "missing", "missing")
 			elseif first and second then
 				local comparable = firstID == secondID or Core.questIDs(id).progress ~= "state"
@@ -519,10 +527,10 @@ function Core.compare(localQuests, members, zoneID, progressMode)
 					addItemStock(firstIndex, first, second, firstID == secondID)
 					addItemStock(secondIndex, second, first, firstID == secondID)
 				end
-				if first.state ~= second.state then
+				if first.state ~= second.state and not first.stateUnknown and not second.stateUnknown then
 					addQuestState(firstIndex, first, comparable)
 					addQuestState(secondIndex, second, comparable)
-				elseif first.state == "active" then
+				elseif first.state == "active" or second.state == "active" then
 					for index, objective in ipairs(comparable and first.objectives or {}) do
 						local other = second.objectives[index]
 						if other and objective.need > 0 and other.need == objective.need then

@@ -69,6 +69,8 @@ Numeric values contain decimal digits only; signed, fractional, and exponent for
 
 Categories belong to this snapshot revision. A later empty category removes the previous classification, and removing a quest also removes its remote classification. There are no separate category messages.
 
+Senders may use character completion flags to include historical `completed` records for quests still logged (`active` or `ready`) in cached party snapshots. These use the actual flagged quest ID, respecting reviewed completion-equivalence rules; the relevant peer record supplies title/location context when needed. Current logged quests take precedence over historical flags. History-only records have no objectives or item stock, are omitted when they do not fit existing limits, and are removed when no logged peer quest needs them. Completion-only records never generate further history replies. This uses the existing baseline `completed` state without a protocol bump or a full-history exchange; the recent session-turn-in cache remains independent.
+
 ## Optional extension blocks
 
 Both extension scopes use the same format. The outer field's byte length delimits a sequence of length-prefixed **tag, value** pairs; there is no separate entry count:

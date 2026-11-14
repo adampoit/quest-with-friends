@@ -90,7 +90,7 @@ function Ignores:observe(groups, indices, localQuests, roster, myself)
 	end
 	for _, member in ipairs(roster) do
 		snapshots[member.key] = member.quests
-		if saved.pending[member.key] and member.quests then
+		if saved.pending[member.key] and member.quests and not member.partial then
 			remember(member.quests)
 			available = true
 		end
@@ -130,9 +130,9 @@ function Ignores:observe(groups, indices, localQuests, roster, myself)
 			end
 		end
 	end
-	for key in pairs(saved.pending) do
-		if snapshots[key] then
-			saved.pending[key] = nil
+	for _, member in ipairs(roster) do
+		if member.quests and not member.partial then
+			saved.pending[member.key] = nil
 		end
 	end
 	saved.lastMissing = missingNow

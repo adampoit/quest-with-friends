@@ -176,6 +176,7 @@ local function network(game, size, minorVersions, options)
 			"src/Sync.lua",
 			"src/QuestIgnores.lua",
 			"src/ItemStock.lua",
+			"src/NativeProgress.lua",
 			"src/QuestWithFriends.lua",
 		}) do
 			setfenv(assert(loadfile(path)), env)()

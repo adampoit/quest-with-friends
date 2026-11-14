@@ -263,6 +263,9 @@ local function partyTest(name, callback)
 	async_test(name, function(done)
 		local originalSend = C_ChatInfo.SendAddonMessage
 		local originalAfter = C_Timer.After
+		local originalNativeQuery = C_TooltipInfo.GetQuestPartyProgress
+		-- Snapshot tests deliberately have no native data source. Native polling has its own clocked suite.
+		C_TooltipInfo.GetQuestPartyProgress = false
 		local observer = CreateFrame("Frame")
 		local pendingTimers = {}
 		C_Timer.After = function(delay, fn)
@@ -284,6 +287,7 @@ local function partyTest(name, callback)
 				A_Admin.FireEvent("GROUP_LEFT")
 				C_ChatInfo.SendAddonMessage = originalSend
 				C_Timer.After = originalAfter
+				C_TooltipInfo.GetQuestPartyProgress = originalNativeQuery
 				if not ok then
 					error(err)
 				end
@@ -340,6 +344,7 @@ local function partyTest(name, callback)
 			A_Admin.SetPartySize(0)
 			C_ChatInfo.SendAddonMessage = originalSend
 			C_Timer.After = originalAfter
+			C_TooltipInfo.GetQuestPartyProgress = originalNativeQuery
 			done(function()
 				error(err)
 			end)
@@ -646,6 +651,85 @@ test("native join popup accepts or keeps existing quest differences", function()
 	StaticPopup_FindVisible(name):GetButton1():Click()
 	assertTrue(accepted)
 	QuestWithFriends.Panel.hideIgnorePrompt()
+end)
+
+async_test("native quest counts render with an explicit limited-data notice", function(done)
+	local originalQuery = C_TooltipInfo.GetQuestPartyProgress
+	local originalObjectives, originalComplete = C_QuestLog.GetQuestObjectives, C_QuestLog.IsComplete
+	local originalEntries, originalInfo = C_QuestLog.GetNumQuestLogEntries, C_QuestLog.GetInfo
+	local zone, professions, classes =
+		QuestWithFriendsDB.zoneFilter, QuestWithFriendsDB.showProfessionQuests, QuestWithFriendsDB.showClassQuests
+	local ok, err = pcall(function()
+		A_Admin.SetPartySize(0)
+		A_Admin.FireEvent("GROUP_LEFT")
+		local id = 987650
+		local objective = { text = "8/8 Wolves slain", numRequired = 8 }
+		local questAPI = {
+			GetNumQuestLogEntries = function()
+				return 1
+			end,
+			GetInfo = function()
+				return { questID = id, title = "Native hunt" }
+			end,
+			GetQuestObjectives = function(questID)
+				if questID == id then
+					return {
+						{
+							text = objective.text,
+							numFulfilled = objective.numRequired,
+							numRequired = objective.numRequired,
+						},
+					}
+				end
+				return originalObjectives(questID)
+			end,
+			IsComplete = function(questID)
+				return questID == id or originalComplete(questID)
+			end,
+		}
+		for name, fn in pairs(questAPI) do
+			C_QuestLog[name] = fn
+		end
+		C_TooltipInfo.GetQuestPartyProgress = function(questID)
+			if questID == id then
+				return {
+					lines = {
+						{ type = Enum.TooltipDataLineType.QuestPlayer, guid = UnitGUID("party1"), leftText = "Julia" },
+						{
+							type = Enum.TooltipDataLineType.QuestObjective,
+							leftText = objective.text,
+							numFulfilled = objective.numRequired - 1,
+							numRequired = objective.numRequired,
+						},
+					},
+				}
+			end
+		end
+		QuestWithFriendsDB.zoneFilter = false
+		QuestWithFriendsDB.showProfessionQuests, QuestWithFriendsDB.showClassQuests = true, true
+		A_Admin.SetPartySize(1)
+		A_Admin.SetPartyMember(1, "Julia", 8, 80)
+		A_Admin.FireEvent("PLAYER_ENTERING_WORLD")
+		assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
+		assertContains(panelTexts(), "Julia: Limited Blizzard quest data · install QWF for full comparison")
+		local found = false
+		for _, value in ipairs(panelTexts()) do
+			found = found or value:find((objective.numRequired - 1) .. "/" .. objective.numRequired, 1, true) ~= nil
+		end
+		assertTrue(found)
+	end)
+	A_Admin.SetPartySize(0)
+	A_Admin.FireEvent("GROUP_LEFT")
+	C_TooltipInfo.GetQuestPartyProgress = originalQuery
+	C_QuestLog.GetQuestObjectives, C_QuestLog.IsComplete = originalObjectives, originalComplete
+	C_QuestLog.GetNumQuestLogEntries, C_QuestLog.GetInfo = originalEntries, originalInfo
+	QuestWithFriendsDB.zoneFilter, QuestWithFriendsDB.showProfessionQuests, QuestWithFriendsDB.showClassQuests =
+		zone, professions, classes
+	done(function()
+		if not ok then
+			error(err)
+		end
+	end)
 end)
 
 partyTest("joining warns about unknown members and leaving hides the panel", function(_, messages)
@@ -1238,7 +1322,7 @@ end)
 
 partyTest("invalid protocol envelopes show a warning and valid data restores sync", function(quests)
 	sendSnapshot(quests)
-	for index, message in ipairs({ "2.0:H", "broken", "1.00:H", "1.2:" }) do
+	for index, message in ipairs({ "2.0:H", "broken", "1.00:H", protocolVersion .. ":" }) do
 		receive(message)
 		assertEquals("Party status incomplete", QuestWithFriendsPanel.status:GetText())
 		assertContains(panelTexts(), "Julia: Incompatible addon protocol · update addon")

@@ -6,6 +6,7 @@
 	<Script file="Sync.lua"/>
 	<Script file="QuestIgnores.lua"/>
 	<Script file="ItemStock.lua"/>
+	<Script file="NativeProgress.lua"/>
 	<Script file="Preview.lua"/>
 	<Script file="QuestWithFriends.lua"/>
 	<Script file="Panel.lua"/>
