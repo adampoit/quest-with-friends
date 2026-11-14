@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.11-beta.2
+
 - Show limited Blizzard quest-tooltip progress for party members without addon snapshots, with GUID-based ownership and conservative objective matching. Discover additional quests from nameplate, target and mouseover tooltips; keep unknown objectives and quest states unknown, prefer addon snapshots, and clearly mark partial coverage without changing the sync protocol.
 - Share character completion history for quests still logged by party members, so friends see Completed instead of Missing after joins and reloads. Respect reviewed variants and snapshot limits, retain recent turn-in item data, and remove irrelevant history replies without exchanging the full completion list or changing the protocol.
 - Treat missing state heartbeats as stale data rather than triggering party-wide full snapshots. Confirm unchanged returning states without retransmission, retain cached comparisons, and keep startup, roster changes and explicit refreshes on the full-snapshot path.
