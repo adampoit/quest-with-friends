@@ -1,24 +1,25 @@
-# Quest With Friends protocol 1.2
+# Quest With Friends protocol 1.3
 
-Protocol versions are independent of addon release versions. The addon sends protocol **1.2** using the `QWF` addon prefix and `PARTY` channel. Readers accept any supported **major** version regardless of its minor version, validating and skipping unknown optional extensions. Optional capabilities are discovered independently; peers do not negotiate a lowest shared minor version. There is no fallback to unversioned or integer-version development formats.
+Protocol versions are independent of addon release versions. The addon sends protocol **1.3** using the `QWF` addon prefix and `PARTY` channel. Readers accept any supported **major** version regardless of its minor version, validating and skipping unknown optional extensions. Optional capabilities are discovered independently; peers do not negotiate a lowest shared minor version. There is no fallback to unversioned or integer-version development formats.
 
 ## Compatibility rules
 
 - **Major:** selects the required schema and baseline semantics. Changing existing fields, meanings, states, categories, encoding, or limits requires a major bump.
 - **Minor:** introduces optional extension tags or optional message kinds. Missing or unknown additions must not prevent baseline synchronization or change its meaning. Added features fall back to baseline behavior when their data is absent.
 - Major and minor components are canonical decimal integers: major 1–999, minor 0–999. Leading zeroes, signs, fractions, and exponent forms are invalid.
-- Protocol 1.0 has no defined extension tags; its reader validates and discards every extension value. Protocol 1.1 adds the optional quest-level `item_stock` tag. Protocol 1.2 adds optional `q1` partial synchronization and the snapshot-level `sync` tag. Older peers retain baseline comparisons, skipping extensions and message kinds they do not understand.
+- Protocol 1.0 has no defined extension tags; its reader validates and discards every extension value. Protocol 1.1 adds the optional quest-level `item_stock` tag. Protocol 1.2 adds optional `q1` partial synchronization and the snapshot-level `sync` tag. Protocol 1.3 adds optional `r1` targeted repair through the snapshot-level `repair` tag and `R` message. Older peers retain baseline comparisons, skipping extensions and message kinds they do not understand.
 - Unknown message kinds within a supported major are ignored. Extensions do not replace required fields or relax their validation. Extension names retain their meaning within a major and must not be repurposed.
 
 ## Message envelopes
 
 ```text
-1.2:H
-1.2:X
-1.2:D:<revision>:<part>:<total>:<payload fragment>
-1.2:C:<session>:q1
-1.2:V:<state identity>
-1.2:P:<revision>:<part>:<total>:<partial payload fragment>
+1.3:H
+1.3:X
+1.3:D:<revision>:<part>:<total>:<payload fragment>
+1.3:C:<session>:q1
+1.3:V:<state identity>
+1.3:P:<revision>:<part>:<total>:<partial payload fragment>
+1.3:R:<target session>
 ```
 
 The `major.minor` marker prefixes every message. For example, a 1.0 reader accepts `1.7:H` and baseline snapshots from `1.7:D:...`, but rejects major 2.
@@ -27,6 +28,7 @@ The `major.minor` marker prefixes every message. For example, a 1.0 reader accep
 - `X`: the sender's snapshot exceeds the size limit. Recipients show an oversized warning instead of claiming synchronization.
 - `D`: one fragment of a complete snapshot. Revision counters start at 1 and increase during the sender's login. Parts are 1-based; reverse-order delivery and identical duplicates are supported.
 - `C`, `V`, `P`: optional 1.2 messages, defined under **Partial synchronization** below. They do not change the meaning of `H`, `X`, or `D`.
+- `R`: optional 1.3 request for a full snapshot from one explicitly capable session, defined under **Targeted repair** below. Other party members ignore it.
 
 Revisions are decimal integers from 1 to 100,000,000, with at most 9 digits. Part and total fields contain at most 3 digits; `1 <= part <= total <= 100`. Each fragment contains 1–220 bytes. Complete messages must not exceed WoW's 255-byte limit, including the version marker.
 
@@ -47,7 +49,7 @@ Lengths count bytes, not Unicode characters. Empty values are `0:`. Colons, pipe
 Fields, in order:
 
 1. Protocol major: `1`.
-2. Protocol minor: `2` for this release; older and higher minors are accepted.
+2. Protocol minor: `3` for this release; older and higher minors are accepted.
 3. Quest count: 0–500.
 4. For each quest, sorted by actual quest ID:
    - Quest ID: 1–100,000,000; duplicates are invalid.
@@ -61,9 +63,9 @@ Fields, in order:
      - Fulfilled count: 0–100,000,000.
      - Required count: 0–100,000,000.
    - Quest extension block: one length-prefixed field; optionally contains `item_stock` in 1.1.
-5. Snapshot extension block: one length-prefixed field, empty in 1.0 and 1.1; optionally contains `sync` in 1.2.
+5. Snapshot extension block: one length-prefixed field, empty in 1.0 and 1.1; optionally contains `sync` in 1.2 and `repair` in 1.3.
 
-Numeric values contain decimal digits only; signed, fractional, and exponent forms are invalid. Version components additionally require canonical spelling. The complete payload is limited to **22,000 bytes**. An empty 1.2 snapshot without extensions encodes as `1:11:21:00:`; the 1.0 encoding `1:11:01:00:` and 1.1 encoding `1:11:11:00:` remain accepted.
+Numeric values contain decimal digits only; signed, fractional, and exponent forms are invalid. Version components additionally require canonical spelling. The complete payload is limited to **22,000 bytes**. An empty 1.3 snapshot without extensions encodes as `1:11:31:00:`; the 1.0 encoding `1:11:01:00:`, 1.1 encoding `1:11:11:00:` and 1.2 encoding `1:11:21:00:` remain accepted.
 
 Categories belong to this snapshot revision. A later empty category removes the previous classification, and removing a quest also removes its remote classification. There are no separate category messages.
 
@@ -110,7 +112,7 @@ Show a finished holder's objective only while a comparable member still needs it
 
 Routine partial updates are allowed only after the sender has fully submitted a tagged baseline and every connected roster member has recently advertised `q1` (within 45 seconds). Unknown and legacy recipients require ordinary full snapshots at the normal event-driven cadence. Offline members do not participate in capability selection; reconnects invalidate their capability and baseline knowledge. Roster changes require a fresh outgoing baseline. `PARTY` broadcasts reach every member; there is no recipient-specific transport or minor-version downgrade. Newer optional fields remain in full snapshots even in mixed-version parties.
 
-Capability announcements are sent alongside refresh requests and periodically. A new session invalidates that peer's partial-update base, retains its cached comparison, and requests a full snapshot. The last eight retired sessions are ignored. Baseline 1.0/1.1 reload announcements clear partial capability knowledge. A capability announcement alone never proves that a cached partial state is current.
+Capability announcements are sent at startup/refresh and periodically when there is no published tagged state. Once published, periodic `V` advertisements establish capability without redundant periodic `C` messages. A new session invalidates that peer's partial-update base and retains its cached comparison; the progress watchdog allows its startup baseline to arrive before requesting repair. The last eight retired sessions are ignored. Baseline 1.0/1.1 reload announcements clear partial capability knowledge. A capability announcement alone never proves that a cached partial state is current.
 
 ### State identity and snapshot extension `sync`
 
@@ -153,13 +155,29 @@ The sender selects the base when a transfer is about to start, from its newest f
 
 ### Heartbeats, recovery and ordering
 
-`V:<state identity>` advertises the newest fully submitted state, even while idle. Capability and state announcements run every 15–18 seconds, using session-derived jitter. A newer advertised state without matching assembly in progress, an equal-sequence digest mismatch, or missing baseline triggers full recovery. Older advertisements do not roll state backward. For a tagged state, more than 45 seconds without a valid state advertisement, committed update or new transfer fragment marks cached data stale; capability announcements alone do not reset that deadline. Detection runs on the periodic timer, so timeout notices can occur up to one timer interval later. Oversized snapshots retain their distinct warning.
+`V:<state identity>` advertises the newest fully submitted state, even while idle. One periodic state advertisement (or capability-only announcement when no state is published) runs every 15–18 seconds, using session-derived jitter. A newer advertised state without matching assembly in progress, an equal-sequence digest mismatch, or missing baseline triggers peer repair. Older advertisements do not roll state backward.
 
-Recovery retains cached comparisons and requests a full snapshot using `H`, rate-limited per peer to once per 15 seconds and coalesced by the sender. The existing progress watchdog supplies retries/backoff. A subsequently valid exact-base partial can also establish a current state; it does not cancel the requested outgoing full snapshot. Full snapshots remain mandatory for initial synchronization, explicit refresh and roster/reconnect recovery, and are used for repairs and ordinary full-only fallback. There are no scheduled full-snapshot checkpoints or periodic local rescans, including in mixed-version parties. Full snapshots have no delivery guarantee; retries, heartbeat checks and stale notices remain necessary.
+For a tagged state, more than 45 seconds without a valid state advertisement, committed update or new transfer fragment marks cached data stale. **Silence alone sends no repair request or snapshot.** It cancels that peer's outstanding repair/watchdog work until communication resumes. Capability-only announcements do not verify a tagged state or reset this freshness deadline. They do prove contact: a live peer without state verification can undergo bounded repair, including when a full-only sender resumes capability announcements instead of state heartbeats. Detection runs on the periodic timer, so timeout notices can occur up to one timer interval later. Oversized and incompatible peers retain their distinct warnings.
+
+A returning advertisement that exactly matches the cached session, sequence and digest restores current status without a snapshot, provided no assembly or explicit refresh obligation is outstanding. A different state is repaired; an incomplete assembly resumes progress monitoring. An explicit refresh still requires a snapshot, including after a silent interval.
+
+Recovery retains cached comparisons and uses the peer-specific repair path below, falling back to `H` for peers without explicit support. Per-peer retries back off through 15, 30 and 60 seconds; successful state verification resets the backoff. Broadcast fallback requests additionally share a 15-second client-wide minimum interval. Queued requests coalesce and are canceled when the peer recovers, becomes silent/offline/incompatible/oversized, changes session or leaves. Transport submission failures retain the separate 1–8-second paced retry policy.
+
+A subsequently valid exact-base partial can also establish a current state; it cancels local repair work but does not cancel a response already being transmitted by another client. Full snapshots remain mandatory for initial synchronization, explicit refresh and roster/reconnect recovery, and are used for repairs and ordinary full-only fallback. There are no scheduled full-snapshot checkpoints or periodic local rescans, including in mixed-version parties. Full snapshots have no delivery guarantee; retries, heartbeat checks and stale notices remain necessary.
 
 Small partial transfers may interrupt a running full snapshot once a published base exists. The full transfer resumes unchanged, receiving at least one send opportunity between partial transfers so continuous updates cannot starve it. Receivers never let an older full snapshot overwrite a newer committed partial state. Sender publication likewise never rolls backward when a suspended full transfer finishes. Initial baselines still have to arrive before partial updates can apply.
 
 These rules prevent silently applying a patch to the wrong base and eventually detect completely lost final updates while communication works. They cannot guarantee current data during a network outage, and digests have a theoretical collision risk.
+
+## Targeted repair (optional `r1`, 1.3)
+
+The snapshot extension `repair` with exact value `r1`, in a validated tagged snapshot with minor >= 3, explicitly advertises support for `R`. The capability belongs to that committed session/state and is preserved through partial updates like other snapshot extensions. Removing the tag or using another value disables selection of targeted repair. A version number alone, `C`, or `V` does not establish `r1`. Unknown values retain baseline behavior. The tag participates in the state digest; older `q1` readers retain it as an unknown extension. Senders omit it rather than make an otherwise valid baseline exceed the size limit.
+
+`R:<target session>` contains exactly one 32-character lowercase hexadecimal session, with no trailing fields. It is sent on `PARTY` only after explicit support is known. Only the client whose current session matches the target handles it; wrong/retired sessions, malformed requests and envelopes below minor 3 are ignored. The sender must be a current roster peer, as with all messages.
+
+The target queues its own full snapshot, coalescing an equivalent queued or active full transfer. Responses share a 15-second minimum interval across requesters, since the snapshot is broadcast to everyone. A requester that missed earlier fragments may need a later retry. Handling `R` does not clear the requester's capability, invalidate other peers' bases, mark other comparisons refreshing, or require the requester to transmit its own snapshot. Normal partial/full ordering and pacing still apply.
+
+If support is absent, use the original `H` path, including the requester's own baseline and the recipients' normal full responses. This retains interoperability with 1.0–1.2 and future peers without `r1`; unchanged baseline message meanings require no major bump. Legacy binaries may still initiate broader recovery themselves.
 
 ## Delivery and recovery
 
@@ -167,6 +185,6 @@ Ordinary changes coalesce in a fixed 0.2-second window; subsequent events do not
 
 Before the first successful chunk submission, routine snapshots are checked against the latest local event scan. Obsolete unsent revisions are replaced with the latest scanned state at the existing eligible send opportunity, without restarting batching or adding a fresh pacing delay. This guarantees send progress under continuous events, subject to transport eligibility, rather than waiting for activity to stop. An unsent routine copy of the last fully submitted payload is also suppressed. This check includes retries of a rejected first chunk. Once any chunk succeeds, that revision finishes unchanged, including retries of the same message. Explicit refresh/recovery obligations are preserved, including requests absorbed by an already-queued routine snapshot. No wire format or version changes are involved.
 
-A peer awaiting a snapshot is checked for assembly progress every 15 seconds. Lack of progress requests a new snapshot, with recovery intervals backing off to 60 seconds. Routine snapshots received while cached data is healthy use a quiet updating indicator, retaining the last-known comparison without inserting connection notices. Pending snapshots still do not count as fully current internally. Initial loading, explicit refreshes, roster/reconnect recovery, invalid snapshots, and stalled transfers retain prominent waiting, refreshing or stale notices. Cached data remains comparable until a complete valid snapshot replaces it. Leaving the party cancels sends and recovery work.
+A peer awaiting a snapshot is initially checked for assembly progress after 15 seconds. Lack of progress requests peer repair, with recovery intervals backing off to 60 seconds; a silent tagged peer instead remains stale without requests until communication resumes. Routine snapshots received while cached data is healthy use a quiet updating indicator, retaining the last-known comparison without inserting connection notices. Pending snapshots still do not count as fully current internally. Initial loading, explicit refreshes, roster/reconnect recovery, invalid snapshots, and stalled transfers retain prominent waiting, refreshing or stale notices. Cached data remains comparable until a complete valid snapshot replaces it. Leaving the party cancels sends and recovery work.
 
 Successful API submission is not an acknowledgement of delivery. Missing fragments are recovered through the watchdog; there are no per-fragment acknowledgements. Legacy peers retain baseline recovery without idle heartbeats; `q1` peers additionally use the state advertisements described above.

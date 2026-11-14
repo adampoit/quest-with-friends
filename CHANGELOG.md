@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Treat missing state heartbeats as stale data rather than triggering party-wide full snapshots. Confirm unchanged returning states without retransmission, retain cached comparisons, and keep startup, roster changes and explicit refreshes on the full-snapshot path.
+- Add optional protocol 1.3 targeted repair: an explicitly advertised `r1` capability requests a snapshot only from the affected session. Coalesce responses, back off repairs through 15/30/60 seconds, and retain bounded broadcast recovery for older peers. Published state heartbeats replace redundant periodic capability announcements.
+- Add deterministic four-player Forever disconnect/throttle reproductions and Retail/Forever recovery regression coverage; expose targeted repair and retry eligibility in development diagnostics.
+
 ## 0.1.11-beta.1
 
 - Add a separate, read-only `/qwf dev` diagnostics window to development installations, showing live peer health, protocol capabilities, snapshot transfers, pacing and recovery without enabling logging or adding sync traffic. The window remains excluded from normal beta and stable packages.

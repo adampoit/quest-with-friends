@@ -38,6 +38,7 @@ local snapshotTooLarge = false
 local revision = 0
 local delta = {
 	enabled = QWF.Sync ~= nil and Core.PROTOCOL_MINOR >= 2,
+	targeted = QWF.Sync ~= nil and Core.PROTOCOL_MINOR >= 3,
 	capabilityPending = false,
 	baselineNeeded = true,
 }
@@ -1279,15 +1280,9 @@ local function watchPeer(key, peer)
 				parts = peer.pending and peer.pending.total,
 			})
 			render("snapshot_timeout")
-			if
-				not delta.enabled
-				or not peer.deltaSession
-				or not peer.deltaRecoveryAt
-				or delta.now() - peer.deltaRecoveryAt >= 15
-			then
-				if delta.enabled and peer.deltaSession then
-					peer.deltaRecoveryAt = delta.now()
-				end
+			if delta.enabled then
+				delta.recover(key, peer, "snapshot progress timeout")
+			else
 				queueRequest()
 				refresh(true, "snapshot_timeout")
 			end
@@ -1300,6 +1295,9 @@ end
 
 local function awaitingSnapshot(key, peer, explicit)
 	peer.detected = true
+	if explicit then
+		peer.explicitRefresh = true
+	end
 	if peer.status ~= "stale" then
 		if not peer.quests then
 			peer.status = "waiting"
@@ -1378,20 +1376,122 @@ function delta.materialize(snapshot)
 	end
 end
 
+function delta.content()
+	local content = Core.encode(localQuests, delta.targeted and { repair = "r1" } or nil)
+	return #content <= Core.MAX_SNAPSHOT_BYTES and content or Core.encode(localQuests)
+end
+
+function delta.targetable(peer)
+	return delta.targeted
+		and peer.state
+		and peer.state.session == peer.deltaSession
+		and tonumber(peer.state.version:match("%.(%d+)$")) >= 3
+		and peer.state.extra.repair == "r1"
+end
+
+function delta.silence(key, peer)
+	peer.watch, peer.repairPending = nil, nil
+	if peer.silent then
+		return
+	end
+	peer.silent = true
+	peer.status = peer.quests and "stale" or "waiting"
+	if QWF.isDevelopment then
+		peer.debugRecoveryReason, peer.debugRecoveryAt = "heartbeat timeout", delta.now()
+	end
+	log("WARN", "sync", "Peer heartbeat timed out; retaining cached snapshot", { sender = key })
+	render("heartbeat_timeout")
+end
+
+function delta.nextRepair()
+	for _, member in ipairs(members) do
+		local peer = peers[member.key]
+		if
+			peer.repairPending
+			and peer.connected
+			and not peer.silent
+			and peer.status ~= "incompatible"
+			and peer.status ~= "oversized"
+		then
+			return delta.targetable(peer) and (VERSION .. ":R:" .. peer.deltaSession) or HANDSHAKE, member.key
+		end
+	end
+end
+
+function delta.sentRepair(message, key)
+	if message == HANDSHAKE then
+		delta.fallbackAt = delta.now() + 15
+	end
+	for sender, peer in pairs(peers) do
+		if peer.repairPending and (message == HANDSHAKE or sender == key) then
+			peer.repairPending = nil
+			peer.repairAfter = delta.now() + (peer.repairDelay or 15)
+			peer.repairDelay = math.min(60, (peer.repairDelay or 15) * 2)
+		end
+	end
+end
+
 function delta.recover(key, peer, reason)
+	if not peer.connected then
+		return
+	end
+	if
+		peer.deltaSession
+		and delta.now() - math.max(peer.deltaSeen, peer.deltaProgressAt or 0, peer.contactAt or 0) > 45
+	then
+		delta.silence(key, peer)
+		return
+	end
 	if QWF.isDevelopment then
 		peer.debugRecoveryReason, peer.debugRecoveryAt = reason, delta.now()
 	end
 	peer.status = peer.quests and "stale" or "waiting"
 	peer.partialPending = nil
 	watchPeer(key, peer)
-	if not peer.deltaRecoveryAt or delta.now() - peer.deltaRecoveryAt >= 15 then
-		peer.deltaRecoveryAt = delta.now()
+	local eligible = math.max(peer.repairAfter or 0, delta.targetable(peer) and 0 or (delta.fallbackAt or 0))
+	if not peer.repairPending and delta.now() < eligible then
+		local watch = peer.watch
+		if not watch.repairScheduled then
+			watch.repairScheduled = true
+			local progress = peer.progress
+			C_Timer.After(eligible - delta.now(), function()
+				watch.repairScheduled = nil
+				if
+					peers[key] == peer
+					and peer.watch == watch
+					and peer.progress == progress
+					and peer.connected
+					and inParty()
+				then
+					delta.recover(key, peer, reason)
+				end
+			end)
+		end
+	elseif not peer.repairPending then
+		peer.repairPending = true
 		log("WARN", "sync", "Partial synchronization requires full snapshot", { sender = key, reason = reason })
-		queueRequest()
-		refresh(true, "partial_recovery")
+		if not delta.targetable(peer) then
+			-- H also announces our own baseline; older readers rely on both sides refreshing.
+			refresh(true, "partial_recovery")
+		end
+		scheduleSend()
 	end
 	render("partial_recovery")
+end
+
+function delta.replyToRepair()
+	if delta.responseAt and delta.now() - delta.responseAt < 15 then
+		return
+	end
+	delta.responseAt = delta.now()
+	local content = delta.content()
+	if queuedSnapshot and queuedSnapshot.content == content then
+		queuedSnapshot.forced = true
+	elseif outgoing and outgoing.content == content and outgoing.next == 1 then
+		outgoing.forced = true
+	elseif not (outgoing and outgoing.kind == "D" and outgoing.content == content) then
+		refresh(true, "targeted_repair")
+	end
 end
 
 function delta.acceptSession(key, peer, session)
@@ -1409,9 +1509,10 @@ function delta.acceptSession(key, peer, session)
 				peer.retiredSessions[table.remove(peer.retiredOrder, 1)] = nil
 			end
 		end
+		peer.watch, peer.repairPending, peer.repairAfter, peer.repairDelay, peer.silent = nil, nil, nil, nil, nil
 		peer.deltaSession = session
 		peer.deltaSeen = delta.now()
-		peer.deltaProgressAt = nil
+		peer.deltaProgressAt, peer.contactAt = nil, nil
 		peer.fullOnly = nil
 		peer.state, peer.partialPending, peer.pending, peer.revision = nil, nil, nil, nil
 		peer.allowReset = true
@@ -1422,16 +1523,29 @@ function delta.acceptSession(key, peer, session)
 	return true
 end
 
-function delta.control(key, peer, body)
+function delta.control(key, peer, body, minor)
 	if not delta.enabled then
 		return false
+	end
+	local target = body:match("^R:([0-9a-f]+)$")
+	if target and minor >= 3 and delta.targeted and QWF.Sync.session(target) then
+		if target == delta.session then
+			log("DEBUG", "sync", "Received targeted snapshot request", { sender = key })
+			delta.replyToRepair()
+		end
+		return true
 	end
 	local session = body:match("^C:([0-9a-f]+):q1$")
 	if session and QWF.Sync.session(session) then
 		local changed = peer.deltaSession ~= session
 		if delta.acceptSession(key, peer, session) then
-			if changed then
-				delta.recover(key, peer, "session needs baseline")
+			if changed and QWF.isDevelopment then
+				peer.debugRecoveryReason, peer.debugRecoveryAt = "session needs baseline", delta.now()
+			end
+			peer.contactAt = delta.now()
+			if peer.silent then
+				peer.silent = nil
+				delta.recover(key, peer, "state verification unavailable")
 			end
 			if peer.fullOnly then
 				peer.deltaSeen = delta.now()
@@ -1451,8 +1565,12 @@ function delta.control(key, peer, body)
 		return true
 	end
 	peer.deltaSeen = delta.now()
+	local wasSilent = peer.silent
+	peer.silent = nil
 	if not peer.state then
-		delta.recover(key, peer, "missing baseline")
+		if not peer.pending then
+			delta.recover(key, peer, "missing baseline")
+		end
 	elseif advertised.sequence == peer.state.sequence and advertised.digest ~= peer.state.digest then
 		delta.recover(key, peer, "state digest mismatch")
 	elseif advertised.sequence > peer.state.sequence then
@@ -1461,6 +1579,19 @@ function delta.control(key, peer, body)
 		if pendingSequence < advertised.sequence then
 			delta.recover(key, peer, "missed update")
 		end
+	elseif advertised.sequence == peer.state.sequence and not peer.pending and not peer.partialPending then
+		if peer.explicitRefresh then
+			if wasSilent then
+				delta.recover(key, peer, "explicit refresh pending")
+			end
+		elseif wasSilent or peer.status == "stale" then
+			peer.status, peer.watch = nil, nil
+			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
+			render("heartbeat_confirmed")
+		end
+	end
+	if wasSilent and (peer.pending or peer.partialPending) then
+		watchPeer(key, peer)
 	end
 	return true
 end
@@ -1493,14 +1624,20 @@ function delta.startTimer()
 				peer.connected
 				and peer.deltaSession
 				and peer.status ~= "oversized"
+				and peer.status ~= "incompatible"
 				and delta.now() - math.max(peer.deltaSeen, peer.deltaProgressAt or 0) > 45
 			then
-				delta.recover(key, peer, "heartbeat timeout")
+				if delta.now() - math.max(peer.deltaSeen, peer.deltaProgressAt or 0, peer.contactAt or 0) > 45 then
+					delta.silence(key, peer)
+				else
+					delta.recover(key, peer, "state verification unavailable")
+				end
 			end
 		end
-		delta.capabilityPending = true
 		if delta.published then
 			delta.heartbeatPending = VERSION .. ":V:" .. QWF.Sync.identityText(delta.published)
+		else
+			delta.capabilityPending = true
 		end
 		scheduleSend()
 		C_Timer.After(15 + tonumber(delta.session:sub(1, 2), 16) % 4, tick)
@@ -1513,8 +1650,11 @@ local function pumpOnce()
 		return
 	end
 	local message
+	local repairMessage, repairKey = delta.nextRepair()
 	if requestPending then
 		message = HANDSHAKE
+	elseif repairMessage then
+		message = repairMessage
 	elseif delta.capabilityPending then
 		message = VERSION .. ":C:" .. delta.session .. ":q1"
 	elseif oversizePending then
@@ -1523,7 +1663,7 @@ local function pumpOnce()
 		message = delta.heartbeatPending
 	else
 		if not outgoing or outgoing.next == 1 or queuedSnapshot then
-			local payload = Core.encode(localQuests)
+			local payload = delta.content()
 			local staleOutgoing = outgoing
 				and outgoing.next == 1
 				and not outgoing.forced
@@ -1601,6 +1741,9 @@ local function pumpOnce()
 	retryDelay = 1
 	if message == HANDSHAKE then
 		requestPending = false
+		delta.sentRepair(message)
+	elseif message == repairMessage then
+		delta.sentRepair(message, repairKey)
 	elseif message == OVERSIZED then
 		oversizePending = false
 	elseif message:match("^%d+%.%d+:C:") then
@@ -1669,6 +1812,7 @@ pump = function()
 			or delta.suspended
 			or delta.capabilityPending
 			or delta.heartbeatPending
+			or delta.nextRepair()
 		)
 	then
 		scheduleSend()
@@ -1687,7 +1831,7 @@ broadcast = function(force, context)
 	if not inParty() then
 		return
 	end
-	local payload = Core.encode(localQuests)
+	local payload = delta.content()
 	local function matches(snapshot)
 		return snapshot and snapshot.content == payload
 	end
@@ -1830,7 +1974,7 @@ local function updateRoster(force, trigger)
 					changed = changed or not peer or peer.connected ~= connected
 					peer = peer or {}
 					if peer.connected ~= connected then
-						peer.watch = nil
+						peer.watch, peer.repairPending, peer.silent = nil, nil, nil
 						peer.pending, peer.partialPending, peer.state, peer.deltaSession = nil, nil, nil, nil
 						peer.status = peer.quests and "stale" or nil
 					end
@@ -1881,6 +2025,10 @@ local function updateRoster(force, trigger)
 		return
 	end
 	if changed then
+		for _, peer in pairs(peers) do
+			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
+		end
+		delta.fallbackAt, delta.responseAt = nil, nil
 		generation = generation + 1
 		scheduled, forceRefresh, sending = false, false, false
 		refreshTriggers, refreshForceReasons = {}, {}
@@ -1973,6 +2121,7 @@ local function receive(sender, message)
 		peer.status = "incompatible"
 		peer.pending, peer.watch, peer.revision = nil, nil, nil
 		peer.state, peer.partialPending, peer.deltaSession = nil, nil, nil
+		peer.repairPending = nil
 		peer.allowReset = true
 		log("WARN", "sync", "Unsupported addon protocol", {
 			sender = key,
@@ -1982,18 +2131,19 @@ local function receive(sender, message)
 		render("unsupported_protocol")
 		return
 	end
-	if minor >= 2 and delta.control(key, peer, body) then
+	if minor >= 2 and delta.control(key, peer, body, minor) then
 		return
 	end
 	if body == "X" then
 		peer.detected = true
 		peer.status = "oversized"
 		peer.pending, peer.watch, peer.partialPending = nil, nil, nil
-		peer.state = nil
+		peer.state, peer.repairPending = nil, nil
 		render("peer_snapshot_oversized")
 		return
 	end
 	if body == "H" then
+		peer.contactAt, peer.silent = delta.now(), nil
 		log("DEBUG", "sync", "Received snapshot request", { sender = key, protocol = version })
 		-- Refresh requests allow revision counters to restart after reloads,
 		-- without discarding the last snapshot or an assembly in progress.
@@ -2097,6 +2247,7 @@ local function receive(sender, message)
 		peer.progress = (peer.progress or 0) + 1
 		if delta.enabled then
 			peer.deltaProgressAt = delta.now()
+			peer.silent = nil
 		end
 	end
 	awaitingSnapshot(key, peer)
@@ -2163,7 +2314,8 @@ local function receive(sender, message)
 			peer.quests = quests
 			peer.snapshotAt = GetTime and GetTime()
 			peer.snapshotRevision = serial
-			peer.status, peer.watch = nil, nil
+			peer.status, peer.watch, peer.silent, peer.explicitRefresh = nil, nil, nil, nil
+			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
 			if kind == "P" then
 				if peer.pending and peer.pending.serial <= serial then
 					peer.pending = nil
@@ -2406,6 +2558,9 @@ local development = QWF.Development
 				fullOnly = peer.fullOnly,
 				pending = assemblySummary(peer.pending),
 				partialPending = assemblySummary(peer.partialPending),
+				targetedRepair = delta.targetable(peer) == true,
+				repairPending = peer.repairPending == true,
+				repairIn = peer.repairAfter and math.max(0, peer.repairAfter - now),
 				recoveryReason = peer.debugRecoveryReason,
 				recoveryAge = age(peer.debugRecoveryAt),
 			}

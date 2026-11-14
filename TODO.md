@@ -11,7 +11,6 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [ ] **Subtle transition notifications.** Offer optional alerts for meaningful changes, such as everyone finishing a quest or someone accepting a quest another member is missing. Avoid alerts for every objective update.
 - [x] **Clear connection health.** Distinguish addon not detected, waiting, refreshing, and stale data. Keep cached comparisons visible with their connection status while fresh data arrives; `/qwf` requests a refresh.
 - [x] **Exclude class and profession quests**
-- [ ] **More compact mode**
 - [x] **Collapsible quest headers**
 - [x] **Resizable panel**
 - [x] **Show remaining objective counts after turn-in.** Compare unfinished players with ready-to-turn-in or completed quests across the whole party.
@@ -20,3 +19,5 @@ Keep additions focused on the core question: **“Are we good to move on?”**
 - [x] **Show finished tradeable item counts.** Show capped x/y with positive surplus such as `10/10 · 2 spare` while another member needs the items. Fall back to the current display when item identity or tradeability is uncertain.
 - [x] **Ignore delve companions.** Exclude NPC party members from comparisons and stop PARTY message attempts when no other players are grouped, preventing repeated "You aren't in a party" messages in solo delves.
 - [x] **Objective progress views.** Choose When anyone finishes (default), When I finish, or Always. Preserve actionable party status independently of informational counts; persist the choice and support preview.
+- [ ] We should use "is quest completed" information. If someone joins the party and they've already completed the quest, the addon doesn't think they have the quest, but they can't have it. Could this help with sending the long list of completed quests too, or no?
+- [ ] Can we know numbers for people who don't have addon from tooltip info?

@@ -171,6 +171,10 @@ luajit -joff tools/benchmark_sync.lua .cache/benchmark-source/fixture.lua 3 nati
 
 Arguments after the fixture are repeat count, `native`/`portable` bit mode, optional scenario name, and optional one-way link latency in seconds. Scenarios: `cold_party`, `single_player`, `all_players`, `four_quests`, `during_checkpoint`, `idle_300s`, `adventure_300s`, `rapid_61s`. A mixed-party update is also measured. Progress is printed to stderr; JSON results go to stdout. The runtime fixture and full results remain ignored cache files, not redistributed upstream data.
 
+## Disconnect/recovery reproduction
+
+Run `luajit tools/reproduce_sync_outage.lua` for deterministic four-player Forever disconnect-only, throttle-only and combined scenarios. No external fixture is needed. [Fault sequence, measurements and limitations](SYNC_OUTAGE.md) document the before/after refresh amplification and bounded recovery; `busted tests/unit/sync_outage_spec.lua tests/unit/heartbeat_repair_spec.lua -v` runs the automated checks.
+
 ## Live addon development
 
 Install or symlink this checkout as `Interface/AddOns/QuestWithFriendsDev` alongside your release installation. The checked-in `QuestWithFriendsDev.toc` loads the shared `src/Load.xml` plus screenshot tools and in-game tests, using separate SavedVariables. No manifest generation is needed; add runtime files to `src/Load.xml` and reload WoW.
@@ -193,8 +197,8 @@ The window starts hidden after each reload and is not included in release packag
 
 Diagnostics show local client/protocol information, each peer's observed protocol,
 connection health, cached quest counts, snapshot age, `q1` capability, state identity,
-full/partial assembly progress, outgoing transfers, send pacing, and recent recovery
-reasons. Full-snapshot fallback explanations distinguish a missing outgoing baseline
+full/partial assembly progress, outgoing transfers, send pacing, targeted-repair
+capability/queue/backoff, and recent recovery reasons. Full-snapshot fallback explanations distinguish a missing outgoing baseline
 from peers without recent partial-sync capability. Protocol versions are not addon
 release versions; remote release versions are not advertised.
 

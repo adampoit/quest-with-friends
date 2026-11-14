@@ -99,6 +99,10 @@ function QWF.Development.formatDiagnostics(data)
 			.. age(peer.messageAge)
 		lines[#lines + 1] = "  q1: "
 			.. (peer.session and ("advertised " .. age(peer.capabilityAge)) or "not established")
+		lines[#lines + 1] = "  Repair: "
+			.. (peer.targetedRepair and "r1 targeted" or "H broadcast fallback")
+			.. (peer.repairPending and " · queued" or "")
+			.. (peer.repairIn and peer.repairIn > 0 and string.format(" · eligible in %.1fs", peer.repairIn) or "")
 		lines[#lines + 1] = "  Cached snapshot: "
 			.. (peer.hasSnapshot and (text(peer.questCount) .. " quests · revision " .. text(peer.revision)) or "none")
 		lines[#lines + 1] = "  Committed: " .. age(peer.snapshotAge) .. " · q1 activity: " .. age(peer.stateAge)
