@@ -233,6 +233,9 @@ describe("Quest With Friends development diagnostics", function()
 				state = { session = string.rep("a", 32), sequence = 7, digest = string.rep("b", 32) },
 				pending = { revision = 8, received = 2, parts = 5 },
 				partialPending = { revision = 9, received = 1, parts = 3 },
+				targetedRepair = true,
+				repairPending = true,
+				repairIn = 12,
 				recoveryReason = "missed update",
 				recoveryAge = 1,
 			},
@@ -248,6 +251,7 @@ describe("Quest With Friends development diagnostics", function()
 			"Committed: 20.0s ago",
 			"Full assembly: revision 8 · 2/5",
 			"Partial assembly: revision 9 · 1/3",
+			"Repair: r1 targeted · queued · eligible in 12.0s",
 			"Last recovery: missed update",
 			"Active: partial · revision 9\n  1/3 chunks submitted",
 			"Control queue: refresh",
@@ -268,6 +272,7 @@ describe("Quest With Friends development diagnostics", function()
 		report = namespace.Development.formatDiagnostics(data)
 		contains(report, "Observed protocol: unknown")
 		contains(report, "addon not detected")
+		contains(report, "Repair: H broadcast fallback")
 		contains(report, "Cached snapshot: none")
 	end)
 end)

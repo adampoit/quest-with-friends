@@ -814,7 +814,7 @@ describe("Quest With Friends party sync", function()
 			pushable[42] = true
 			fire("PLAYER_ENTERING_WORLD")
 			flush()
-			assert.are.equal("1.2:H", messages[1])
+			assert.are.equal("1.3:H", messages[1])
 			local function receiveQuests(quests, serial)
 				fire(
 					"CHAT_MSG_ADDON",
@@ -1993,8 +1993,8 @@ describe("Quest With Friends party sync", function()
 		pushable[42] = true
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		assert.are.equal("1.2:H", messages[1])
-		fire("CHAT_MSG_ADDON", "QWF", "1.2:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
+		assert.are.equal("1.3:H", messages[1])
+		fire("CHAT_MSG_ADDON", "QWF", "1.3:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		view.share(42)
 		assert.same({ "QuestWithFriendsDev", "Version" }, metadata)

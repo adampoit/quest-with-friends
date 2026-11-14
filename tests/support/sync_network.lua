@@ -28,18 +28,11 @@ local function network(game, size, minorVersions, options)
 		end
 		error("Timer queue did not settle")
 	end
-	for index, name in ipairs(n.names) do
-		local c = { quests = {}, attempts = {}, logs = {}, party = true, units = {}, offline = {}, companions = {} }
-		n.clients[index] = c
-		for peerIndex in ipairs(n.names) do
-			if peerIndex ~= index then
-				c.units[#c.units + 1] = peerIndex
-			end
-		end
-		c.sender = game == "forever" and (name.first .. " " .. name.last) or (name.first .. "-Realm")
+	local function loadClient(index, c)
+		c.incarnation = (c.incarnation or 0) + 1
 		local env = setmetatable({
 			QuestWithFriends = false,
-			QuestWithFriendsDB = { debugMode = options.debug ~= false },
+			QuestWithFriendsDB = c.env and c.env.QuestWithFriendsDB or { debugMode = options.debug ~= false },
 			Constants = false,
 			C_Map = false,
 			GetQuestUiMapID = false,
@@ -99,7 +92,13 @@ local function network(game, size, minorVersions, options)
 		end
 		env.C_Timer = {
 			After = function(delay, callback)
-				later(delay, options.wrap and options.wrap(c, "runtime.other", callback) or callback)
+				local wrapped = options.wrap and options.wrap(c, "runtime.other", callback) or callback
+				later(delay, function()
+					-- A reload destroys the old runtime's timers, not already-submitted messages.
+					if c.env == env then
+						wrapped()
+					end
+				end)
 			end,
 		}
 		env.C_ChatInfo = {
@@ -233,6 +232,23 @@ local function network(game, size, minorVersions, options)
 			end
 			return snapshots
 		end
+	end
+	for index, name in ipairs(n.names) do
+		local c = { quests = {}, attempts = {}, logs = {}, party = true, units = {}, offline = {}, companions = {} }
+		n.clients[index] = c
+		for peerIndex in ipairs(n.names) do
+			if peerIndex ~= index then
+				c.units[#c.units + 1] = peerIndex
+			end
+		end
+		c.sender = game == "forever" and (name.first .. " " .. name.last) or (name.first .. "-Realm")
+		loadClient(index, c)
+	end
+	function n:reload(index)
+		local c = assert(self.clients[index], "unknown client")
+		loadClient(index, c)
+		c:fire("PLAYER_ENTERING_WORLD")
+		return c
 	end
 	function n:join()
 		for _, c in ipairs(self.clients) do

@@ -1510,7 +1510,8 @@ for _, game in ipairs({ "retail", "forever" }) do
 					messages[#messages + 1] = message
 					return false
 				end
-				return true
+				-- Isolate assembly from heartbeat-driven repair while fragments are held.
+				return not (from == a and recipient == b and message:match("^1%.2:V:"))
 			end
 			replaceQuest(n, a, 1, string.rep("Changed", 40), 3)
 			assert.is_true(#messages > 1)
@@ -1820,7 +1821,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 							assert.equal(before[client][kind], client:count(version .. kind))
 						end
 						if version == "1.2:" then
-							assert.is_true(client:count(version .. "C:") > before[client]["C:"])
+							assert.equal(before[client]["C:"], client:count(version .. "C:"))
 							assert.is_true(client:count(version .. "V:") > before[client]["V:"])
 						end
 						assert.is_true(client.view.complete)

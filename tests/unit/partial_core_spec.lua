@@ -15,6 +15,8 @@ describe("partial snapshot codec", function()
 	before_each(function()
 		_G.QuestWithFriends = nil
 		assert(loadfile("src/Core.lua"))()
+		QuestWithFriends.Core.PROTOCOL_MINOR = 2
+		QuestWithFriends.Core.PROTOCOL_VERSION = "1.2"
 		assert(loadfile("src/Sync.lua"))()
 		Core, Sync = QuestWithFriends.Core, QuestWithFriends.Sync
 	end)
