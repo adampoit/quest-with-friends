@@ -615,6 +615,56 @@ local function scanQuests(trigger)
 	localSnapshotKnown = true
 end
 
+local function questSnapshot(bounded)
+	local quests, candidates, ids = {}, {}, {}
+	local count = 0
+	for id, quest in pairs(localQuests) do
+		quests[id] = quest
+		count = count + 1
+	end
+	-- Only logged peer quests create demand; completion replies must not sustain each other.
+	for _, member in ipairs(members) do
+		local peer = peers[member.key]
+		for id, quest in pairs(peer and peer.quests or {}) do
+			if quest.state ~= "completed" and not candidates[id] then
+				candidates[id] = quest
+				ids[#ids + 1] = id
+			end
+		end
+	end
+	table.sort(ids)
+	local size = bounded and #Core.encode(quests) or 0
+	local emptySize = bounded and #Core.encode({}) or 0
+	for _, id in ipairs(ids) do
+		if not Core.matchQuest(quests, id) and C_QuestLog.IsQuestFlaggedCompleted then
+			for _, variantID in ipairs(Core.completionIDs(id)) do
+				if C_QuestLog.IsQuestFlaggedCompleted(variantID) then
+					local source = candidates[id]
+					local record = {
+						title = source.title,
+						state = "completed",
+						objectives = {},
+						mapID = source.mapID,
+						category = questCategory(variantID) or source.category,
+					}
+					local nextSize = size
+					if bounded then
+						local recordSize = #Core.encode({ [variantID] = record }) - emptySize
+						-- The quest-count field grows at 10 and 100 records.
+						nextSize = size + recordSize + #tostring(count + 1) - #tostring(count)
+					end
+					if not bounded or (count < 500 and nextSize <= Core.MAX_SNAPSHOT_BYTES) then
+						quests[variantID] = record
+						count, size = count + 1, nextSize
+					end
+					break
+				end
+			end
+		end
+	end
+	return quests, count
+end
+
 local function shareableQuestIndex(id)
 	if not inParty() or not C_QuestLog.IsPushableQuest(id) then
 		return nil
@@ -1083,10 +1133,7 @@ render = function(trigger)
 		return
 	end
 	local roster, peerDiagnostics = {}, {}
-	local localView = {}
-	for id, quest in pairs(localQuests) do
-		localView[id] = quest
-	end
+	local localView = questSnapshot()
 	for _, member in ipairs(members) do
 		local peer = peers[member.key]
 		local quests = peer and peer.quests
@@ -1099,17 +1146,6 @@ render = function(trigger)
 		}
 		if quests then
 			snapshotObjectiveDiagnostics(peerDiagnostics, quests, member.key)
-			for id, quest in pairs(quests) do
-				if not Core.matchQuest(localView, id) then
-					for _, variantID in ipairs(Core.completionIDs(id)) do
-						if C_QuestLog.IsQuestFlaggedCompleted(variantID) then
-							localView[id] =
-								{ title = quest.title, state = "completed", objectives = {}, mapID = quest.mapID }
-							break
-						end
-					end
-				end
-			end
 		end
 	end
 	recordObjectiveDiagnostics("peer", peerDiagnostics, trigger)
@@ -1377,8 +1413,9 @@ function delta.materialize(snapshot)
 end
 
 function delta.content()
-	local content = Core.encode(localQuests, delta.targeted and { repair = "r1" } or nil)
-	return #content <= Core.MAX_SNAPSHOT_BYTES and content or Core.encode(localQuests)
+	local quests, count = questSnapshot(true)
+	local content = Core.encode(quests, delta.targeted and { repair = "r1" } or nil)
+	return #content <= Core.MAX_SNAPSHOT_BYTES and content or Core.encode(quests), count
 end
 
 function delta.targetable(peer)
@@ -1831,7 +1868,7 @@ broadcast = function(force, context)
 	if not inParty() then
 		return
 	end
-	local payload = delta.content()
+	local payload, count = delta.content()
 	local function matches(snapshot)
 		return snapshot and snapshot.content == payload
 	end
@@ -1898,10 +1935,6 @@ broadcast = function(force, context)
 		queuedAt = QWF.db.debugMode and GetTime and GetTime() or nil,
 	}
 	local total = math.max(1, math.ceil(#payload / CHUNK_SIZE))
-	local count = 0
-	for _ in pairs(localQuests) do
-		count = count + 1
-	end
 	snapshot.quests = count
 	snapshot.parts = total
 	if QWF.db.debugMode then
@@ -2304,6 +2337,7 @@ local function receive(sender, message)
 			end
 		end
 		if quests then
+			local previousContent = delta.content()
 			peer.state = state
 			peer.fullOnly = peer.deltaSession and not state or nil
 			if peer.deltaSession then
@@ -2342,7 +2376,11 @@ local function receive(sender, message)
 			if QWF.db.debugMode then
 				peer.diagnosticPayload = diagnosticPayload
 			end
-			render("snapshot_received")
+			if delta.content() ~= previousContent then
+				refresh(false, "peer_completion_changed")
+			else
+				render("snapshot_received")
+			end
 		else
 			if peer.status ~= "stale" then
 				peer.status = peer.quests and "refreshing" or "waiting"

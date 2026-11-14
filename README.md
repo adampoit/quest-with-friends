@@ -32,7 +32,7 @@ Optional beta builds for live clients are listed as prereleases on [GitHub Relea
 
 ## How it works
 
-The panel highlights **missing quests**, **unfinished objectives**, and **ready-to-turn-in or completed quests** when party members differ. Comparisons include differences between your friends, even when you are missing or still working on the quest yourself.
+The panel highlights **missing quests**, **unfinished objectives**, and **ready-to-turn-in or completed quests** when party members differ. Comparisons include differences between your friends, even when you are missing or still working on the quest yourself. Already completed a friend's quest before joining or reloading? Your addon checks your character's completion history and shares the relevant completion, rather than reporting you as missing the quest. It does not send your entire quest history.
 
 Click **Share** beside a quest to offer it through WoW's normal party-wide sharing flow. WoW checks eligibility, and recipients accept the offer. Right-click a quest heading and choose **Abandon quest…** to open WoW's confirmation, including its quest-item removal warning when applicable. This action is available only for abandonable quests in your own log and is disabled for sample data. Most comparisons use exact quest IDs; a small set of reviewed Retail Northshire quest variants also compare across class and race versions.
 
