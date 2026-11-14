@@ -1851,7 +1851,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		local status = findLog(records, "Party sync status").data
 		assert.are.equal("Carola Goodspeed", status.player)
-		assert.same({ { key = "Florace Bastille", name = "Florace Bastille" } }, status.members)
+		assert.same({ { key = "Florace Bastille", name = "Florace Bastille", unit = "party1" } }, status.members)
 		assert.same({ { player = "Florace Bastille", reason = "unknown" } }, view.notices)
 		local sent = #messages
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Carola Goodspeed")
@@ -2669,7 +2669,7 @@ describe("Quest With Friends party sync", function()
 		assert.same({ "1.1:H" }, messages)
 		local status = findLog(records, "Party sync status").data
 		assert.are.equal("Adam-Realm", status.player)
-		assert.same({ { name = "Julia", key = "Julia-Realm" } }, status.members)
+		assert.same({ { name = "Julia", key = "Julia-Realm", unit = "party1" } }, status.members)
 		assert.is_true(status.prefixRegistered)
 		flush()
 		local first = #messages

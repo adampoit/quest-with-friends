@@ -8,7 +8,7 @@
 
 Quest With Friends shows the differences that matter while questing together: who missed a quest, who still needs an objective, and who is ready to turn in. When your party is caught up, it says **Party in sync**.
 
-Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-contained and works alongside Blizzard's quest tracker. Everyone in the party needs the addon to share their progress.
+Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-contained and works alongside Blizzard's quest tracker. Install it on everyone for full comparisons; members without it can still show limited progress from Blizzard's quest tooltips.
 
 ## Why use it?
 
@@ -22,7 +22,7 @@ Built for **World of Warcraft Retail** and **WoW Forever**. The addon is self-co
 
 1. Install Quest With Friends for your client. For manual installation, download `QuestWithFriends-<version>.zip` from [GitHub Releases](https://github.com/adampoit/quest-with-friends/releases) and extract it so the addon manifest is at `Interface/AddOns/QuestWithFriends/QuestWithFriends.toc`.
 2. Enable **Quest With Friends** in the character-selection AddOns menu, then log in or `/reload`.
-3. Have your friends install the same release, then join a party. The panel appears and updates automatically as you quest.
+3. For full comparisons, have your friends install the same release, then join a party. The panel appears and updates automatically as you quest.
 
 Install a separate copy in each client if you play both Retail and Forever.
 
@@ -35,6 +35,12 @@ Optional beta builds for live clients are listed as prereleases on [GitHub Relea
 The panel highlights **missing quests**, **unfinished objectives**, and **ready-to-turn-in or completed quests** when party members differ. Comparisons include differences between your friends, even when you are missing or still working on the quest yourself. Already completed a friend's quest before joining or reloading? Your addon checks your character's completion history and shares the relevant completion, rather than reporting you as missing the quest. It does not send your entire quest history.
 
 Click **Share** beside a quest to offer it through WoW's normal party-wide sharing flow. WoW checks eligibility, and recipients accept the offer. Right-click a quest heading and choose **Abandon quest…** to open WoW's confirmation, including its quest-item removal warning when applicable. This action is available only for abandonable quests in your own log and is disabled for sample data. Most comparisons use exact quest IDs; a small set of reviewed Retail Northshire quest variants also compare across class and race versions.
+
+### Friends without the addon
+
+QWF reads Blizzard's party quest-tooltip data for members without an addon snapshot. Nameplate, target, and mouseover tooltips can also reveal quests and objective counts. Readable counts use the same objective-progress filters as addon-shared counts.
+
+This is **limited coverage**, not a full quest log: unavailable objectives stay unknown, and QWF cannot determine missing quests, turn-in readiness, completion history, or spare items for those members. Percentage objectives are omitted when reliable counts cannot be established. Brief unit-tooltip observations expire after 15 seconds; party-tooltip data is checked every two seconds while needed. The panel stays **Party status incomplete**, even if all visible counts match. Addon snapshots, including last-known snapshots during recovery, take precedence.
 
 ### Focus the view
 

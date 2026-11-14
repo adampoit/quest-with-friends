@@ -88,6 +88,10 @@ Reviewed Retail variant families let friends on different class/race versions of
 
 Connection notices appear separately above quest groups. Distinguish offline members, addon detection, waiting for a snapshot, explicit refreshing, stale data and protocol incompatibility. Routine updates with a healthy cached snapshot retain the last-known comparison and header, with a muted **Updating** indicator beside the scope; its tooltip explains that the comparison uses the last complete snapshots. Reserve the indicator's space even while idle so updates do not reflow the panel. Initial loading, explicit refreshes, roster/reconnect recovery and stalled or invalid transfers keep prominent notices. Keep the last comparison visible during recovery or disconnection, with a clear status. Offline members keep party status incomplete; syncing resumes automatically when they reconnect. `/qwf` requests a fresh comparison for online members.
 
+### Limited native quest data
+
+For connected members without addon snapshots, use readable Blizzard party quest-tooltip data and short-lived nameplate, target and mouseover observations. Match members by GUID and objectives by unambiguous normalized text and agreeing targets, never by player names or visible row position. Missing objectives and negative quest-membership results remain unknown, not missing quests or completed history. Do not infer readiness from a subset of finished objectives. Native-only coverage always keeps party status incomplete and displays a limited-data notice. Full addon snapshots, including cached snapshots during recovery, take precedence. Native observations never enter outgoing snapshots or prematurely settle a join-time ignore baseline.
+
 ## Synchronization
 
 Addon-enabled members establish complete quest snapshots through WoW's addon communication channel. Each snapshot carries actual quest IDs, titles, states, objective counts, locations and classifications. Filters apply to the local presentation.
