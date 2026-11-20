@@ -42,11 +42,12 @@ local privateStages = {
 	recordActivity = "activity",
 	broadcast = "sender_queue",
 	pump = "sender_queue",
+	materialize = "fragmentation",
 	send = "send_glue",
 }
 local function instrument(c, env)
 	c.cpu, c.cpuAt, c.scope = {}, {}, {}
-	local visited, wrapped = {}, {}
+	local visited, visitedTables, wrapped = {}, {}, {}
 	local function measured(fn, stage)
 		if not wrapped[fn] then
 			wrapped[fn] = wrap(c, stage, fn)
@@ -54,12 +55,10 @@ local function instrument(c, env)
 		return wrapped[fn]
 	end
 	for _, entry in ipairs({
+		{ env.QuestWithFriends.SnapshotCodec, { encode = "encode", decode = "decode" } },
+		{ env.QuestWithFriends.Core, { compare = "comparison", sortGroups = "comparison" } },
 		{
-			env.QuestWithFriends.Core,
-			{ encode = "encode", decode = "decode", compare = "comparison", sortGroups = "comparison" },
-		},
-		{
-			env.QuestWithFriends.Sync,
+			env.QuestWithFriends.SyncState,
 			{
 				digest = "digest",
 				snapshot = "sync_state",
@@ -96,12 +95,17 @@ local function instrument(c, env)
 				if privateStages[name] then
 					debug.setupvalue(fn, i, measured(value, privateStages[name]))
 				end
-			elseif name == "delta" and type(value) == "table" then
+			elseif
+				(name == "sync" or name == "syncSender" or name == "peerSync" or name == "options")
+				and type(value) == "table"
+				and not visitedTables[value]
+			then
+				visitedTables[value] = true
 				for key, method in pairs(value) do
-					if type(method) == "function" then
+					if type(method) == "function" and debug.getinfo(method, "S").source:match("^@src/") then
 						visit(method)
-						if key == "materialize" then
-							value[key] = measured(method, "fragmentation")
+						if privateStages[key] then
+							value[key] = measured(method, privateStages[key])
 						end
 					end
 				end
@@ -122,13 +126,6 @@ local function clone(value)
 		copy[k] = clone(v)
 	end
 	return copy
-end
-local function count(values)
-	local n = 0
-	for _ in pairs(values) do
-		n = n + 1
-	end
-	return n
 end
 local function configure(c, env, index)
 	env.bit = bitMode == "native" and require("bit") or false
@@ -227,24 +224,33 @@ local function setup(minor, mixed)
 end
 local function ready(n)
 	for _, c in ipairs(n.clients) do
-		for _, name in ipairs({ "outgoing", "queuedSnapshot", "requestPending", "scheduled" }) do
-			if c.scope[name]() then
-				return false
-			end
-		end
-		local delta = c.scope.delta()
-		if delta.suspended or delta.capabilityPending or delta.heartbeatPending then
+		local sync = c.scope.sync()
+		local sender = sync.diagnostics()
+		if
+			sender.batching
+			or sender.outgoing
+			or sender.queued
+			or sender.suspended
+			or sender.requestPending
+			or sender.capabilityPending
+			or sender.heartbeatPending
+		then
 			return false
 		end
-		local peers = c.scope.peers()
-		if count(peers) ~= 3 then
-			return false
-		end
-		for _, peer in pairs(peers) do
-			if not peer.quests or peer.status or peer.pending or peer.partialPending then
-				return false
+		for _, other in ipairs(n.clients) do
+			if other ~= c then
+				local peer = sync.peerDiagnostics(other.sender)
+				if
+					not peer
+					or not peer.hasSnapshot
+					or peer.status ~= "healthy"
+					or peer.pending
+					or peer.partialPending
+				then
+					return false
+				end
+				assert(peer.questCount == 50, "expected 20 active + 30 retained completed records")
 			end
-			assert(count(peer.quests) == 50, "expected 20 active + 30 retained completed records")
 		end
 	end
 	return true
@@ -306,10 +312,10 @@ local function update(n, players, quests, monotonic)
 end
 local function matches(n, expected)
 	for _, c in ipairs(n.clients) do
-		local peers = c.scope.peers()
+		local sync = c.scope.sync()
 		for sender, changes in pairs(expected) do
 			if c.sender ~= sender then
-				local peer = peers[sender]
+				local peer = sync.peer(sender)
 				for id, want in pairs(changes) do
 					local q = peer and peer.quests and peer.quests[id]
 					if not q or q.objectives[want.objective].have ~= want.have or q.state ~= want.state then
@@ -450,7 +456,8 @@ local function run(minor, scenario, mixed)
 	local result = summarize(n, start, finish)
 	result.local_payload_bytes = {}
 	for _, client in ipairs(n.clients) do
-		result.local_payload_bytes[client.sender] = #client.env.QuestWithFriends.Core.encode(client.scope.localQuests())
+		result.local_payload_bytes[client.sender] =
+			#client.env.QuestWithFriends.SnapshotCodec.encode(client.scope.localQuests())
 	end
 	return result
 end

@@ -1,3 +1,5 @@
+local manifest = require("tests.support.manifest")
+
 describe("Quest With Friends two Forever clients", function()
 	it("exchanges real snapshots using First Last chat senders and answers manual refreshes", function()
 		local outgoing = {}
@@ -95,20 +97,14 @@ describe("Quest With Friends two Forever clients", function()
 					c.logs[#c.logs + 1] = { message = message, data = data }
 				end,
 			}
-			for _, path in ipairs({
-				"src/QuestEquivalences.lua",
-				"src/Client.lua",
-				"src/QuestCategories.lua",
-				"src/Core.lua",
-				"src/Sync.lua",
-				"src/QuestIgnores.lua",
-				"src/ItemStock.lua",
-				"src/QuestWithFriends.lua",
-			}) do
+			for _, path in ipairs(manifest("QuestWithFriends.toc")) do
+				if path == "src/Panel.lua" then
+					break
+				end
 				setfenv(assert(loadfile(path)), env)()
-				if path == "src/Core.lua" then
-					env.QuestWithFriends.Core.PROTOCOL_MINOR = 1
-					env.QuestWithFriends.Core.PROTOCOL_VERSION = "1.1"
+				if path == "src/sync/SnapshotCodec.lua" then
+					env.QuestWithFriends.SnapshotCodec.PROTOCOL_MINOR = 1
+					env.QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION = "1.1"
 				end
 			end
 			env.QuestWithFriends.Panel = {

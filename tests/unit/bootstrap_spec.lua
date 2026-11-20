@@ -47,7 +47,11 @@ describe("Quest With Friends installation identity", function()
 			load(env, "src/Client.lua", firstName, first)
 			load(env, "src/QuestCategories.lua", firstName, first)
 			load(env, "src/Core.lua", firstName, first)
-			load(env, "src/Sync.lua", firstName, first)
+			load(env, "src/sync/SnapshotCodec.lua", firstName, first)
+			load(env, "src/sync/State.lua", firstName, first)
+			load(env, "src/sync/Sender.lua", firstName, first)
+			load(env, "src/sync/Peers.lua", firstName, first)
+			load(env, "src/sync/Sync.lua", firstName, first)
 			load(env, "src/Preview.lua", firstName, first)
 			local core, preview, equivalences, categories =
 				first.Core, first.Preview, first.QuestEquivalences, first.QuestCategories
@@ -57,7 +61,11 @@ describe("Quest With Friends installation identity", function()
 				"src/Client.lua",
 				"src/QuestCategories.lua",
 				"src/Core.lua",
-				"src/Sync.lua",
+				"src/sync/SnapshotCodec.lua",
+				"src/sync/State.lua",
+				"src/sync/Sender.lua",
+				"src/sync/Peers.lua",
+				"src/sync/Sync.lua",
 				"src/QuestIgnores.lua",
 				"src/ItemStock.lua",
 				"src/Preview.lua",

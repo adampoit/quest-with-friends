@@ -2,7 +2,7 @@ local network = require("tests.support.sync_network")
 
 local function sentState(client)
 	local pending, state, latest = {}, nil, 0
-	local Sync = client.env.QuestWithFriends.Sync
+	local Sync = client.env.QuestWithFriends.SyncState
 	for _, attempt in ipairs(client.attempts) do
 		local kind, revision, part, total, data = attempt.message:match("^1%.%d+:([DP]):(%d+):(%d+):(%d+):(.+)$")
 		if kind and attempt.result == 0 then

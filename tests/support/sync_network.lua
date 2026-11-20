@@ -1,3 +1,5 @@
+local manifest = require("tests.support.manifest")
+
 local function network(game, size, minorVersions, options)
 	options = options or {}
 	local n = { time = 0, timers = {}, clients = {}, names = {}, sequence = 0 }
@@ -167,23 +169,15 @@ local function network(game, size, minorVersions, options)
 				c.logs[#c.logs + 1] = { level = level, category = category, message = message, data = data }
 			end,
 		}
-		for _, path in ipairs({
-			"src/Bootstrap.lua",
-			"src/QuestEquivalences.lua",
-			"src/Client.lua",
-			"src/QuestCategories.lua",
-			"src/Core.lua",
-			"src/Sync.lua",
-			"src/QuestIgnores.lua",
-			"src/ItemStock.lua",
-			"src/NativeProgress.lua",
-			"src/QuestWithFriends.lua",
-		}) do
+		for _, path in ipairs(manifest("QuestWithFriends.toc")) do
+			if path == "src/Panel.lua" then
+				break
+			end
 			setfenv(assert(loadfile(path)), env)()
-			if path == "src/Core.lua" then
-				local core = env.QuestWithFriends.Core
-				core.PROTOCOL_MINOR = minorVersions and (minorVersions[index] or 0) or 1
-				core.PROTOCOL_VERSION = core.PROTOCOL_MAJOR .. "." .. core.PROTOCOL_MINOR
+			if path == "src/sync/SnapshotCodec.lua" then
+				local codec = env.QuestWithFriends.SnapshotCodec
+				codec.PROTOCOL_MINOR = minorVersions and (minorVersions[index] or 0) or 1
+				codec.PROTOCOL_VERSION = codec.PROTOCOL_MAJOR .. "." .. codec.PROTOCOL_MINOR
 			end
 		end
 		env.QuestWithFriends.Panel = {
@@ -226,7 +220,7 @@ local function network(game, size, minorVersions, options)
 						assembly.parts[part] = data
 						if assembly.received == total then
 							snapshots[#snapshots + 1] =
-								assert(self.env.QuestWithFriends.Core.decode(table.concat(assembly.parts)))
+								assert(self.env.QuestWithFriends.SnapshotCodec.decode(table.concat(assembly.parts)))
 						end
 					end
 				end

@@ -1,9 +1,10 @@
 describe("Quest item stock comparisons and protocol", function()
-	local Core
+	local Core, Codec
 	before_each(function()
 		QuestWithFriends = nil
 		assert(loadfile("src/Core.lua"))()
-		Core = QuestWithFriends.Core
+		assert(loadfile("src/sync/SnapshotCodec.lua"))()
+		Core, Codec = QuestWithFriends.Core, QuestWithFriends.SnapshotCodec
 	end)
 
 	local function quest(state, have, spare, itemID)
@@ -35,19 +36,19 @@ describe("Quest item stock comparisons and protocol", function()
 	it("round trips optional stock without changing baseline quest progress", function()
 		for _, state in ipairs({ "ready", "completed" }) do
 			local input = { [42] = quest(state, 12, 2, 2589) }
-			assert.same(input, Core.decode(Core.encode(input)))
+			assert.same(input, Codec.decode(Codec.encode(input)))
 			assert.is_nil(input[42].extensions)
 			input[42].objectives[1].spare = 0
-			assert.same(input, Core.decode(Core.encode(input)))
+			assert.same(input, Codec.decode(Codec.encode(input)))
 		end
 	end)
 
 	it("preserves objective indices and replaces stock metadata on the next snapshot", function()
 		local input = { [42] = quest("active", 3) }
 		input[42].objectives[2] = { text = "Silk Cloth", have = 10, need = 10, itemID = 4306, spare = 4 }
-		assert.same(input, Core.decode(Core.encode(input)))
+		assert.same(input, Codec.decode(Codec.encode(input)))
 		input[42].objectives[2].itemID, input[42].objectives[2].spare = nil, nil
-		local decoded = Core.decode(Core.encode(input))
+		local decoded = Codec.decode(Codec.encode(input))
 		assert.same(input, decoded)
 		assert.is_nil(decoded[42].objectives[2].spare)
 	end)
@@ -57,27 +58,27 @@ describe("Quest item stock comparisons and protocol", function()
 			local input = { [42] = quest("active", progress.have) }
 			input[42].objectives[1].need = progress.need
 			input[42].extensions = { item_stock = fields({ 1, 2589, 2 }) }
-			assert.is_nil(Core.decode(Core.encode(input)))
+			assert.is_nil(Codec.decode(Codec.encode(input)))
 		end
 	end)
 
 	it("preserves baseline snapshots for older peers in both directions", function()
 		local input = { [42] = quest("ready", 10, 2, 2589) }
-		local modern = Core.encode(input)
-		Core.PROTOCOL_MINOR = 0
-		assert.same({ [42] = quest("ready", 10) }, Core.decode(modern))
-		local legacy = Core.encode(input)
-		Core.PROTOCOL_MINOR = 1
-		assert.same({ [42] = quest("ready", 10) }, Core.decode(legacy))
+		local modern = Codec.encode(input)
+		Codec.PROTOCOL_MINOR = 0
+		assert.same({ [42] = quest("ready", 10) }, Codec.decode(modern))
+		local legacy = Codec.encode(input)
+		Codec.PROTOCOL_MINOR = 1
+		assert.same({ [42] = quest("ready", 10) }, Codec.decode(legacy))
 	end)
 
 	it("does not interpret a known tag before its introducing minor version", function()
-		Core.PROTOCOL_MINOR = 0
+		Codec.PROTOCOL_MINOR = 0
 		local input = { [42] = quest("ready", 10) }
 		input[42].extensions = { item_stock = "not a 1.0 feature" }
-		local legacy = Core.encode(input)
-		Core.PROTOCOL_MINOR = 1
-		assert.same({ [42] = quest("ready", 10) }, Core.decode(legacy))
+		local legacy = Codec.encode(input)
+		Codec.PROTOCOL_MINOR = 1
+		assert.same({ [42] = quest("ready", 10) }, Codec.decode(legacy))
 	end)
 
 	it("keeps optional stock inside the extension size limit for large objective lists", function()
@@ -91,7 +92,7 @@ describe("Quest item stock comparisons and protocol", function()
 				spare = 100000000,
 			}
 		end
-		local decoded = assert(Core.decode(Core.encode(input)))
+		local decoded = assert(Codec.decode(Codec.encode(input)))
 		assert.are.equal(30, #decoded[42].objectives)
 		assert.are.equal(100000000, decoded[42].objectives[1].spare)
 		assert.is_nil(decoded[42].objectives[30].spare)
@@ -113,7 +114,7 @@ describe("Quest item stock comparisons and protocol", function()
 		}) do
 			local input = { [42] = quest("ready", 10) }
 			input[42].extensions = { item_stock = stock }
-			assert.is_nil(Core.decode(Core.encode(input)))
+			assert.is_nil(Codec.decode(Codec.encode(input)))
 		end
 	end)
 

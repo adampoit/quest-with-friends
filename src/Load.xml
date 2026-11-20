@@ -3,7 +3,11 @@
 	<Script file="Client.lua"/>
 	<Script file="QuestCategories.lua"/>
 	<Script file="Core.lua"/>
-	<Script file="Sync.lua"/>
+	<Script file="sync/SnapshotCodec.lua"/>
+	<Script file="sync/State.lua"/>
+	<Script file="sync/Sender.lua"/>
+	<Script file="sync/Peers.lua"/>
+	<Script file="sync/Sync.lua"/>
 	<Script file="QuestIgnores.lua"/>
 	<Script file="ItemStock.lua"/>
 	<Script file="NativeProgress.lua"/>

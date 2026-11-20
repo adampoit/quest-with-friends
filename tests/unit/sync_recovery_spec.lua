@@ -5,12 +5,12 @@ local function quest(title)
 end
 
 local function chunks(c, serial, quests, minor, extensions)
-	local core = c.env.QuestWithFriends.Core
-	local savedMinor = core.PROTOCOL_MINOR
-	core.PROTOCOL_MINOR = minor or savedMinor
-	local version = core.PROTOCOL_MAJOR .. "." .. core.PROTOCOL_MINOR
-	local payload = core.encode(quests, extensions)
-	core.PROTOCOL_MINOR = savedMinor
+	local codec = c.env.QuestWithFriends.SnapshotCodec
+	local savedMinor = codec.PROTOCOL_MINOR
+	codec.PROTOCOL_MINOR = minor or savedMinor
+	local version = codec.PROTOCOL_MAJOR .. "." .. codec.PROTOCOL_MINOR
+	local payload = codec.encode(quests, extensions)
+	codec.PROTOCOL_MINOR = savedMinor
 	local messages = {}
 	local total = math.ceil(#payload / 220)
 	for part = 1, total do
@@ -1547,28 +1547,28 @@ for _, game in ipairs({ "retail", "forever" }) do
 		end)
 		it("allows a new session to restart sequences and ignores retired snapshots", function()
 			local _, a, b = modern()
-			local sync, core = a.env.QuestWithFriends.Sync, a.env.QuestWithFriends.Core
+			local sync, codec = a.env.QuestWithFriends.SyncState, a.env.QuestWithFriends.SnapshotCodec
 			local oldSession
 			for _, attempt in ipairs(a.attempts) do
 				oldSession = attempt.message:match("^1%.2:C:([0-9a-f]+):q1$") or oldSession
 			end
 			local newSession = string.rep("f", 32)
-			local _, data = sync.snapshot(core.encode({ [99] = quest("After reload") }), newSession, 1)
+			local _, data = sync.snapshot(codec.encode({ [99] = quest("After reload") }), newSession, 1)
 			b:receive(a.sender, "1.2:C:" .. newSession .. ":q1")
 			for _, message in ipairs(wire("D", 1, data)) do
 				b:receive(a.sender, message)
 			end
 			assert.equal("After reload", title(b, 99))
 			b:receive(a.sender, "1.2:C:" .. oldSession .. ":q1")
-			local _, oldData = sync.snapshot(core.encode({ [100] = quest("Retired") }), oldSession, 100)
+			local _, oldData = sync.snapshot(codec.encode({ [100] = quest("Retired") }), oldSession, 100)
 			for _, message in ipairs(wire("D", 100, oldData)) do
 				b:receive(a.sender, message)
 			end
 			assert.equal("After reload", title(b, 99))
 			assert.is_nil(title(b, 100))
 			assert.is_true(b.view.complete)
-			local oldBase = sync.snapshot(core.encode({ [100] = quest("Retired base") }), oldSession, 99)
-			local oldTarget = sync.snapshot(core.encode({ [100] = quest("Retired patch") }), oldSession, 100)
+			local oldBase = sync.snapshot(codec.encode({ [100] = quest("Retired base") }), oldSession, 99)
+			local oldTarget = sync.snapshot(codec.encode({ [100] = quest("Retired patch") }), oldSession, 100)
 			for _, message in ipairs(wire("P", 100, sync.patch(oldBase, oldTarget))) do
 				b:receive(a.sender, message)
 			end
@@ -1802,7 +1802,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 					local n, a = modern(versions)
 					local before, scans = {}, 0
 					for _, client in ipairs(n.clients) do
-						local version = client.env.QuestWithFriends.Core.PROTOCOL_VERSION .. ":"
+						local version = client.env.QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION .. ":"
 						before[client] = {}
 						for _, kind in ipairs({ "D:", "P:", "H", "C:", "V:" }) do
 							before[client][kind] = client:count(version .. kind)
@@ -1816,7 +1816,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 					n:advance(720)
 					assert.equal(0, scans)
 					for _, client in ipairs(n.clients) do
-						local version = client.env.QuestWithFriends.Core.PROTOCOL_VERSION .. ":"
+						local version = client.env.QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION .. ":"
 						for _, kind in ipairs({ "D:", "P:", "H" }) do
 							assert.equal(before[client][kind], client:count(version .. kind))
 						end

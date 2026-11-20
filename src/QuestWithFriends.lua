@@ -4,26 +4,18 @@ if QWF.disabled then
 	return
 end
 local addonName = QWF.name or "QuestWithFriends"
-local Core = QWF.Core
+local Core, Codec = QWF.Core, QWF.SnapshotCodec
 local isForever = QWF.QuestEquivalencesGame == "forever"
 local surnameSeparator = Constants
 		and Constants.CharacterNameSeparatorConsts
 		and Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR
 	or " "
 local PREFIX = "QWF"
-local VERSION = tostring(Core.PROTOCOL_VERSION)
-local HANDSHAKE = VERSION .. ":H"
-local OVERSIZED = VERSION .. ":X"
-local CHUNK_SIZE = 220
-local MAX_PARTS = 100
-local SEND_INTERVAL = 0.5
-local COALESCE_INTERVAL = 0.2
-local SNAPSHOT_TIMEOUT = 15
-local MAX_RETRY_DELAY = 8
+local VERSION = Codec.PROTOCOL_VERSION
 local SHARE_DIAGNOSTIC_WINDOW = 5
 local lastShareAttempt
 local shareAttemptSequence = 0
-local peers = {}
+local sync
 local members = {}
 local completed = {}
 local completedOrder = {}
@@ -33,40 +25,6 @@ local activity = {}
 local activitySequence = 0
 local questCategories = {}
 local lastScanSummary
-local lastPayload
-local snapshotTooLarge = false
-local revision = 0
-local delta = {
-	enabled = QWF.Sync ~= nil and Core.PROTOCOL_MINOR >= 2,
-	targeted = QWF.Sync ~= nil and Core.PROTOCOL_MINOR >= 3,
-	capabilityPending = false,
-	baselineNeeded = true,
-}
-if delta.enabled then
-	local clock = rawget(_G, "GetServerTime") or rawget(_G, "time")
-	delta.session = QWF.Sync.digest(
-		tostring({})
-			.. tostring(clock and clock() or "")
-			.. tostring(math.random(1, 100000000))
-			.. tostring(GetTime and GetTime() or 0)
-	)
-end
-local scheduled = false
-local forceRefresh = false
-local refreshTriggers, refreshForceReasons = {}, {}
-local lastQueuedDiagnosticPayload, lastSubmittedDiagnosticPayload, lastSnapshotDecision
-local generation = 0
-local rosterInParty
-local outgoing
-local queuedSnapshot
-local requestPending = false
-local oversizePending = false
-local sending = false
-local retryDelay = 1
-local nextSendAt = 0
-local pumping = false
-local refresh
-local queueRequest
 local prefixRegistered
 local previewMode = false
 local screenshotMode = false
@@ -164,159 +122,6 @@ local function sameFields(first, second)
 		end
 	end
 	return true
-end
-
-local function fingerprint(payload)
-	if not payload then
-		return nil
-	end
-	-- Adler-32 uses exact integer arithmetic in Lua 5.1 without optional bit libraries.
-	local a, b = 1, 0
-	for index = 1, #payload do
-		a = (a + payload:byte(index)) % 65521
-		b = (b + a) % 65521
-	end
-	return "adler32:" .. string.format("%08x", b * 65536 + a) .. ":" .. #payload
-end
-
-local function sortedKeys(set)
-	local keys = {}
-	for key in pairs(set or {}) do
-		keys[#keys + 1] = key
-	end
-	table.sort(keys)
-	return keys
-end
-
-local function mergeContext(current, previous)
-	if not QWF.db.debugMode then
-		return nil
-	end
-	local context = { triggers = {}, forceReasons = {} }
-	for _, source in ipairs({ current or {}, previous or {} }) do
-		for _, field in ipairs({ "triggers", "forceReasons" }) do
-			for reason in pairs(source[field] or {}) do
-				context[field][reason] = true
-			end
-		end
-	end
-	return context
-end
-
-local function snapshotEvidence(payload, previous)
-	local data = { fingerprint = fingerprint(payload), previousFingerprint = fingerprint(previous) }
-	if not previous then
-		data.changeReason = "baseline"
-		return data
-	end
-	data.payloadChanged = payload ~= previous
-	if not data.payloadChanged then
-		data.changeReason = "unchanged"
-		return data
-	end
-	local before, after = Core.decode(previous), Core.decode(payload)
-	local changes, ids, changedIDs = {}, {}, {}
-	local function change(reason)
-		changes[reason] = (changes[reason] or 0) + 1
-	end
-	for id in pairs(before or {}) do
-		ids[id] = true
-	end
-	for id in pairs(after or {}) do
-		ids[id] = true
-	end
-	for _, id in ipairs(sortedKeys(ids)) do
-		local old, new = before and before[id], after and after[id]
-		local changed = false
-		local function mark(reason)
-			change(reason)
-			changed = true
-		end
-		if not old then
-			mark("added")
-		elseif not new then
-			mark("removed")
-		else
-			for _, field in ipairs({ "title", "state", "mapID", "category" }) do
-				if old[field] ~= new[field] then
-					mark(field)
-				end
-			end
-			local objectivesChanged = #old.objectives ~= #new.objectives
-			local stockChanged = false
-			for index = 1, math.max(#old.objectives, #new.objectives) do
-				local first, second = old.objectives[index] or {}, new.objectives[index] or {}
-				for _, field in ipairs({ "text", "have", "need" }) do
-					objectivesChanged = objectivesChanged or first[field] ~= second[field]
-				end
-				stockChanged = stockChanged or first.itemID ~= second.itemID or first.spare ~= second.spare
-			end
-			if objectivesChanged then
-				mark("objectives")
-			end
-			if stockChanged then
-				mark("item_stock")
-			end
-		end
-		if changed then
-			changedIDs[#changedIDs + 1] = id
-		end
-	end
-	data.changeReason = next(changes) and table.concat(sortedKeys(changes), ",") or "wire_only"
-	data.changes = changes
-	data.changedQuests = #changedIDs
-	data.changedQuestIDs = {}
-	for index = 1, math.min(12, #changedIDs) do
-		data.changedQuestIDs[index] = changedIDs[index]
-	end
-	return data
-end
-
-local function logSnapshot(message, payload, previous, data, context)
-	if QWF.db.debugMode then
-		for field, value in pairs(snapshotEvidence(payload, previous)) do
-			data[field] = value
-		end
-		if context then
-			data.triggers = table.concat(sortedKeys(context.triggers), ",")
-			data.forceReasons = table.concat(sortedKeys(context.forceReasons), ",")
-		end
-	end
-	log("DEBUG", "sync", message, data)
-end
-
-local function logSuppressedSnapshot(reason, payload, context)
-	if not QWF.db.debugMode then
-		return
-	end
-	local triggers = table.concat(sortedKeys(context and context.triggers), ",")
-	local forceReasons = table.concat(sortedKeys(context and context.forceReasons), ",")
-	local decision = { reason = reason, payload = payload, triggers = triggers, forceReasons = forceReasons }
-	if sameFields(lastSnapshotDecision, decision) then
-		return
-	end
-	lastSnapshotDecision = decision
-	log("DEBUG", "sync", "Quest snapshot suppressed", {
-		reason = reason,
-		fingerprint = fingerprint(payload),
-		bytes = #payload,
-		triggers = triggers,
-		forceReasons = forceReasons,
-		activeRevision = outgoing and outgoing.revision,
-		queuedRevision = queuedSnapshot and queuedSnapshot.revision,
-	})
-end
-
-local function logCanceledSnapshot(snapshot, reason)
-	if QWF.db.debugMode and snapshot then
-		log("DEBUG", "sync", "Quest snapshot canceled", {
-			revision = snapshot.revision,
-			fingerprint = fingerprint(snapshot.payload),
-			reason = reason,
-			nextPart = snapshot.next,
-			parts = snapshot.parts,
-		})
-	end
 end
 
 local function recordObjectiveDiagnostics(stage, records, trigger, context)
@@ -616,16 +421,11 @@ local function scanQuests(trigger)
 	localSnapshotKnown = true
 end
 
-local function questSnapshot(bounded)
-	local quests, candidates, ids = {}, {}, {}
-	local count = 0
-	for id, quest in pairs(localQuests) do
-		quests[id] = quest
-		count = count + 1
-	end
+local function offerCompletionHistory(quests, offer)
+	local candidates, ids = {}, {}
 	-- Only logged peer quests create demand; completion replies must not sustain each other.
 	for _, member in ipairs(members) do
-		local peer = peers[member.key]
+		local peer = sync.peer(member.key)
 		for id, quest in pairs(peer and peer.quests or {}) do
 			if quest.state ~= "completed" and not candidates[id] then
 				candidates[id] = quest
@@ -634,36 +434,34 @@ local function questSnapshot(bounded)
 		end
 	end
 	table.sort(ids)
-	local size = bounded and #Core.encode(quests) or 0
-	local emptySize = bounded and #Core.encode({}) or 0
 	for _, id in ipairs(ids) do
 		if not Core.matchQuest(quests, id) and C_QuestLog.IsQuestFlaggedCompleted then
 			for _, variantID in ipairs(Core.completionIDs(id)) do
 				if C_QuestLog.IsQuestFlaggedCompleted(variantID) then
 					local source = candidates[id]
-					local record = {
+					offer(variantID, {
 						title = source.title,
 						state = "completed",
 						objectives = {},
 						mapID = source.mapID,
 						category = questCategory(variantID) or source.category,
-					}
-					local nextSize = size
-					if bounded then
-						local recordSize = #Core.encode({ [variantID] = record }) - emptySize
-						-- The quest-count field grows at 10 and 100 records.
-						nextSize = size + recordSize + #tostring(count + 1) - #tostring(count)
-					end
-					if not bounded or (count < 500 and nextSize <= Core.MAX_SNAPSHOT_BYTES) then
-						quests[variantID] = record
-						count, size = count + 1, nextSize
-					end
+					})
 					break
 				end
 			end
 		end
 	end
-	return quests, count
+end
+
+local function questSnapshot()
+	local quests = {}
+	for id, quest in pairs(localQuests) do
+		quests[id] = quest
+	end
+	offerCompletionHistory(quests, function(id, quest)
+		quests[id] = quest
+	end)
+	return quests
 end
 
 local function shareableQuestIndex(id)
@@ -762,13 +560,6 @@ end
 local displayedPeers = {}
 local displayedPanel
 
-local function peerDisplayStatus(peer)
-	if not peer.connected then
-		return "offline"
-	end
-	return peer.status or (peer.quests and "healthy" or "unknown")
-end
-
 local function recordUIState(visible, groups, complete, notices, trigger, updating)
 	if not QWF.db.debugMode then
 		return
@@ -845,12 +636,12 @@ local function recordUIState(visible, groups, complete, notices, trigger, updati
 					and old.unhealthySince
 					and (now - old.unhealthySince)
 				or nil,
-			hasSnapshot = peer and peer.quests ~= nil,
-			snapshotAge = now and peer and peer.snapshotAt and (now - peer.snapshotAt),
-			revision = peer and peer.snapshotRevision,
-			pendingRevision = peer and peer.pending and peer.pending.serial,
+			hasSnapshot = peer and peer.hasSnapshot == true,
+			snapshotAge = now and peer and peer.snapshotAge,
+			revision = peer and peer.revision,
+			pendingRevision = peer and peer.pending and peer.pending.revision,
 			received = peer and peer.pending and peer.pending.received,
-			parts = peer and peer.pending and peer.pending.total,
+			parts = peer and peer.pending and peer.pending.parts,
 			mode = mode,
 		})
 		nextDisplayed[key] = { status = nextStatus, player = player, since = now, unhealthySince = unhealthySince }
@@ -858,17 +649,17 @@ local function recordUIState(visible, groups, complete, notices, trigger, updati
 	-- Sample views never report live peers as recovered or healthy.
 	if mode == "live" then
 		for _, member in ipairs(members) do
-			local peer = peers[member.key]
-			recordPeer(member.key, member.name, peerDisplayStatus(peer), peer)
+			local peer = sync.peerDiagnostics(member.key)
+			recordPeer(member.key, member.name, peer.status, peer)
 		end
 		local myself = identity("player")
-		if myself and (snapshotTooLarge or displayedPeers[myself]) then
-			recordPeer(myself, "You", snapshotTooLarge and "oversized" or "healthy")
+		if myself and (sync.isOversized() or displayedPeers[myself]) then
+			recordPeer(myself, "You", sync.isOversized() and "oversized" or "healthy")
 		end
 	end
 	for key, old in pairs(displayedPeers) do
 		if not nextDisplayed[key] then
-			recordPeer(key, old.player, "not_displayed", peers[key])
+			recordPeer(key, old.player, "not_displayed", sync.peerDiagnostics(key))
 			nextDisplayed[key] = nil
 		end
 	end
@@ -1175,9 +966,9 @@ render = function(trigger)
 	end
 	native.wanted = false
 	for _, member in ipairs(members) do
-		local peer = peers[member.key]
+		local peer = sync.peer(member.key)
 		local quests = peer and peer.quests
-		local status = peer and peerDisplayStatus(peer)
+		local status = peer and peer.status
 		roster[#roster + 1] = {
 			key = member.key,
 			name = member.name,
@@ -1282,7 +1073,7 @@ render = function(trigger)
 			for _, id in ipairs(Core.questIDs(group.questID)) do
 				local category = questCategories[id] or questCategory(id)
 				for _, member in ipairs(members) do
-					local peer = peers[member.key]
+					local peer = sync.peer(member.key)
 					local remote = peer and peer.quests and peer.quests[id]
 					category = category or (remote and remote.category)
 				end
@@ -1320,7 +1111,7 @@ render = function(trigger)
 			group.shareQuestID = nil
 		end
 	end
-	if snapshotTooLarge then
+	if sync.isOversized() then
 		complete = false
 		table.insert(notices, 1, { player = "You", reason = "oversized" })
 	end
@@ -1365,719 +1156,77 @@ local function send(message)
 	log(failed and "WARN" or "DEBUG", "sync", failed and "Addon message send failed" or "Addon message submitted", {
 		channel = "PARTY",
 		kind = message:match("^%d+%.%d+:([^:]+)"),
-		protocol = Core.PROTOCOL_VERSION,
+		protocol = Codec.PROTOCOL_VERSION,
 		bytes = #message,
 		result = resultName,
 	})
 	return not failed
 end
 
-local function watchPeer(key, peer)
-	if peer.watch or not peer.connected or peer.status == "incompatible" then
-		return
-	end
-	local watch = { progress = peer.progress, delay = SNAPSHOT_TIMEOUT }
-	peer.watch = watch
-	local function check()
-		if peers[key] ~= peer or peer.watch ~= watch or not inParty() then
-			return
-		end
-		if peer.progress ~= watch.progress then
-			watch.progress = peer.progress
-			watch.delay = SNAPSHOT_TIMEOUT
-		else
-			peer.status = peer.quests and "stale" or "waiting"
-			if QWF.isDevelopment then
-				peer.debugRecoveryReason, peer.debugRecoveryAt = "snapshot progress timeout", GetTime and GetTime()
-			end
-			peer.revision = nil
-			peer.allowReset = true
-			log("WARN", "sync", "Quest snapshot timed out; requesting refresh", {
-				sender = key,
-				revision = peer.pending and peer.pending.serial,
-				received = peer.pending and peer.pending.received,
-				parts = peer.pending and peer.pending.total,
-			})
-			render("snapshot_timeout")
-			if delta.enabled then
-				delta.recover(key, peer, "snapshot progress timeout")
-			else
-				queueRequest()
-				refresh(true, "snapshot_timeout")
-			end
-			watch.delay = math.min(60, watch.delay * 2)
-		end
-		C_Timer.After(watch.delay, check)
-	end
-	C_Timer.After(watch.delay, check)
+local function timestamp()
+	return GetTime and GetTime()
 end
 
-local function awaitingSnapshot(key, peer, explicit)
-	peer.detected = true
-	if explicit then
-		peer.explicitRefresh = true
-	end
-	if peer.status ~= "stale" then
-		if not peer.quests then
-			peer.status = "waiting"
-		elseif explicit or (peer.status and peer.status ~= "updating") then
-			peer.status = "refreshing"
-		else
-			peer.status = "updating"
-		end
-	end
-	watchPeer(key, peer)
+local function now()
+	return timestamp() or 0
 end
 
-local pump, broadcast
-local function scheduleSend()
-	if sending or pumping then
-		return
-	end
-	sending = true
-	local currentGeneration = generation
-	C_Timer.After(math.max(0, nextSendAt - (GetTime and GetTime() or 0)), function()
-		if currentGeneration ~= generation then
-			return
-		end
-		sending = false
-		pump()
-	end)
+local function after(delay, callback)
+	return C_Timer.After(delay, callback)
 end
 
-function delta.now()
-	return GetTime and GetTime() or 0
+local function debugMode()
+	return QWF.db.debugMode
 end
 
-function delta.canPatch()
-	if not delta.enabled or delta.baselineNeeded or not delta.published then
-		return false
-	end
-	local found = false
-	for _, peer in pairs(peers) do
-		if peer.connected then
-			if not peer.deltaSession or not peer.capabilityAt or delta.now() - peer.capabilityAt > 45 then
-				return false
-			end
-			found = true
-		end
-	end
-	return found
+local syncSession
+if Codec.PROTOCOL_MINOR >= 2 then
+	local clock = rawget(_G, "GetServerTime") or rawget(_G, "time")
+	syncSession = QWF.SyncState.digest(
+		tostring({}) .. tostring(clock and clock() or "") .. tostring(math.random(1, 100000000)) .. tostring(now())
+	)
 end
-
-function delta.materialize(snapshot)
-	if snapshot.next > 1 then
-		return
-	end
-	local data = snapshot.payload
-	snapshot.kind = "D"
-	if snapshot.state and not snapshot.forced and delta.canPatch() then
-		local patch = QWF.Sync.patch(delta.published, snapshot.state)
-		if #patch < #data then
-			data, snapshot.kind = patch, "P"
-		end
-	end
-	snapshot.wireBytes = #data
-	snapshot.messages = {}
-	snapshot.parts = math.max(1, math.ceil(#data / CHUNK_SIZE))
-	for part = 1, snapshot.parts do
-		snapshot.messages[part] = VERSION
-			.. ":"
-			.. snapshot.kind
-			.. ":"
-			.. snapshot.revision
-			.. ":"
-			.. part
-			.. ":"
-			.. snapshot.parts
-			.. ":"
-			.. data:sub((part - 1) * CHUNK_SIZE + 1, part * CHUNK_SIZE)
-	end
-end
-
-function delta.content()
-	local quests, count = questSnapshot(true)
-	local content = Core.encode(quests, delta.targeted and { repair = "r1" } or nil)
-	return #content <= Core.MAX_SNAPSHOT_BYTES and content or Core.encode(quests), count
-end
-
-function delta.targetable(peer)
-	return delta.targeted
-		and peer.state
-		and peer.state.session == peer.deltaSession
-		and tonumber(peer.state.version:match("%.(%d+)$")) >= 3
-		and peer.state.extra.repair == "r1"
-end
-
-function delta.silence(key, peer)
-	peer.watch, peer.repairPending = nil, nil
-	if peer.silent then
-		return
-	end
-	peer.silent = true
-	peer.status = peer.quests and "stale" or "waiting"
-	if QWF.isDevelopment then
-		peer.debugRecoveryReason, peer.debugRecoveryAt = "heartbeat timeout", delta.now()
-	end
-	log("WARN", "sync", "Peer heartbeat timed out; retaining cached snapshot", { sender = key })
-	render("heartbeat_timeout")
-end
-
-function delta.nextRepair()
-	for _, member in ipairs(members) do
-		local peer = peers[member.key]
-		if
-			peer.repairPending
-			and peer.connected
-			and not peer.silent
-			and peer.status ~= "incompatible"
-			and peer.status ~= "oversized"
-		then
-			return delta.targetable(peer) and (VERSION .. ":R:" .. peer.deltaSession) or HANDSHAKE, member.key
-		end
-	end
-end
-
-function delta.sentRepair(message, key)
-	if message == HANDSHAKE then
-		delta.fallbackAt = delta.now() + 15
-	end
-	for sender, peer in pairs(peers) do
-		if peer.repairPending and (message == HANDSHAKE or sender == key) then
-			peer.repairPending = nil
-			peer.repairAfter = delta.now() + (peer.repairDelay or 15)
-			peer.repairDelay = math.min(60, (peer.repairDelay or 15) * 2)
-		end
-	end
-end
-
-function delta.recover(key, peer, reason)
-	if not peer.connected then
-		return
-	end
-	if
-		peer.deltaSession
-		and delta.now() - math.max(peer.deltaSeen, peer.deltaProgressAt or 0, peer.contactAt or 0) > 45
-	then
-		delta.silence(key, peer)
-		return
-	end
-	if QWF.isDevelopment then
-		peer.debugRecoveryReason, peer.debugRecoveryAt = reason, delta.now()
-	end
-	peer.status = peer.quests and "stale" or "waiting"
-	peer.partialPending = nil
-	watchPeer(key, peer)
-	local eligible = math.max(peer.repairAfter or 0, delta.targetable(peer) and 0 or (delta.fallbackAt or 0))
-	if not peer.repairPending and delta.now() < eligible then
-		local watch = peer.watch
-		if not watch.repairScheduled then
-			watch.repairScheduled = true
-			local progress = peer.progress
-			C_Timer.After(eligible - delta.now(), function()
-				watch.repairScheduled = nil
-				if
-					peers[key] == peer
-					and peer.watch == watch
-					and peer.progress == progress
-					and peer.connected
-					and inParty()
-				then
-					delta.recover(key, peer, reason)
-				end
-			end)
-		end
-	elseif not peer.repairPending then
-		peer.repairPending = true
-		log("WARN", "sync", "Partial synchronization requires full snapshot", { sender = key, reason = reason })
-		if not delta.targetable(peer) then
-			-- H also announces our own baseline; older readers rely on both sides refreshing.
-			refresh(true, "partial_recovery")
-		end
-		scheduleSend()
-	end
-	render("partial_recovery")
-end
-
-function delta.replyToRepair()
-	if delta.responseAt and delta.now() - delta.responseAt < 15 then
-		return
-	end
-	delta.responseAt = delta.now()
-	local content = delta.content()
-	if queuedSnapshot and queuedSnapshot.content == content then
-		queuedSnapshot.forced = true
-	elseif outgoing and outgoing.content == content and outgoing.next == 1 then
-		outgoing.forced = true
-	elseif not (outgoing and outgoing.kind == "D" and outgoing.content == content) then
-		refresh(true, "targeted_repair")
-	end
-end
-
-function delta.acceptSession(key, peer, session)
-	if peer.deltaSession ~= session then
-		peer.retiredSessions = peer.retiredSessions or {}
-		if peer.retiredSessions[session] then
-			return false
-		end
-		if peer.deltaSession then
-			-- Bound history; recovery stays conservative even if a very old announcement reappears.
-			peer.retiredSessions[peer.deltaSession] = true
-			peer.retiredOrder = peer.retiredOrder or {}
-			peer.retiredOrder[#peer.retiredOrder + 1] = peer.deltaSession
-			if #peer.retiredOrder > 8 then
-				peer.retiredSessions[table.remove(peer.retiredOrder, 1)] = nil
-			end
-		end
-		peer.watch, peer.repairPending, peer.repairAfter, peer.repairDelay, peer.silent = nil, nil, nil, nil, nil
-		peer.deltaSession = session
-		peer.deltaSeen = delta.now()
-		peer.deltaProgressAt, peer.contactAt = nil, nil
-		peer.fullOnly = nil
-		peer.state, peer.partialPending, peer.pending, peer.revision = nil, nil, nil, nil
-		peer.allowReset = true
-		awaitingSnapshot(key, peer, true)
-	end
-	peer.capabilityAt = delta.now()
-	peer.detected = true
-	return true
-end
-
-function delta.control(key, peer, body, minor)
-	if not delta.enabled then
-		return false
-	end
-	local target = body:match("^R:([0-9a-f]+)$")
-	if target and minor >= 3 and delta.targeted and QWF.Sync.session(target) then
-		if target == delta.session then
-			log("DEBUG", "sync", "Received targeted snapshot request", { sender = key })
-			delta.replyToRepair()
-		end
-		return true
-	end
-	local session = body:match("^C:([0-9a-f]+):q1$")
-	if session and QWF.Sync.session(session) then
-		local changed = peer.deltaSession ~= session
-		if delta.acceptSession(key, peer, session) then
-			if changed and QWF.isDevelopment then
-				peer.debugRecoveryReason, peer.debugRecoveryAt = "session needs baseline", delta.now()
-			end
-			peer.contactAt = delta.now()
-			if peer.silent then
-				peer.silent = nil
-				delta.recover(key, peer, "state verification unavailable")
-			end
-			if peer.fullOnly then
-				peer.deltaSeen = delta.now()
-			end
-		end
-		return true
-	end
-	local advertisedText = body:match("^V:(.+)$")
-	if not advertisedText then
-		return false
-	end
-	local advertised = QWF.Sync.identity(advertisedText)
-	if not advertised then
-		return true
-	end
-	if not delta.acceptSession(key, peer, advertised.session) then
-		return true
-	end
-	peer.deltaSeen = delta.now()
-	local wasSilent = peer.silent
-	peer.silent = nil
-	if not peer.state then
-		if not peer.pending then
-			delta.recover(key, peer, "missing baseline")
-		end
-	elseif advertised.sequence == peer.state.sequence and advertised.digest ~= peer.state.digest then
-		delta.recover(key, peer, "state digest mismatch")
-	elseif advertised.sequence > peer.state.sequence then
-		local pendingSequence =
-			math.max(peer.partialPending and peer.partialPending.serial or 0, peer.pending and peer.pending.serial or 0)
-		if pendingSequence < advertised.sequence then
-			delta.recover(key, peer, "missed update")
-		end
-	elseif advertised.sequence == peer.state.sequence and not peer.pending and not peer.partialPending then
-		if peer.explicitRefresh then
-			if wasSilent then
-				delta.recover(key, peer, "explicit refresh pending")
-			end
-		elseif wasSilent or peer.status == "stale" then
-			peer.status, peer.watch = nil, nil
-			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
-			render("heartbeat_confirmed")
-		end
-	end
-	if wasSilent and (peer.pending or peer.partialPending) then
-		watchPeer(key, peer)
-	end
-	return true
-end
-
-function delta.ignoreTransfer(peer, pending)
-	if
-		peer.state
-		and peer.status == "updating"
-		and pending.previousStatus == nil
-		and not peer.pending
-		and not peer.partialPending
-	then
-		peer.status, peer.watch = nil, nil
-		render("obsolete_transfer")
-	end
-end
-
-function delta.startTimer()
-	if not delta.enabled or delta.timer then
-		return
-	end
-	local timer = {}
-	delta.timer = timer
-	local function tick()
-		if delta.timer ~= timer or not inParty() then
-			return
-		end
-		for key, peer in pairs(peers) do
-			if
-				peer.connected
-				and peer.deltaSession
-				and peer.status ~= "oversized"
-				and peer.status ~= "incompatible"
-				and delta.now() - math.max(peer.deltaSeen, peer.deltaProgressAt or 0) > 45
-			then
-				if delta.now() - math.max(peer.deltaSeen, peer.deltaProgressAt or 0, peer.contactAt or 0) > 45 then
-					delta.silence(key, peer)
-				else
-					delta.recover(key, peer, "state verification unavailable")
-				end
-			end
-		end
-		if delta.published then
-			delta.heartbeatPending = VERSION .. ":V:" .. QWF.Sync.identityText(delta.published)
-		else
-			delta.capabilityPending = true
-		end
-		scheduleSend()
-		C_Timer.After(15 + tonumber(delta.session:sub(1, 2), 16) % 4, tick)
-	end
-	C_Timer.After(15 + tonumber(delta.session:sub(1, 2), 16) % 4, tick)
-end
-
-local function pumpOnce()
-	if not inParty() then
-		return
-	end
-	local message
-	local repairMessage, repairKey = delta.nextRepair()
-	if requestPending then
-		message = HANDSHAKE
-	elseif repairMessage then
-		message = repairMessage
-	elseif delta.capabilityPending then
-		message = VERSION .. ":C:" .. delta.session .. ":q1"
-	elseif oversizePending then
-		message = OVERSIZED
-	elseif delta.heartbeatPending then
-		message = delta.heartbeatPending
-	else
-		if not outgoing or outgoing.next == 1 or queuedSnapshot then
-			local payload = delta.content()
-			local staleOutgoing = outgoing
-				and outgoing.next == 1
-				and not outgoing.forced
-				and outgoing.content ~= payload
-			local staleQueued = queuedSnapshot and not queuedSnapshot.forced and queuedSnapshot.content ~= payload
-			if staleOutgoing or staleQueued then
-				local context = mergeContext(staleOutgoing and outgoing.context, staleQueued and queuedSnapshot.context)
-				if staleOutgoing then
-					logCanceledSnapshot(outgoing, "obsolete_before_start")
-					outgoing = nil
-				end
-				if staleQueued then
-					logCanceledSnapshot(queuedSnapshot, "obsolete_before_start")
-					queuedSnapshot = nil
-				end
-				-- Reuse this eligible send opportunity; restarting a batching timer can starve busy logs.
-				broadcast(false, context)
-			end
-			if
-				not outgoing
-				and queuedSnapshot
-				and not queuedSnapshot.forced
-				and queuedSnapshot.content == lastPayload
-			then
-				logCanceledSnapshot(queuedSnapshot, "matches_submitted")
-				queuedSnapshot = nil
-			end
-		end
-		if queuedSnapshot then
-			delta.materialize(queuedSnapshot)
-		end
-		if not outgoing and delta.resumeCheckpoint and delta.suspended then
-			outgoing, delta.suspended = delta.suspended, nil
-			delta.resumeCheckpoint, delta.checkpointTurn = nil, true
-		end
-		if
-			outgoing
-			and outgoing.next > 1
-			and outgoing.kind == "D"
-			and queuedSnapshot
-			and queuedSnapshot.kind == "P"
-			and not delta.suspended
-			and not delta.checkpointTurn
-		then
-			delta.suspended, outgoing = outgoing, nil
-		end
-		if not outgoing then
-			outgoing, queuedSnapshot = queuedSnapshot, nil
-		end
-		if not outgoing and delta.suspended then
-			outgoing, delta.suspended = delta.suspended, nil
-		end
-		if not outgoing then
-			return
-		end
-		delta.materialize(outgoing)
-		message = outgoing.messages[outgoing.next]
-	end
-	if not send(message) then
-		if message:match("^%d+%.%d+:[DP]:") then
-			log("WARN", "sync", "Quest snapshot submission failed", {
-				kind = outgoing.kind,
-				revision = outgoing.revision,
-				part = outgoing.next,
-				parts = outgoing.parts,
-				fingerprint = QWF.db.debugMode and fingerprint(outgoing.payload) or nil,
-				retryDelay = retryDelay,
-			})
-		end
-		nextSendAt = delta.now() + retryDelay
-		retryDelay = math.min(MAX_RETRY_DELAY, retryDelay * 2)
-		return
-	end
-	nextSendAt = delta.now() + SEND_INTERVAL
-	retryDelay = 1
-	if message == HANDSHAKE then
-		requestPending = false
-		delta.sentRepair(message)
-	elseif message == repairMessage then
-		delta.sentRepair(message, repairKey)
-	elseif message == OVERSIZED then
-		oversizePending = false
-	elseif message:match("^%d+%.%d+:C:") then
-		delta.capabilityPending = false
-	elseif message:match("^%d+%.%d+:V:") then
-		delta.heartbeatPending = nil
-	else
-		delta.checkpointTurn = nil
-		outgoing.next = outgoing.next + 1
-		if outgoing.next > #outgoing.messages then
-			if outgoing.kind == "P" and delta.suspended then
-				delta.resumeCheckpoint = true
-			end
-			if not delta.submittedRevision or outgoing.revision >= delta.submittedRevision then
-				delta.submittedRevision = outgoing.revision
-				lastPayload = outgoing.content
-				delta.published = outgoing.state
-				if not outgoing.state then
-					delta.heartbeatPending = nil
-				end
-				if outgoing.kind == "D" then
-					delta.baselineNeeded = outgoing.state == nil
-				end
-			end
-			if QWF.db.debugMode then
-				local diagnostics = {}
-				snapshotObjectiveDiagnostics(diagnostics, Core.decode(outgoing.content) or {}, "You")
-				recordObjectiveDiagnostics("submitted", diagnostics, "snapshot_submitted", {
-					revision = outgoing.revision,
-					protocol = VERSION,
-				})
-			end
-			logSnapshot("Submitted quest snapshot", outgoing.content, lastSubmittedDiagnosticPayload, {
-				kind = outgoing.kind,
-				quests = outgoing.quests,
-				bytes = outgoing.wireBytes,
-				parts = outgoing.parts,
-				revision = outgoing.revision,
-				forced = outgoing.forced == true,
-				queueToSubmit = QWF.db.debugMode and GetTime and outgoing.queuedAt and (GetTime() - outgoing.queuedAt)
-					or nil,
-			}, outgoing.context)
-			if QWF.db.debugMode then
-				lastSubmittedDiagnosticPayload = outgoing.content
-			end
-			outgoing = nil
-		end
-	end
-end
-
-pump = function()
-	pumping = true
-	local ok, err = pcall(pumpOnce)
-	pumping = false
-	if not ok then
-		error(err, 0)
-	end
-
-	if
-		inParty()
-		and (
-			requestPending
-			or oversizePending
-			or outgoing
-			or queuedSnapshot
-			or delta.suspended
-			or delta.capabilityPending
-			or delta.heartbeatPending
-			or delta.nextRepair()
-		)
-	then
-		scheduleSend()
-	end
-end
-
-queueRequest = function()
-	requestPending = true
-	if delta.enabled then
-		delta.capabilityPending = true
-	end
-	scheduleSend()
-end
-
-broadcast = function(force, context)
-	if not inParty() then
-		return
-	end
-	local payload, count = delta.content()
-	local function matches(snapshot)
-		return snapshot and snapshot.content == payload
-	end
-	local forced = force or (queuedSnapshot and queuedSnapshot.forced)
-	if matches(outgoing) and not forced then
-		logSuppressedSnapshot("matches_active", payload, context)
-		logCanceledSnapshot(queuedSnapshot, "matches_active")
-		queuedSnapshot = nil
-		return
-	end
-	if matches(queuedSnapshot) then
-		queuedSnapshot.forced = forced
-		queuedSnapshot.context = mergeContext(context, queuedSnapshot.context)
-		logSuppressedSnapshot("matches_queued", payload, context)
-		return
-	end
-	if not outgoing and payload == lastPayload and not forced then
-		logSuppressedSnapshot("matches_submitted", payload, context)
-		logCanceledSnapshot(queuedSnapshot, "matches_submitted")
-		queuedSnapshot = nil
-		return
-	end
-	if #payload > Core.MAX_SNAPSHOT_BYTES then
-		if not snapshotTooLarge or force then
-			oversizePending = true
-			scheduleSend()
-		end
-		logCanceledSnapshot(outgoing, "oversized")
-		logCanceledSnapshot(queuedSnapshot, "oversized")
-		outgoing, queuedSnapshot = nil, nil
-		delta.suspended, delta.published, delta.heartbeatPending = nil, nil, nil
-		delta.resumeCheckpoint, delta.checkpointTurn = nil, nil
-		delta.baselineNeeded = true
-		snapshotTooLarge = true
-		lastPayload = nil
-		log("WARN", "sync", "Quest snapshot exceeds protocol limit")
-		render("local_snapshot_oversized")
-		return
-	end
-	snapshotTooLarge = false
-	oversizePending = false
-	render("local_snapshot_ready")
-	revision = revision + 1
-	local content, state = payload, nil
-	if delta.enabled then
-		state, payload = QWF.Sync.snapshot(content, delta.session, revision)
-		if not state then
-			-- Metadata must not make a previously valid baseline exceed protocol limits.
-			payload = content
-			delta.published, delta.heartbeatPending = nil, nil
-			delta.baselineNeeded = true
-		end
-	end
-	local snapshot = {
-		payload = payload,
-		content = content,
-		state = state,
-		kind = "D",
-		messages = {},
-		next = 1,
-		revision = revision,
-		forced = forced,
-		context = mergeContext(context, queuedSnapshot and queuedSnapshot.context),
-		queuedAt = QWF.db.debugMode and GetTime and GetTime() or nil,
-	}
-	local total = math.max(1, math.ceil(#payload / CHUNK_SIZE))
-	snapshot.quests = count
-	snapshot.parts = total
-	if QWF.db.debugMode then
-		logSnapshot("Quest snapshot queued", payload, lastQueuedDiagnosticPayload, {
-			revision = revision,
-			quests = count,
-			bytes = #payload,
-			parts = total,
-			forced = forced == true,
-			activeRevision = outgoing and outgoing.revision,
-			replacedRevision = queuedSnapshot and queuedSnapshot.revision,
-		}, snapshot.context)
-		lastQueuedDiagnosticPayload, lastSnapshotDecision = payload, nil
-	end
-	logCanceledSnapshot(queuedSnapshot, "superseded")
-	queuedSnapshot = snapshot
-	scheduleSend()
-end
-
-refresh = function(force, trigger)
-	if native.progress then
+local function prepareLocal(trigger, batched)
+	if not batched and native.progress then
 		native.progress:invalidate()
 	end
 	scanQuests(trigger)
 	render(trigger)
-	if not inParty() then
-		return
-	end
-	forceRefresh = forceRefresh or force == true
-	if QWF.db.debugMode then
-		refreshTriggers[trigger or "refresh"] = true
-		if force then
-			refreshForceReasons[trigger or "refresh"] = true
-		end
-	end
-	if scheduled then
-		return
-	end
-	scheduled = true
-	local currentGeneration = generation
-	C_Timer.After(COALESCE_INTERVAL, function()
-		if currentGeneration ~= generation then
-			return
-		end
-		scheduled = false
-		scanQuests("coalesced_refresh")
-		render("coalesced_refresh")
-		local forced = forceRefresh
-		local context = { triggers = refreshTriggers, forceReasons = refreshForceReasons }
-		forceRefresh = false
-		refreshTriggers, refreshForceReasons = {}, {}
-		broadcast(forced, context)
-	end)
 end
+
+sync = QWF.Sync.new({
+	session = syncSession,
+	now = now,
+	timestamp = timestamp,
+	after = after,
+	isTransportAvailable = inParty,
+	send = send,
+	getLocalQuests = function()
+		return localQuests
+	end,
+	offerOptionalQuests = offerCompletionHistory,
+	prepareLocal = prepareLocal,
+	onStatusChanged = render,
+	onPeerSnapshot = function(_, previous, quests)
+		recordActivity(previous, quests)
+	end,
+	debugMode = debugMode,
+	development = QWF.isDevelopment,
+	log = log,
+	onSubmitted = function(quests, revision)
+		local diagnostics = {}
+		snapshotObjectiveDiagnostics(diagnostics, quests, "You")
+		recordObjectiveDiagnostics("submitted", diagnostics, "snapshot_submitted", {
+			revision = revision,
+			protocol = VERSION,
+		})
+	end,
+})
 
 local function updateRoster(force, trigger)
 	local party = inParty()
-	local nextPeers, nextMembers = {}, {}
+	local nextMembers, connections = {}, {}
 	local rosterPending = false
-	local changed = rosterInParty ~= party
 	if party then
 		local myself = identity("player")
 		for index = 1, 4 do
@@ -2087,29 +1236,18 @@ local function updateRoster(force, trigger)
 				rosterPending = rosterPending or not key
 				if key and key ~= myself then
 					local name = isForever and key or UnitName(unit) or key
-					nextMembers[#nextMembers + 1] = { key = key, name = name, unit = unit }
-					local connected = UnitIsConnected(unit) == true
-					local peer = peers[key]
-					changed = changed or not peer or peer.connected ~= connected
-					peer = peer or {}
-					if peer.connected ~= connected then
-						peer.watch, peer.repairPending, peer.silent = nil, nil, nil
-						peer.pending, peer.partialPending, peer.state, peer.deltaSession = nil, nil, nil, nil
-						peer.status = peer.quests and "stale" or nil
-					end
-					peer.connected = connected
-					nextPeers[key] = peer
+					nextMembers[#nextMembers + 1] = {
+						key = key,
+						name = name,
+						unit = unit,
+					}
+					connections[key] = UnitIsConnected(unit) == true
 				end
 			end
 		end
 	end
-	for key, peer in pairs(peers) do
-		if not nextPeers[key] then
-			changed = true
-			peer.watch = nil
-		end
-	end
-	peers, members = nextPeers, nextMembers
+	local changed = sync.setRoster(nextMembers, connections, party, trigger)
+	members = nextMembers
 	if party then
 		leaveCheck = nil
 		local session = ensureIgnoreSession()
@@ -2138,46 +1276,12 @@ local function updateRoster(force, trigger)
 			end
 		end)
 	end
-	rosterInParty = party
 	if not changed and not force then
 		render(trigger)
 		return
 	end
-	if changed then
-		if native.progress then
-			native.progress:reset()
-		end
-		for _, peer in pairs(peers) do
-			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
-		end
-		delta.fallbackAt, delta.responseAt = nil, nil
-		generation = generation + 1
-		scheduled, forceRefresh, sending = false, false, false
-		refreshTriggers, refreshForceReasons = {}, {}
-		logCanceledSnapshot(outgoing, "roster_changed")
-		logCanceledSnapshot(queuedSnapshot, "roster_changed")
-		outgoing, queuedSnapshot = nil, nil
-		delta.suspended, delta.published, delta.heartbeatPending = nil, nil, nil
-		delta.resumeCheckpoint, delta.checkpointTurn = nil, nil
-		delta.baselineNeeded = true
-		delta.capabilityPending = delta.enabled and party
-		if not party then
-			delta.timer = nil
-		end
-		requestPending, oversizePending = false, false
-		nextSendAt = math.min(nextSendAt, delta.now() + SEND_INTERVAL)
-		retryDelay = 1
-	end
-	if party then
-		delta.startTimer()
-		for key, peer in pairs(peers) do
-			if peer.connected and peer.detected and peer.status ~= "incompatible" then
-				peer.revision = nil
-				peer.allowReset = true
-				awaitingSnapshot(key, peer, true)
-			end
-		end
-		queueRequest()
+	if changed and native.progress then
+		native.progress:reset()
 	end
 	log("DEBUG", "sync", "Party sync status", {
 		player = identity("player"),
@@ -2186,12 +1290,13 @@ local function updateRoster(force, trigger)
 		members = members,
 		game = QWF.QuestEquivalencesGame,
 		prefixRegistered = prefixRegistered,
-		protocol = Core.PROTOCOL_VERSION,
+		protocol = Codec.PROTOCOL_VERSION,
 	})
 	if changed then
-		lastPayload = nil
+		prepareLocal(trigger)
+	else
+		sync.refresh(trigger)
 	end
-	refresh(true, trigger)
 end
 
 local function senderKey(sender)
@@ -2223,266 +1328,7 @@ local function receive(sender, message)
 		log("DEBUG", "sync", "Ignored addon message", { sender = sender, key = key, reason = "self message" })
 		return
 	end
-	local peer = key and peers[key]
-	if not peer then
-		log("DEBUG", "sync", "Ignored addon message", { sender = sender, key = key, reason = "sender not in roster" })
-		return
-	end
-	if #message > 255 then
-		log("DEBUG", "sync", "Ignored addon message", { sender = key, reason = "message exceeds wire limit" })
-		return
-	end
-	local version, body = message:match("^(%d+%.%d+):(.+)$")
-	local major, minor = Core.parseProtocolVersion(version)
-	if QWF.isDevelopment then
-		peer.debugProtocol = major and version or "unversioned / malformed"
-		peer.debugMessageAt = delta.now()
-	end
-	if not major or major ~= Core.PROTOCOL_MAJOR then
-		peer.detected = true
-		peer.status = "incompatible"
-		peer.pending, peer.watch, peer.revision = nil, nil, nil
-		peer.state, peer.partialPending, peer.deltaSession = nil, nil, nil
-		peer.repairPending = nil
-		peer.allowReset = true
-		log("WARN", "sync", "Unsupported addon protocol", {
-			sender = key,
-			protocol = version or "unversioned",
-			expected = Core.PROTOCOL_VERSION,
-		})
-		render("unsupported_protocol")
-		return
-	end
-	if minor >= 2 and delta.control(key, peer, body, minor) then
-		return
-	end
-	if body == "X" then
-		peer.detected = true
-		peer.status = "oversized"
-		peer.pending, peer.watch, peer.partialPending = nil, nil, nil
-		peer.state, peer.repairPending = nil, nil
-		render("peer_snapshot_oversized")
-		return
-	end
-	if body == "H" then
-		peer.contactAt, peer.silent = delta.now(), nil
-		log("DEBUG", "sync", "Received snapshot request", { sender = key, protocol = version })
-		-- Refresh requests allow revision counters to restart after reloads,
-		-- without discarding the last snapshot or an assembly in progress.
-		peer.revision = nil
-		peer.allowReset = true
-		if minor < 2 then
-			peer.state, peer.deltaSession = nil, nil
-		end
-		if delta.enabled then
-			delta.capabilityPending = true
-			delta.baselineNeeded = true
-			peer.capabilityAt = nil
-		end
-		awaitingSnapshot(key, peer, true)
-		render("snapshot_requested")
-		refresh(true, "snapshot_requested")
-		return
-	end
-	local kind, serialText, partText, totalText, data = body:match("^([DP]):(%d+):(%d+):(%d+):(.+)$")
-	if kind == "P" and (not delta.enabled or minor < 2) then
-		return
-	end
-	local pendingField = kind == "P" and "partialPending" or "pending"
-	local serial, part, total = tonumber(serialText), tonumber(partText), tonumber(totalText)
-	if
-		not serial
-		or serial < 1
-		or serial > 100000000
-		or #serialText > 9
-		or not part
-		or #partText > 3
-		or not total
-		or #totalText > 3
-		or total > MAX_PARTS
-		or part < 1
-		or part > total
-		or #data > CHUNK_SIZE
-	then
-		log("DEBUG", "sync", "Ignored addon message", { sender = key, reason = "invalid chunk header" })
-		return
-	end
-	if kind == "P" and peer.state and serial <= peer.state.sequence then
-		return
-	end
-	if peer.revision and serial <= peer.revision then
-		log("DEBUG", "sync", "Ignored addon message", { sender = key, reason = "stale revision", revision = serial })
-		return
-	end
-	local pending = peer[pendingField]
-	if
-		not pending
-		or pending.serial ~= serial
-		or (peer.allowReset and (pending.total ~= total or pending.version ~= version))
-	then
-		if pending and serial < pending.serial and not peer.allowReset then
-			log(
-				"DEBUG",
-				"sync",
-				"Ignored addon message",
-				{ sender = key, reason = "older than pending revision", revision = serial }
-			)
-			return
-		end
-		pending = {
-			serial = serial,
-			total = total,
-			version = version,
-			parts = {},
-			received = 0,
-			startedAt = QWF.db.debugMode and GetTime and GetTime() or nil,
-			previousStatus = peer.status,
-		}
-		peer[pendingField] = pending
-	end
-	peer.allowReset = nil
-	if pending.version ~= version then
-		log(
-			"DEBUG",
-			"sync",
-			"Ignored addon message",
-			{ sender = key, reason = "inconsistent snapshot version", revision = serial }
-		)
-		return
-	end
-	if pending.total ~= total then
-		log(
-			"DEBUG",
-			"sync",
-			"Ignored addon message",
-			{ sender = key, reason = "inconsistent chunk count", revision = serial }
-		)
-		return
-	end
-	if kind == "P" and pending.parts[part] and pending.parts[part] ~= data then
-		delta.recover(key, peer, "conflicting fragment")
-		return
-	end
-	if not pending.parts[part] then
-		pending.parts[part] = data
-		pending.received = pending.received + 1
-		peer.progress = (peer.progress or 0) + 1
-		if delta.enabled then
-			peer.deltaProgressAt = delta.now()
-			peer.silent = nil
-		end
-	end
-	awaitingSnapshot(key, peer)
-	log("DEBUG", "sync", "Received snapshot chunk", {
-		kind = kind,
-		sender = key,
-		revision = serial,
-		part = part,
-		parts = total,
-		received = pending.received,
-	})
-	if pending.received == total then
-		peer[pendingField] = nil
-		local payload = table.concat(pending.parts)
-		local quests, state
-		if kind == "P" then
-			local target = QWF.Sync.patchTarget(payload)
-			if target and peer.retiredSessions and peer.retiredSessions[target.session] then
-				delta.ignoreTransfer(peer, pending)
-				return
-			end
-			state = QWF.Sync.apply(peer.state, payload, pending.version)
-			if not state or state.sequence ~= serial or state.session ~= peer.deltaSession then
-				delta.recover(key, peer, "invalid partial update or base mismatch")
-				return
-			end
-			quests = state.quests
-		else
-			quests = Core.decode(payload, pending.version)
-			if quests and delta.enabled and minor >= 2 then
-				state = QWF.Sync.readSnapshot(payload, pending.version)
-				if not state then
-					quests = nil
-				elseif state.session then
-					if state.sequence ~= serial then
-						delta.recover(key, peer, "snapshot identity revision mismatch")
-						return
-					end
-					if not delta.acceptSession(key, peer, state.session) then
-						delta.ignoreTransfer(peer, pending)
-						return
-					end
-					if peer.state and state.sequence < peer.state.sequence then
-						delta.ignoreTransfer(peer, pending)
-						return
-					end
-				else
-					state = nil
-					if peer.state and serial <= peer.state.sequence then
-						delta.ignoreTransfer(peer, pending)
-						return
-					end
-				end
-			end
-		end
-		if quests then
-			local previousContent = delta.content()
-			peer.state = state
-			peer.fullOnly = peer.deltaSession and not state or nil
-			if peer.deltaSession then
-				peer.deltaSeen = delta.now()
-			end
-			recordActivity(peer.quests, quests)
-			peer.revision = serial
-			peer.quests = quests
-			peer.snapshotAt = GetTime and GetTime()
-			peer.snapshotRevision = serial
-			peer.status, peer.watch, peer.silent, peer.explicitRefresh = nil, nil, nil, nil
-			peer.repairPending, peer.repairAfter, peer.repairDelay = nil, nil, nil
-			if kind == "P" then
-				if peer.pending and peer.pending.serial <= serial then
-					peer.pending = nil
-				end
-			else
-				if peer.partialPending and peer.partialPending.serial <= serial then
-					peer.partialPending = nil
-				end
-			end
-			local diagnosticPayload = state and state.content or payload
-			logSnapshot("Received quest snapshot", diagnosticPayload, peer.diagnosticPayload, {
-				kind = kind,
-				sender = key,
-				parts = total,
-				protocol = pending.version,
-				revision = serial,
-				bytes = #payload,
-				assemblyDuration = QWF.db.debugMode
-						and GetTime
-						and pending.startedAt
-						and (GetTime() - pending.startedAt)
-					or nil,
-			})
-			if QWF.db.debugMode then
-				peer.diagnosticPayload = diagnosticPayload
-			end
-			if delta.content() ~= previousContent then
-				refresh(false, "peer_completion_changed")
-			else
-				render("snapshot_received")
-			end
-		else
-			if peer.status ~= "stale" then
-				peer.status = peer.quests and "refreshing" or "waiting"
-			end
-			if QWF.isDevelopment then
-				peer.debugRecoveryReason, peer.debugRecoveryAt = "invalid snapshot rejected", delta.now()
-			end
-			log("WARN", "sync", "Rejected invalid quest snapshot", { sender = key })
-			render("snapshot_rejected")
-		end
-	else
-		render("snapshot_chunk_received")
-	end
+	sync.receive(key, message, sender)
 end
 
 frame:RegisterEvent("ADDON_LOADED")
@@ -2613,7 +1459,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 				completed[id] = nil
 			end
 		end
-		refresh(false, event)
+		sync.localChanged(event)
 	end
 end)
 
@@ -2621,14 +1467,7 @@ local function setDebugMode(enabled)
 	if QWF.db.debugMode ~= (enabled == true) then
 		displayedPeers, displayedPanel = {}, nil
 		objectiveDiagnostics = {}
-		refreshTriggers, refreshForceReasons = {}, {}
-		lastQueuedDiagnosticPayload, lastSubmittedDiagnosticPayload, lastSnapshotDecision = nil, nil, nil
-		for _, peer in pairs(peers) do
-			peer.diagnosticPayload = nil
-		end
-		for _, snapshot in pairs({ outgoing = outgoing, queued = queuedSnapshot }) do
-			snapshot.context, snapshot.queuedAt = nil, nil
-		end
+		sync.clearDiagnostics()
 	end
 	QWF.db.debugMode = enabled == true
 	applyDebugMode(true)
@@ -2643,28 +1482,6 @@ local development = QWF.Development
 	and QWF.Development.new(setPreviewMode, function()
 		return screenshotMode
 	end, function()
-		local now = delta.now()
-		local function age(timestamp)
-			return timestamp and math.max(0, now - timestamp)
-		end
-		local function stateSummary(state)
-			return state and { session = state.session, sequence = state.sequence, digest = state.digest }
-		end
-		local function transferSummary(snapshot)
-			return snapshot
-				and {
-					kind = snapshot.kind,
-					revision = snapshot.revision,
-					sent = snapshot.next - 1,
-					parts = snapshot.parts,
-					bytes = snapshot.wireBytes or #snapshot.payload,
-					forced = snapshot.forced == true,
-					materialized = #snapshot.messages > 0,
-				}
-		end
-		local function assemblySummary(pending)
-			return pending and { revision = pending.serial, received = pending.received, parts = pending.total }
-		end
 		local data = {
 			protocol = VERSION,
 			game = isForever and "Forever" or "Retail",
@@ -2674,23 +1491,11 @@ local development = QWF.Development
 			view = screenshotMode and "screenshot samples" or (previewMode and "preview samples" or "live"),
 			localSnapshotKnown = localSnapshotKnown,
 			localQuestCount = entryCount(localQuests),
-			snapshotTooLarge = snapshotTooLarge,
-			submittedBytes = lastPayload and #lastPayload,
-			partialEnabled = delta.enabled,
-			baselineNeeded = delta.baselineNeeded,
-			published = stateSummary(delta.published),
-			outgoing = transferSummary(outgoing),
-			queued = transferSummary(queuedSnapshot),
-			suspended = transferSummary(delta.suspended),
-			requestPending = requestPending,
-			capabilityPending = delta.capabilityPending,
-			heartbeatPending = delta.heartbeatPending ~= nil,
-			oversizePending = oversizePending,
-			nextSendIn = math.max(0, nextSendAt - now),
-			retryIn = retryDelay > 1 and math.max(0, nextSendAt - now) or nil,
-			batching = scheduled,
 			peers = {},
 		}
+		for field, value in pairs(sync.diagnostics()) do
+			data[field] = value
+		end
 		if C_AddOns and C_AddOns.GetAddOnMetadata then
 			data.addonVersion = C_AddOns.GetAddOnMetadata(addonName, "Version")
 		end
@@ -2698,31 +1503,9 @@ local development = QWF.Development
 			data.clientVersion, data.clientBuild = GetBuildInfo()
 		end
 		for _, member in ipairs(members) do
-			local peer = peers[member.key]
-			data.peers[#data.peers + 1] = {
-				name = member.name,
-				connected = peer.connected,
-				detected = peer.detected == true,
-				status = peerDisplayStatus(peer),
-				protocol = peer.debugProtocol,
-				messageAge = age(peer.debugMessageAt),
-				hasSnapshot = peer.quests ~= nil,
-				questCount = peer.quests and entryCount(peer.quests),
-				revision = peer.snapshotRevision,
-				snapshotAge = age(peer.snapshotAt),
-				session = peer.deltaSession,
-				capabilityAge = age(peer.capabilityAt),
-				state = stateSummary(peer.state),
-				stateAge = age(peer.deltaSeen and math.max(peer.deltaSeen, peer.deltaProgressAt or 0)),
-				fullOnly = peer.fullOnly,
-				pending = assemblySummary(peer.pending),
-				partialPending = assemblySummary(peer.partialPending),
-				targetedRepair = delta.targetable(peer) == true,
-				repairPending = peer.repairPending == true,
-				repairIn = peer.repairAfter and math.max(0, peer.repairAfter - now),
-				recoveryReason = peer.debugRecoveryReason,
-				recoveryAge = age(peer.debugRecoveryAt),
-			}
+			local summary = sync.peerDiagnostics(member.key)
+			summary.name = member.name
+			data.peers[#data.peers + 1] = summary
 		end
 		return data
 	end)

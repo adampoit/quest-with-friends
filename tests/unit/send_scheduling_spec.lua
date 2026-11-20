@@ -95,15 +95,15 @@ for _, game in ipairs({ "retail", "forever" }) do
 				n:advance(0.21)
 				change(a, "Queued")
 				n:advance(0.25)
-				local core = a.env.QuestWithFriends.Core
-				local encode = core.encode
-				core.encode = function()
+				local codec = a.env.QuestWithFriends.SnapshotCodec
+				local encode = codec.encode
+				codec.encode = function()
 					error("injected encoding failure", 0)
 				end
 				assert.has_error(function()
 					n:advance(0.25)
 				end, "injected encoding failure")
-				core.encode = encode
+				codec.encode = encode
 				change(a, "Recovered")
 				n:advance(0.3)
 				assert.equal("Recovered", b.view.groups[1].title)

@@ -44,7 +44,7 @@ local function identity(c)
 	for i = #c.attempts, 1, -1 do
 		local text = c.attempts[i].message:match("^1%.%d+:V:(.+)$")
 		if text then
-			return assert(c.env.QuestWithFriends.Sync.identity(text))
+			return assert(c.env.QuestWithFriends.SyncState.identity(text))
 		end
 	end
 	error("missing heartbeat")
@@ -180,7 +180,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 				local n, a, b = setupParty(game, { minor, 3 })
 				local state, before = identity(a), #b.attempts
 				state.sequence = state.sequence + 1
-				local advertised = "1." .. minor .. ":V:" .. a.env.QuestWithFriends.Sync.identityText(state)
+				local advertised = "1." .. minor .. ":V:" .. a.env.QuestWithFriends.SyncState.identityText(state)
 				local kind = minor == 3 and "1.3:R:" or "1.3:H"
 				n.deliver = function(from, to)
 					return from ~= a or to ~= b
@@ -227,11 +227,12 @@ for _, game in ipairs({ "retail", "forever" }) do
 		it("does not infer repair capability from a higher minor number", function()
 			local n, a, b = setupParty(game, { 7, 3 })
 			local state = identity(a)
-			local core = a.env.QuestWithFriends.Core
-			local _, payload = a.env.QuestWithFriends.Sync.snapshot(core.encode({}), state.session, state.sequence + 1)
+			local codec = a.env.QuestWithFriends.SnapshotCodec
+			local _, payload =
+				a.env.QuestWithFriends.SyncState.snapshot(codec.encode({}), state.session, state.sequence + 1)
 			b:receive(a.sender, "1.7:D:" .. (state.sequence + 1) .. ":1:1:" .. payload)
 			state.sequence = state.sequence + 2
-			b:receive(a.sender, "1.7:V:" .. a.env.QuestWithFriends.Sync.identityText(state))
+			b:receive(a.sender, "1.7:V:" .. a.env.QuestWithFriends.SyncState.identityText(state))
 			n:advance(1)
 			assert.are.equal(0, b:count("1.3:R:"))
 			assert.are.equal(2, b:count("1.3:H"))
@@ -240,12 +241,12 @@ for _, game in ipairs({ "retail", "forever" }) do
 		it("cancels a rejected queued repair when a heartbeat confirms the cached state", function()
 			local n, a, b = setupParty(game, { 3, 3 })
 			local state = identity(a)
-			local confirmed = "1.3:V:" .. a.env.QuestWithFriends.Sync.identityText(state)
+			local confirmed = "1.3:V:" .. a.env.QuestWithFriends.SyncState.identityText(state)
 			state.sequence = state.sequence + 1
 			b.sendResult = function(message)
 				return message:match("^1%.3:R:") and 5 or 0
 			end
-			b:receive(a.sender, "1.3:V:" .. a.env.QuestWithFriends.Sync.identityText(state))
+			b:receive(a.sender, "1.3:V:" .. a.env.QuestWithFriends.SyncState.identityText(state))
 			n:advance(0.1)
 			assert.are.equal(1, b:count("1.3:R:"))
 			b:receive(a.sender, confirmed)
@@ -280,7 +281,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 				return from ~= a or to ~= b
 			end
 			b.env.SlashCmdList.QUESTWITHFRIENDS("")
-			b:receive(a.sender, "1.3:V:" .. a.env.QuestWithFriends.Sync.identityText(state))
+			b:receive(a.sender, "1.3:V:" .. a.env.QuestWithFriends.SyncState.identityText(state))
 			assert.is_false(b.view.complete)
 			assert.are.equal("refreshing", b.view.notices[1].reason)
 		end)
@@ -316,7 +317,7 @@ for _, game in ipairs({ "retail", "forever" }) do
 			end
 			b.env.SlashCmdList.QUESTWITHFRIENDS("")
 			n:advance(90)
-			b:receive(a.sender, "1.3:V:" .. a.env.QuestWithFriends.Sync.identityText(state))
+			b:receive(a.sender, "1.3:V:" .. a.env.QuestWithFriends.SyncState.identityText(state))
 			assert.is_false(b.view.complete)
 			n:advance(1)
 			assert.is_true(b:count("1.3:R:") > 0)
@@ -331,12 +332,12 @@ for _, game in ipairs({ "retail", "forever" }) do
 			for id = 1, 68 do
 				a.quests[id] = { title = string.rep("x", 300), state = "active", objectives = {} }
 			end
-			local core = a.env.QuestWithFriends.Core
-			while #core.encode(a.quests) > core.MAX_SNAPSHOT_BYTES do
+			local codec = a.env.QuestWithFriends.SnapshotCodec
+			while #codec.encode(a.quests) > codec.MAX_SNAPSHOT_BYTES do
 				a.quests[68].title = a.quests[68].title:sub(1, -2)
 				assert.is_true(#a.quests[68].title > 0)
 			end
-			assert.is_true(core.MAX_SNAPSHOT_BYTES - #core.encode(a.quests) <= 1)
+			assert.is_true(codec.MAX_SNAPSHOT_BYTES - #codec.encode(a.quests) <= 1)
 			a:fire("QUEST_LOG_UPDATE")
 			n:advance(120)
 			assert.is_true(a.view.complete)

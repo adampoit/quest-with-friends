@@ -3,9 +3,9 @@ QWF = QWF or QuestWithFriends
 if QWF.disabled then
 	return
 end
-local Core = QWF.Core
+local Codec = QWF.SnapshotCodec
 local Sync = {}
-QWF.Sync = Sync
+QWF.SyncState = Sync
 
 -- SHA-256/128. Arithmetic fallbacks keep the wire digest identical on Lua 5.1 clients without bit libraries.
 local MOD = 4294967296
@@ -170,29 +170,23 @@ function Sync.digest(data)
 	return string.format("%08x%08x%08x%08x", h[1], h[2], h[3], h[4])
 end
 
-local function field(value)
-	value = tostring(value)
-	return #value .. ":" .. value
-end
+local field = Codec.field
+local encodeRecords = Codec.encodeRecords
+
 local function reader(data)
 	local position = 1
 	return function()
 		if position == #data + 1 then
 			return nil, position
 		end
-		local first, last, size = data:find("(%d+):", position)
-		if first ~= position or last - first > 5 then
-			return nil
+		local value, following = Codec.readField(data, position, #data)
+		if following then
+			position = following
 		end
-		size = tonumber(size)
-		if not size or last + size > #data then
-			return nil
-		end
-		local value = data:sub(last + 1, last + size)
-		position = last + size + 1
-		return value, position
+		return value, following
 	end
 end
+
 local function number(value, maximum)
 	if not value or not value:match("^%d+$") then
 		return nil
@@ -206,31 +200,6 @@ end
 local function token(value)
 	return type(value) == "string" and #value == 32 and value:match("^[0-9a-f]+$") ~= nil
 end
-local function extensions(values)
-	local tags, parts = {}, {}
-	for tag in pairs(values) do
-		tags[#tags + 1] = tag
-	end
-	table.sort(tags)
-	for _, tag in ipairs(tags) do
-		parts[#parts + 1] = field(tag) .. field(values[tag])
-	end
-	return table.concat(parts)
-end
-local function payload(version, records, extra)
-	local ids, parts = {}, { field(1), field(version:match("%.(%d+)$")) }
-	for id in pairs(records) do
-		ids[#ids + 1] = id
-	end
-	table.sort(ids)
-	parts[#parts + 1] = field(#ids)
-	for _, id in ipairs(ids) do
-		parts[#parts + 1] = records[id]
-	end
-	parts[#parts + 1] = field(extensions(extra))
-	return table.concat(parts)
-end
-
 function Sync.identity(data)
 	local nextField = reader(data)
 	local session, sequence, digest = nextField(), number(nextField(), 100000000), nextField()
@@ -254,55 +223,23 @@ function Sync.session(value)
 	return token(value)
 end
 
--- Retain raw quest records, including unknown extensions; decode/re-encode would discard them.
-function Sync.readSnapshot(data, expectedVersion)
-	local quests = Core.decode(data, expectedVersion)
+-- Digest exact quest record bytes; decoding alone discards unknown extensions.
+function Sync.readSnapshot(data, expectedVersion, codec)
+	codec = codec or Codec
+	local quests, wire = codec.decode(data, expectedVersion, true)
 	if not quests then
 		return nil
 	end
-	local nextField = reader(data)
-	local major, minor = nextField(), nextField()
-	local version = major .. "." .. minor
-	local count, position = nextField()
-	count = tonumber(count)
-	local records = {}
-	for _ = 1, count do
-		local start = position
-		local id = tonumber((nextField()))
-		for _ = 1, 4 do
-			nextField()
-		end
-		local objectives = tonumber((nextField()))
-		for _ = 1, objectives * 3 do
-			nextField()
-		end
-		_, position = nextField()
-		if not id or not position then
-			return nil
-		end
-		records[id] = data:sub(start, position - 1)
-	end
-	local extra, block = {}, nextField()
-	if not block then
-		return nil
-	end
-	local nextExtension = reader(block)
-	while true do
-		local tag = nextExtension()
-		if not tag then
-			break
-		end
-		extra[tag] = nextExtension()
-	end
+	local version, records, extra = wire.version, wire.records, wire.extra
 	local identity
-	if extra.sync and tonumber(minor) >= 2 then
+	if extra.sync and tonumber(version:match("%.(%d+)$")) >= 2 then
 		identity = Sync.identity(extra.sync)
 		if not identity then
 			return nil
 		end
 		extra.sync = nil
 	end
-	local content = payload(version, records, extra)
+	local content = encodeRecords(version, records, extra)
 	local digest = Sync.digest(content)
 	if identity and identity.digest ~= digest then
 		return nil
@@ -312,8 +249,9 @@ function Sync.readSnapshot(data, expectedVersion)
 	return state
 end
 
-function Sync.snapshot(content, session, sequence)
-	local state = Sync.readSnapshot(content)
+function Sync.snapshot(content, session, sequence, codec)
+	codec = codec or Codec
+	local state = Sync.readSnapshot(content, nil, codec)
 	if not state then
 		return nil
 	end
@@ -323,8 +261,8 @@ function Sync.snapshot(content, session, sequence)
 		extra[tag] = value
 	end
 	extra.sync = Sync.identityText(state)
-	local encoded = payload(state.version, state.records, extra)
-	if #encoded > Core.MAX_SNAPSHOT_BYTES or not Core.decode(encoded) then
+	local encoded = encodeRecords(state.version, state.records, extra)
+	if #encoded > codec.MAX_SNAPSHOT_BYTES or not codec.decode(encoded) then
 		return nil
 	end
 	return state, encoded
@@ -354,7 +292,7 @@ function Sync.patch(base, target)
 	for _, id in ipairs(removed) do
 		parts[#parts + 1] = field(id)
 	end
-	parts[#parts + 1] = field(payload(target.version, changed, target.extra))
+	parts[#parts + 1] = field(encodeRecords(target.version, changed, target.extra))
 	return table.concat(parts)
 end
 
@@ -370,8 +308,9 @@ function Sync.patchTarget(data)
 	return Sync.identity(field(session) .. field(sequence) .. field(digest))
 end
 
-function Sync.apply(base, data, expectedVersion)
-	if #data > Core.MAX_SNAPSHOT_BYTES then
+function Sync.apply(base, data, expectedVersion, codec)
+	codec = codec or Codec
+	if #data > codec.MAX_SNAPSHOT_BYTES then
 		return nil
 	end
 	local nextField = reader(data)
@@ -411,7 +350,7 @@ function Sync.apply(base, data, expectedVersion)
 	if not changes or trailing ~= nil or finish ~= #data + 1 then
 		return nil
 	end
-	local target = Sync.readSnapshot(changes, expectedVersion)
+	local target = Sync.readSnapshot(changes, expectedVersion, codec)
 	if not target or target.session then
 		return nil
 	end
@@ -421,8 +360,8 @@ function Sync.apply(base, data, expectedVersion)
 		end
 		records[id] = record
 	end
-	local content = payload(target.version, records, target.extra)
-	local state = Sync.readSnapshot(content, expectedVersion)
+	local content = encodeRecords(target.version, records, target.extra)
+	local state = Sync.readSnapshot(content, expectedVersion, codec)
 	if not state or state.digest ~= resultDigest then
 		return nil
 	end

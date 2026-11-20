@@ -1,5 +1,5 @@
 local QuestWithFriendsDB = QuestWithFriends.db
-local protocolVersion = QuestWithFriends.Core.PROTOCOL_VERSION
+local protocolVersion = QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION
 local protocolPattern = protocolVersion:gsub("%.", "%%.")
 
 test("TOC loads the addon and registers its slash command", function()
@@ -234,7 +234,7 @@ local function receive(message, prefix, channel, sender)
 end
 
 local function sendSnapshot(quests, revision)
-	local payload = QuestWithFriends.Core.encode(quests)
+	local payload = QuestWithFriends.SnapshotCodec.encode(quests)
 	local total = math.max(1, math.ceil(#payload / 220))
 	for part = total, 1, -1 do
 		receive(
@@ -260,7 +260,7 @@ local function outgoingSnapshot(messages)
 		end
 	end
 	assertTrue(#parts > 0)
-	local quests = QuestWithFriends.Core.decode(table.concat(parts))
+	local quests = QuestWithFriends.SnapshotCodec.decode(table.concat(parts))
 	assertNotNil(quests)
 	return quests
 end
@@ -876,7 +876,7 @@ end)
 
 partyTest("partial and duplicate chunks stay unknown until reverse-order assembly completes", function(quests)
 	quests[987655] = { title = string.rep("Completed quest ", 17), state = "completed", objectives = {} }
-	local payload = QuestWithFriends.Core.encode(quests)
+	local payload = QuestWithFriends.SnapshotCodec.encode(quests)
 	local total = math.ceil(#payload / 220)
 	assertTrue(total > 1)
 	for part = total, 2, -1 do
@@ -900,7 +900,7 @@ partyTest("routine chunk transfers keep the header and geometry stable with quie
 	sendSnapshot(quests, 100)
 	local panel = QuestWithFriendsPanel
 	local height, scopeWidth, scrollTop = panel:GetHeight(), panel.scope:GetWidth(), panel.scroll:GetTop()
-	local payload = QuestWithFriends.Core.encode(quests)
+	local payload = QuestWithFriends.SnapshotCodec.encode(quests)
 	local total = math.ceil(#payload / 220)
 	assertTrue(total > 1)
 	for part = 1, total do
@@ -918,7 +918,7 @@ end)
 
 partyTest("remote quest differences render and stale snapshots cannot replace them", function(quests)
 	sendSnapshot(quests, 100)
-	local original = QuestWithFriends.Core.encode(quests)
+	local original = QuestWithFriends.SnapshotCodec.encode(quests)
 	quests[987654] = { title = "Simulator errand", state = "active", objectives = {} }
 	sendSnapshot(quests, 101)
 	assertEquals("Party out of sync", QuestWithFriendsPanel.status:GetText())
@@ -930,7 +930,7 @@ partyTest("remote quest differences render and stale snapshots cannot replace th
 end)
 
 partyTest("wrong prefixes, channels, senders and malformed payloads stay unknown", function(quests)
-	local message = protocolVersion .. ":D:100:1:1:" .. QuestWithFriends.Core.encode({})
+	local message = protocolVersion .. ":D:100:1:1:" .. QuestWithFriends.SnapshotCodec.encode({})
 	receive(message, "OTHER")
 	receive(message, nil, "RAID")
 	receive(message, nil, nil, "Stranger-OtherRealm")
@@ -1271,9 +1271,9 @@ partyTest("quest event bursts and slash refreshes queue only one new snapshot", 
 end)
 
 partyTest("partial snapshots update the panel atomically and ignore older checkpoints", function(quests)
-	local core, sync = QuestWithFriends.Core, QuestWithFriends.Sync
+	local codec, sync = QuestWithFriends.SnapshotCodec, QuestWithFriends.SyncState
 	local session = string.rep("a", 32)
-	local base, baseline = sync.snapshot(core.encode(quests), session, 100)
+	local base, baseline = sync.snapshot(codec.encode(quests), session, 100)
 	local function deliver(kind, revision, payload)
 		local total = math.ceil(#payload / 220)
 		for part = total, 1, -1 do
@@ -1303,7 +1303,7 @@ partyTest("partial snapshots update the panel atomically and ignore older checkp
 	end
 	changed[987654] =
 		{ title = "Realtime errand", state = "active", mapID = C_Map.GetBestMapForUnit("player"), objectives = {} }
-	local target = sync.snapshot(core.encode(changed), session, 101)
+	local target = sync.snapshot(codec.encode(changed), session, 101)
 	local patch = sync.patch(base, target)
 	deliver("P", 101, patch)
 	assertEquals("Party out of sync", QuestWithFriendsPanel.status:GetText())
@@ -1320,11 +1320,11 @@ partyTest("higher minors and unknown optional extensions preserve baseline compa
 		objectives = {},
 		extensions = { chain_id = "123:4", state = "must not override active" },
 	}
-	local core = QuestWithFriends.Core
-	local minor = core.PROTOCOL_MINOR
-	core.PROTOCOL_MINOR = 7
-	local payload = core.encode(quests, { optional_feature = "enabled" })
-	core.PROTOCOL_MINOR = minor
+	local codec = QuestWithFriends.SnapshotCodec
+	local minor = codec.PROTOCOL_MINOR
+	codec.PROTOCOL_MINOR = 7
+	local payload = codec.encode(quests, { optional_feature = "enabled" })
+	codec.PROTOCOL_MINOR = minor
 	local total = math.ceil(#payload / 220)
 	receive("1.7:H")
 	for part = total, 1, -1 do

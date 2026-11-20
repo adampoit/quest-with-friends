@@ -16,6 +16,7 @@ describe("Quest With Friends client quest data", function()
 		end)
 		assert(loadfile("src/Client.lua"))()
 		assert(loadfile("src/Core.lua"))()
+		assert(loadfile("src/sync/SnapshotCodec.lua"))()
 	end
 
 	it("ships explicitly reviewed Retail completion-sharing families", function()
@@ -38,7 +39,7 @@ describe("Quest With Friends client quest data", function()
 
 	it("compares completed source variants without rewriting snapshots or sharing other steps", function()
 		loadClient(120100)
-		local Core = QuestWithFriends.Core
+		local Core, Codec = QuestWithFriends.Core, QuestWithFriends.SnapshotCodec
 		for _, id in ipairs({ 28762, 28769, 28784, 28792, 28808, 28818 }) do
 			local first = Core.questIDs(id)[1]
 			local mine = { [first] = { title = "Reviewed step", state = "completed", objectives = {} } }
@@ -52,7 +53,7 @@ describe("Quest With Friends client quest data", function()
 			}, groups[1].differences)
 			assert.is_nil(groups[1].shareQuestID)
 			assert.is_nil(mine[id])
-			assert.same(peer, Core.decode(Core.encode(peer)))
+			assert.same(peer, Codec.decode(Codec.encode(peer)))
 		end
 		assert.is_nil(Core.matchQuest({ [28762] = { state = "completed" } }, 28769))
 	end)

@@ -119,6 +119,12 @@ class BundleTests(unittest.TestCase):
 		self.assertLess(
 			runtime.index("Core.lua"), runtime.index("QuestWithFriends.lua")
 		)
+		sync_order = [
+			runtime.index(f"sync/{module}.lua")
+			for module in ("SnapshotCodec", "State", "Sender", "Peers", "Sync")
+		]
+		self.assertEqual(sorted(sync_order), sync_order)
+		self.assertLess(sync_order[-1], runtime.index("QuestWithFriends.lua"))
 		self.assertEqual("Panel.lua", runtime[-1])
 		listed = {"src/Bootstrap.lua", *(f"src/{name}" for name in runtime), *DEV_FILES}
 		actual = {

@@ -55,9 +55,13 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/Client.lua"))()
 		assert(loadfile("src/QuestCategories.lua"))()
 		assert(loadfile("src/Core.lua"))()
-		assert(loadfile("src/Sync.lua"))()
-		QuestWithFriends.Core.PROTOCOL_MINOR = 1
-		QuestWithFriends.Core.PROTOCOL_VERSION = "1.1"
+		assert(loadfile("src/sync/SnapshotCodec.lua"))()
+		assert(loadfile("src/sync/State.lua"))()
+		assert(loadfile("src/sync/Sender.lua"))()
+		assert(loadfile("src/sync/Peers.lua"))()
+		assert(loadfile("src/sync/Sync.lua"))()
+		QuestWithFriends.SnapshotCodec.PROTOCOL_MINOR = 1
+		QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION = "1.1"
 		assert(loadfile("src/QuestIgnores.lua"))()
 		assert(loadfile("src/ItemStock.lua"))()
 		assert(loadfile("src/Preview.lua"))()
@@ -254,7 +258,7 @@ describe("Quest With Friends party sync", function()
 	end
 
 	local function receiveSnapshot(quests, serial)
-		local payload = QuestWithFriends.Core.encode(quests)
+		local payload = QuestWithFriends.SnapshotCodec.encode(quests)
 		local total = math.ceil(#payload / 220)
 		for part = 1, total do
 			fire(
@@ -298,7 +302,7 @@ describe("Quest With Friends party sync", function()
 				end
 			end
 			local expected = { text = case.expected, have = 3, need = 8 }
-			local snapshot = QuestWithFriends.Core.decode(table.concat(parts))
+			local snapshot = QuestWithFriends.SnapshotCodec.decode(table.concat(parts))
 			assert.same(expected, snapshot[42].objectives[1])
 
 			receiveSnapshot({ [42] = { title = "Errand", state = "completed", mapID = 101, objectives = {} } }, 1)
@@ -340,7 +344,7 @@ describe("Quest With Friends party sync", function()
 				parts[tonumber(part)] = data
 			end
 		end
-		return assert(QuestWithFriends.Core.decode(table.concat(parts)))
+		return assert(QuestWithFriends.SnapshotCodec.decode(table.concat(parts)))
 	end
 
 	it("collects item stock and syncs surplus changes even when quest progress stays capped", function()
@@ -522,7 +526,7 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		receiveSnapshot({ [42] = { title = "Hunt", state = "completed", mapID = 101, objectives = {} } }, 1)
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[42] = {
 				title = "Hunt",
 				state = "active",
@@ -819,11 +823,11 @@ describe("Quest With Friends party sync", function()
 				fire(
 					"CHAT_MSG_ADDON",
 					"QWF",
-					QuestWithFriends.Core.PROTOCOL_VERSION
+					QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION
 						.. ":D:"
 						.. serial
 						.. ":1:1:"
-						.. QuestWithFriends.Core.encode(quests),
+						.. QuestWithFriends.SnapshotCodec.encode(quests),
 					"PARTY",
 					sender
 				)
@@ -1098,7 +1102,7 @@ describe("Quest With Friends party sync", function()
 				snapshots = snapshots + 1
 				assert.same(
 					{ [42] = { title = "Actual errand", state = "active", objectives = {} } },
-					QuestWithFriends.Core.decode(payload)
+					QuestWithFriends.SnapshotCodec.decode(payload)
 				)
 			end
 		end
@@ -1161,7 +1165,7 @@ describe("Quest With Friends party sync", function()
 		for _, message in ipairs(messages) do
 			payload = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or payload
 		end
-		local snapshot = QuestWithFriends.Core.decode(payload)
+		local snapshot = QuestWithFriends.SnapshotCodec.decode(payload)
 		assert.are.equal("Actual errand", snapshot[42].title)
 		assert.is_nil(next(snapshot, 42))
 		SlashCmdList.QUESTWITHFRIENDS("preview on")
@@ -1209,7 +1213,7 @@ describe("Quest With Friends party sync", function()
 		assert.is_false(view.complete)
 		flush()
 		assert.are.equal("1.1:H", messages[1])
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[7] = {
 				title = "Remote",
 				state = "active",
@@ -1239,10 +1243,10 @@ describe("Quest With Friends party sync", function()
 		for _, message in ipairs(messages) do
 			data = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or data
 		end
-		local quests = QuestWithFriends.Core.decode(data)
+		local quests = QuestWithFriends.SnapshotCodec.decode(data)
 		assert.is_not_nil(quests[71002])
 		assert.is_nil(quests[71001])
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[71001] = { title = "Branch quest", state = "active", objectives = {} },
 		})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
@@ -1259,7 +1263,7 @@ describe("Quest With Friends party sync", function()
 		end
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[71003] = { title = "Branch quest", state = "active", objectives = {} },
 		})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
@@ -1374,8 +1378,9 @@ describe("Quest With Friends party sync", function()
 						expected[id] = { title = "Quest " .. id, state = "active", objectives = {} }
 					end
 					expected[999] = { title = "History", state = "completed", objectives = {} }
-					local Core = QuestWithFriends.Core
-					Core.MAX_SNAPSHOT_BYTES = #Core.encode(expected) + headroom
+					local Codec = QuestWithFriends.SnapshotCodec
+					Codec.MAX_SNAPSHOT_BYTES = #Codec.encode(expected) + headroom
+					assert(loadfile("src/QuestWithFriends.lua"))()
 					_G.C_QuestLog.IsQuestFlaggedCompleted = function(id)
 						return id == 999
 					end
@@ -1420,7 +1425,7 @@ describe("Quest With Friends party sync", function()
 		end
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[28757] = { title = "Beating Them Back!", state = "active", objectives = {} },
 			[28780] = { title = "Join the Battle!", state = "active", objectives = {} },
 		})
@@ -1450,7 +1455,7 @@ describe("Quest With Friends party sync", function()
 		for _, message in ipairs(messages) do
 			data = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or data
 		end
-		local quests = QuestWithFriends.Core.decode(data)
+		local quests = QuestWithFriends.SnapshotCodec.decode(data)
 		assert.is_nil(quests[77734])
 		assert.is_nil(quests[77735])
 		assert.is_nil(quests[0])
@@ -1721,7 +1726,7 @@ describe("Quest With Friends party sync", function()
 		SlashCmdList.QUESTWITHFRIENDS("debug on")
 		assert.are.equal(1, #uiRecords(records, "Panel status changed"))
 		SlashCmdList.QUESTWITHFRIENDS("debug off")
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		party = false
 		fire("GROUP_ROSTER_UPDATE")
@@ -1742,7 +1747,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		entries = { { questID = 42, title = "Errand" } }
 		questMaps[42] = 202
@@ -1861,7 +1866,8 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal("Florace Bastille", findLog(records, "Received snapshot request").data.sender)
 		flush()
 		assert.are.equal(sent + 1, #messages)
-		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
+		local payload =
+			QuestWithFriends.SnapshotCodec.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Florace Bastille")
 		assert.is_true(view.complete)
 		assert.are.equal("Florace Bastille", findLog(records, "Received quest snapshot").data.sender)
@@ -1880,7 +1886,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		for _, sender in ipairs({ "Florace", "Florace Stranger", "Stranger Bastille" }) do
 			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", sender)
 		end
@@ -1903,7 +1909,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		for _, sender in ipairs({ "Florace Bastille", "Zachori", "Marva Less-Wand" }) do
 			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", sender)
 		end
@@ -1917,7 +1923,13 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Florace·Bastille")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}),
+			"PARTY",
+			"Florace·Bastille"
+		)
 		assert.is_true(view.complete)
 	end)
 
@@ -1930,7 +1942,7 @@ describe("Quest With Friends party sync", function()
 		end)
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia")
 		assert.is_true(view.complete)
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:H", "PARTY", "Julia-TestRealm")
@@ -2107,7 +2119,11 @@ describe("Quest With Friends party sync", function()
 			"src/Client.lua",
 			"src/QuestCategories.lua",
 			"src/Core.lua",
-			"src/Sync.lua",
+			"src/sync/SnapshotCodec.lua",
+			"src/sync/State.lua",
+			"src/sync/Sender.lua",
+			"src/sync/Peers.lua",
+			"src/sync/Sync.lua",
 			"src/QuestIgnores.lua",
 			"src/ItemStock.lua",
 			"src/Preview.lua",
@@ -2139,7 +2155,7 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		assert.are.equal("1.3:H", messages[1])
-		fire("CHAT_MSG_ADDON", "QWF", "1.3:D:1:1:1:" .. namespace.Core.encode({}), "PARTY", "Julia-Realm")
+		fire("CHAT_MSG_ADDON", "QWF", "1.3:D:1:1:1:" .. namespace.SnapshotCodec.encode({}), "PARTY", "Julia-Realm")
 		assert.is_true(view.complete)
 		view.share(42)
 		assert.same({ "QuestWithFriendsDev", "Version" }, metadata)
@@ -2151,8 +2167,8 @@ describe("Quest With Friends party sync", function()
 
 	local function diagnosticsRuntime(minor)
 		QuestWithFriends.isDevelopment = true
-		QuestWithFriends.Core.PROTOCOL_MINOR = minor or 1
-		QuestWithFriends.Core.PROTOCOL_VERSION = "1." .. (minor or 1)
+		QuestWithFriends.SnapshotCodec.PROTOCOL_MINOR = minor or 1
+		QuestWithFriends.SnapshotCodec.PROTOCOL_VERSION = "1." .. (minor or 1)
 		assert(loadfile("dev/Development.lua"))()
 		local create = QuestWithFriends.Development.new
 		---@type fun(): table
@@ -2248,7 +2264,8 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal(session, peer.session)
 		assert.are.equal(0, peer.capabilityAge)
 		assert.are.equal("session needs baseline", peer.recoveryReason)
-		local state, payload = QuestWithFriends.Sync.snapshot(QuestWithFriends.Core.encode({}), session, 1)
+		local state, payload =
+			QuestWithFriends.SyncState.snapshot(QuestWithFriends.SnapshotCodec.encode({}), session, 1)
 		local total = math.ceil(#payload / 220)
 		for part = 1, total do
 			fire(
@@ -2270,7 +2287,7 @@ describe("Quest With Friends party sync", function()
 		fire(
 			"CHAT_MSG_ADDON",
 			"QWF",
-			"1.2:V:" .. QuestWithFriends.Sync.identityText(advertised),
+			"1.2:V:" .. QuestWithFriends.SyncState.identityText(advertised),
 			"PARTY",
 			"Julia-Realm"
 		)
@@ -2683,7 +2700,7 @@ describe("Quest With Friends party sync", function()
 		assert.are.equal("1.1:H", messages[beforeRefresh + 1])
 		local snapshot = findLog(records, "Submitted quest snapshot").data
 		assert.are.equal(0, snapshot.quests)
-		assert.are.equal(#QuestWithFriends.Core.encode({}), snapshot.bytes)
+		assert.are.equal(#QuestWithFriends.SnapshotCodec.encode({}), snapshot.bytes)
 	end)
 
 	local function syncRecords(records, message)
@@ -2833,10 +2850,10 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		receiveSnapshot({}, 1)
-		local core = QuestWithFriends.Core
-		core.PROTOCOL_MINOR = 9
-		local payload = core.encode({}, { future_feature = "opaque" })
-		core.PROTOCOL_MINOR = 1
+		local codec = QuestWithFriends.SnapshotCodec
+		codec.PROTOCOL_MINOR = 9
+		local payload = codec.encode({}, { future_feature = "opaque" })
+		codec.PROTOCOL_MINOR = 1
 		fire("CHAT_MSG_ADDON", "QWF", "1.9:D:2:1:1:" .. payload, "PARTY", "Julia-Realm")
 		local wire = syncRecords(records, "Received quest snapshot")[2]
 		assert.is_true(wire.payloadChanged)
@@ -2960,7 +2977,8 @@ describe("Quest With Friends party sync", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
 		local records = captureLogs()
-		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
+		local payload =
+			QuestWithFriends.SnapshotCodec.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:2:2:" .. payload:sub(7), "PARTY", "Julia-Realm")
 		local chunk = findLog(records, "Received snapshot chunk").data
 		assert.same({ kind = "D", sender = "Julia-Realm", revision = 1, part = 2, parts = 2, received = 1 }, chunk)
@@ -2976,7 +2994,7 @@ describe("Quest With Friends party sync", function()
 		questMaps[42] = 202
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[7] = { title = "Also distant", state = "active", objectives = {}, mapID = 202 },
 		})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
@@ -3044,7 +3062,7 @@ describe("Quest With Friends party sync", function()
 					parts[tonumber(part)] = data
 				end
 			end
-			local quests = QuestWithFriends.Core.decode(table.concat(parts))
+			local quests = QuestWithFriends.SnapshotCodec.decode(table.concat(parts))
 			for id = 41, 47 do
 				assert.is_not_nil(quests[id])
 			end
@@ -3055,7 +3073,7 @@ describe("Quest With Friends party sync", function()
 				assert.are.equal("class", quests[id].category)
 			end
 			assert.is_nil(quests[43].category)
-			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", sender)
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}), "PARTY", sender)
 			assert.is_false(view.filters.professions)
 			assert.is_false(view.filters.classes)
 			assert.is_false(QuestWithFriendsDB.showProfessionQuests)
@@ -3117,12 +3135,12 @@ describe("Quest With Friends party sync", function()
 					parts[tonumber(part)] = data
 				end
 			end
-			local snapshot = QuestWithFriends.Core.decode(table.concat(parts))
+			local snapshot = QuestWithFriends.SnapshotCodec.decode(table.concat(parts))
 			for id in pairs(QuestWithFriends.QuestCategories.forever) do
 				assert.is_not_nil(snapshot[id])
 				assert.are.equal(game == "forever" and "profession" or nil, snapshot[id].category)
 			end
-			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", sender)
+			fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}), "PARTY", sender)
 			assert.are.equal(game == "forever" and 1 or 95, #view.groups)
 			if game == "forever" then
 				assert.are.equal(42, view.groups[1].questID)
@@ -3140,7 +3158,7 @@ describe("Quest With Friends party sync", function()
 		assert(loadfile("src/QuestWithFriends.lua"))()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[96101] = { title = "The Great Outdoors", state = "active", objectives = {} },
 			[96031] = { title = "Camping 101: Leatherworking", state = "active", objectives = {} },
 			[96629] = { title = "Camping 101: Cooking", state = "active", objectives = {} },
@@ -3165,7 +3183,13 @@ describe("Quest With Friends party sync", function()
 			[41] = { title = "Remote fishing", state = "active", objectives = {}, category = "profession" },
 			[42] = { title = "Remote class", state = "ready", objectives = {}, category = "class" },
 		}
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode(quests), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode(quests),
+			"PARTY",
+			"Julia-Realm"
+		)
 		assert.same({}, view.groups)
 		assert.is_true(view.complete)
 		view.filters.toggleProfessions()
@@ -3177,7 +3201,13 @@ describe("Quest With Friends party sync", function()
 		view.filters.toggleClasses()
 		quests[41].category = nil
 		quests[42] = nil
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:2:1:1:" .. QuestWithFriends.Core.encode(quests), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:2:1:1:" .. QuestWithFriends.SnapshotCodec.encode(quests),
+			"PARTY",
+			"Julia-Realm"
+		)
 		assert.are.equal(1, #view.groups)
 		assert.are.equal(41, view.groups[1].questID)
 	end)
@@ -3186,7 +3216,7 @@ describe("Quest With Friends party sync", function()
 		local records = captureLogs()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		for _, message in ipairs({
 			"H",
@@ -3225,7 +3255,7 @@ describe("Quest With Friends party sync", function()
 	it("ignores unknown message kinds and malformed chunk headers within a supported protocol", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({})
+		local payload = QuestWithFriends.SnapshotCodec.encode({})
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		for _, message in ipairs({
 			"1.1:H:extra",
@@ -3291,7 +3321,7 @@ describe("Quest With Friends party sync", function()
 			end
 		end
 		assert.is_true(#parts > 1)
-		local quests = QuestWithFriends.Core.decode(table.concat(parts))
+		local quests = QuestWithFriends.SnapshotCodec.decode(table.concat(parts))
 		for id in pairs(tags) do
 			assert.are.equal("class", quests[id].category)
 		end
@@ -3304,7 +3334,7 @@ describe("Quest With Friends party sync", function()
 		flush()
 		entries, tags = {}, {}
 		fire("QUEST_TURNED_IN", 42)
-		local payload = QuestWithFriends.Core.encode({
+		local payload = QuestWithFriends.SnapshotCodec.encode({
 			[42] = { title = "Class quest", state = "active", objectives = {} },
 			[71001] = { title = "Branch quest", state = "active", objectives = {} },
 		})
@@ -3330,10 +3360,16 @@ describe("Quest With Friends party sync", function()
 		for _, message in ipairs(messages) do
 			data = message:match("^1%.1:D:%d+:%d+:%d+:(.+)$") or data
 		end
-		local quests = QuestWithFriends.Core.decode(data)
+		local quests = QuestWithFriends.SnapshotCodec.decode(data)
 		assert.are.equal(101, quests[11].mapID)
 		assert.is_nil(quests[12].mapID)
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}),
+			"PARTY",
+			"Julia-Realm"
+		)
 		assert.are.equal("Here", view.groups[1].title)
 		assert.are.equal("Unknown", view.groups[2].title)
 	end)
@@ -3341,7 +3377,13 @@ describe("Quest With Friends party sync", function()
 	it("marks a peer unknown when its snapshot cannot be shared", function()
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}),
+			"PARTY",
+			"Julia-Realm"
+		)
 		assert.is_true(view.complete)
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:X", "PARTY", "Julia-Realm")
 		assert.is_false(view.complete)
@@ -3357,7 +3399,13 @@ describe("Quest With Friends party sync", function()
 		assert.same({ player = "You", reason = "oversized" }, view.notices[1])
 		assert.same({ player = "Julia", reason = "unknown" }, view.notices[2])
 		assert.same({}, view.groups)
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}),
+			"PARTY",
+			"Julia-Realm"
+		)
 		assert.is_false(view.complete)
 		assert.same({ { player = "You", reason = "oversized" } }, view.notices)
 		assert.are.equal(100, #view.groups)
@@ -3374,7 +3422,13 @@ describe("Quest With Friends party sync", function()
 		flush()
 		assert.same({}, view.groups)
 		assert.same({ { player = "Julia", reason = "unknown" } }, view.notices)
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}),
+			"PARTY",
+			"Julia-Realm"
+		)
 		assert.are.equal(71002, view.groups[1].shareQuestID)
 		assert.is_nil(view.groups[2].shareQuestID)
 		assert.same({}, pushed)
@@ -3392,7 +3446,13 @@ describe("Quest With Friends party sync", function()
 		pushable[42] = true
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. QuestWithFriends.Core.encode({}), "PARTY", "Julia-Realm")
+		fire(
+			"CHAT_MSG_ADDON",
+			"QWF",
+			"1.1:D:1:1:1:" .. QuestWithFriends.SnapshotCodec.encode({}),
+			"PARTY",
+			"Julia-Realm"
+		)
 		local share = view.share
 		entries = {}
 		share(42)
@@ -3567,7 +3627,8 @@ describe("Quest With Friends party sync", function()
 		entries = { { questID = 42, title = "Errand" } }
 		fire("PLAYER_ENTERING_WORLD")
 		flush()
-		local payload = QuestWithFriends.Core.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
+		local payload =
+			QuestWithFriends.SnapshotCodec.encode({ [42] = { title = "Errand", state = "active", objectives = {} } })
 		fire("CHAT_MSG_ADDON", "QWF", "1.1:D:1:1:1:" .. payload, "PARTY", "Julia-Realm")
 		assert.same({}, view.groups)
 		local sent = #messages
