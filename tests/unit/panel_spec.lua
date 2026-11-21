@@ -46,6 +46,12 @@ describe("Quest With Friends panel", function()
 		function w:GetVerticalScroll()
 			return self.scroll or 0
 		end
+		function w:GetVerticalScrollRange()
+			local top = self.points.TOPLEFT[4]
+			local bottom = self.points.BOTTOMRIGHT[4]
+			local viewport = self.parent:GetHeight() + top - bottom
+			return math.max(0, self.scrollChild:GetHeight() - viewport)
+		end
 		function w:SetVerticalScroll(value)
 			self.scroll = value
 		end
@@ -54,6 +60,9 @@ describe("Quest With Friends panel", function()
 		end
 		function w:SetValue(value)
 			self.value = value
+		end
+		function w:GetValue()
+			return self.value or 0
 		end
 		function w:SetNormalTexture(...) end
 		function w:SetHighlightTexture(...) end
@@ -321,6 +330,29 @@ describe("Quest With Friends panel", function()
 				w.ScrollBar.ScrollUpButton:SetSize(18, 16)
 				w.ScrollBar.ScrollDownButton = widget()
 				w.ScrollBar.ScrollDownButton:SetSize(18, 16)
+				if template == "UIPanelScrollFrameTemplate" then
+					-- The native range callback runs after geometry updates and also owns visibility.
+					w:SetScript("OnScrollRangeChanged", function(self, _, yrange)
+						local bar = self.ScrollBar
+						yrange = math.floor(yrange or self:GetVerticalScrollRange())
+						bar:SetMinMaxValues(0, yrange)
+						bar:SetValue(math.min(bar:GetValue(), yrange))
+						if yrange == 0 and self.scrollBarHideable then
+							bar:Hide()
+							bar.ScrollUpButton:Hide()
+							bar.ScrollDownButton:Hide()
+						elseif yrange == 0 then
+							bar.ScrollUpButton:SetEnabled(false)
+							bar.ScrollDownButton:SetEnabled(false)
+							bar.ScrollUpButton:Show()
+							bar.ScrollDownButton:Show()
+						else
+							bar:Show()
+							bar.ScrollUpButton:Show()
+							bar.ScrollDownButton:Show()
+						end
+					end)
+				end
 			elseif kind == "Button" or kind == "DropdownButton" then
 				local layoutButton = parent == panel and #buttons == 1 and not panel.resize
 				if not layoutButton then
@@ -1606,7 +1638,7 @@ describe("Quest With Friends panel", function()
 
 	it("only permits moving and resizing while unlocked and shrinks again when locked", function()
 		loadPanel()
-		assert.are.equal(82, panel.height)
+		assert.are.equal(83, panel.height)
 		assert.is_false(panel.header.mouseEnabled)
 		assert.is_true(panel.lock.shown)
 		assert.is_false(panel.hint.shown)
@@ -1634,7 +1666,7 @@ describe("Quest With Friends panel", function()
 		assert.are.equal(240, panel.height)
 		panel.lock.OnClick()
 		assert.is_true(QuestWithFriendsDB.panelLocked)
-		assert.are.equal(82, panel.height)
+		assert.are.equal(83, panel.height)
 		assert.are.equal(420, panel.width)
 		assert.is_false(panel.resize.shown)
 		QuestWithFriends.Panel.setLocked(false)
@@ -1679,6 +1711,56 @@ describe("Quest With Friends panel", function()
 				end
 			end
 		end
+	end)
+
+	it("keeps a header-only panel's scrollbar hidden after a deferred native range update", function()
+		loadPanel()
+		local scroll = panel.scroll
+		local height = panel:GetHeight()
+		assert.are.equal(0, panel.scrollRange)
+		assert.is_false(scroll.ScrollBar:IsShown())
+
+		-- Native range updates must agree with our layout even when there are no quest rows.
+		scroll:GetScript("OnScrollRangeChanged")(scroll, 0, scroll:GetVerticalScrollRange())
+
+		assert.is_false(scroll.ScrollBar:IsShown())
+		assert.is_false(scroll.ScrollBar.ScrollUpButton:IsShown())
+		assert.is_false(scroll.ScrollBar.ScrollDownButton:IsShown())
+		assert.are.equal(0, scroll:GetVerticalScrollRange())
+		assert.are.equal(0, scroll.ScrollBar.range[2])
+		assert.are.equal(height, panel:GetHeight())
+	end)
+
+	it("does not resurrect the scrollbar after an overflowing quest list becomes empty", function()
+		loadPanel()
+		local groups = {}
+		for index = 1, 25 do
+			groups[index] = group(index)
+		end
+		QuestWithFriends.Panel.show(groups, true, true)
+		local scroll = panel.scroll
+		scroll:GetScript("OnScrollRangeChanged")(scroll, 0, scroll:GetVerticalScrollRange())
+		assert.is_true(scroll.ScrollBar:IsShown())
+		assert.is_true(scroll.ScrollBar.range[2] > 0)
+		scroll:SetVerticalScroll(20)
+
+		QuestWithFriends.Panel.show({}, true, true)
+		assert.is_false(scroll.ScrollBar:IsShown())
+		assert.are.equal(0, scroll:GetVerticalScroll())
+		scroll:GetScript("OnScrollRangeChanged")(scroll, 0, scroll:GetVerticalScrollRange())
+
+		assert.is_false(scroll.ScrollBar:IsShown())
+		assert.is_false(scroll.ScrollBar.ScrollUpButton:IsShown())
+		assert.is_false(scroll.ScrollBar.ScrollDownButton:IsShown())
+		assert.are.equal(0, scroll.ScrollBar.range[2])
+		assert.are.equal(0, scroll:GetVerticalScroll())
+
+		QuestWithFriends.Panel.show(groups, true, true)
+		scroll:GetScript("OnScrollRangeChanged")(scroll, 0, scroll:GetVerticalScrollRange())
+		assert.is_true(scroll.ScrollBar:IsShown())
+		assert.is_true(scroll.ScrollBar.ScrollUpButton:IsShown())
+		assert.is_true(scroll.ScrollBar.ScrollDownButton:IsShown())
+		assert.are.equal(panel.scrollRange, scroll.ScrollBar.range[2])
 	end)
 
 	it("updates the lock tooltip and icon when toggled or changed externally", function()
@@ -1735,7 +1817,7 @@ describe("Quest With Friends panel", function()
 		QuestWithFriends.Panel.setLocked(true)
 		loadPanel()
 		assert.are.equal(480, panel.width)
-		assert.are.equal(82, panel.height)
+		assert.are.equal(83, panel.height)
 	end)
 
 	it("reflows wrapped objectives on resize without scaling text or changing sharing", function()
@@ -1809,7 +1891,7 @@ describe("Quest With Friends panel", function()
 			QuestWithFriendsDB.panelPosition = { x = 100000, y = -100000 }
 			loadPanel()
 			assert.is_true(panel.width >= 300 and panel.width <= UIParent.width)
-			assert.is_true(panel.height >= 82 and panel.height <= UIParent.height)
+			assert.is_true(panel.height >= 83 and panel.height <= UIParent.height)
 			assert.is_true(QuestWithFriendsDB.panelPosition.x <= UIParent.width - panel.width)
 			assert.is_true(QuestWithFriendsDB.panelPosition.y >= panel.height - UIParent.height)
 		end
