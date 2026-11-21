@@ -382,6 +382,7 @@ local function createPanel()
 	panel.hint:SetText("Drag header or corner")
 
 	panel.scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+	panel.scroll.scrollBarHideable = true
 	panel.content = CreateFrame("Frame", nil, panel.scroll)
 	panel.content:SetSize(DEFAULT_WIDTH, 1)
 	panel.scroll:SetScrollChild(panel.content)
@@ -988,7 +989,8 @@ function QWF.Panel.show(groups, complete, zoneFilter, onToggle, onShare, notices
 		-- Notices may raise the effective ceiling without changing the saved allowance.
 		local minimum = math.min(screenHeight, math.max(MIN_HEIGHT, pinned + MIN_QUEST_HEIGHT + footer))
 		ceiling = clamp(ceiling, minimum, screenHeight)
-		local height = unlocked and ceiling or math.min(ceiling, pinned + contentHeight + footer)
+		-- Match the scroll child's one-pixel minimum so an empty body has no native scroll range.
+		local height = unlocked and ceiling or math.min(ceiling, pinned + math.max(1, contentHeight) + footer)
 		local viewport = math.max(1, height - pinned - footer)
 		local overflow = contentHeight > viewport
 		local scrollBar = panel.scroll.ScrollBar
